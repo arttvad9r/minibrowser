@@ -13,7 +13,9 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import java.io.File
 
-class Tab(var session: GeckoSession, val id: Long, val isPrivate: Boolean) {
+class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
+    // Compose state: смена сессии при краш-восстановлении должна перерисовать AndroidView.
+    var session: GeckoSession by mutableStateOf(session)
     var url by mutableStateOf("")
     var title by mutableStateOf("")
     var progress by mutableFloatStateOf(-1f)
