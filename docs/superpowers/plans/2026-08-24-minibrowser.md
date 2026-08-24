@@ -6,14 +6,15 @@
 
 **Architecture:** Один Gradle-модуль. GeckoRuntime — синглтон Application; вкладки = список `GeckoSession` в `TabManager` с Compose-состоянием внутри каждой вкладки; делегаты GeckoView обновляют состояние → Compose перерисовывает. Расширения uBO/VOT ставятся из ассетов APK через `ensureBuiltIn`. Данные: DataStore (настройки), Room (история, закладки), JSON (открытые вкладки).
 
-**Tech Stack:** Kotlin 2.0.20, AGP 8.7.3, Gradle 8.10.2, Compose BOM 2024.09.03, GeckoView 154.0.20260814215756, Room 2.6.1 (KSP), DataStore 1.1.1, kotlinx-serialization 1.7.3.
+**Tech Stack:** Kotlin 2.4.10, AGP 9.3.1, Gradle 9.5.0, Compose BOM 2024.09.03, GeckoView 154.0.20260814215756, Room 2.6.1 (KSP), DataStore 1.1.1, kotlinx-serialization 1.7.3.
 
 **Spec:** `docs/superpowers/specs/2026-08-24-minibrowser-design.md` (читать вместе с планом).
 
 ## Global Constraints
 
-- minSdk 26, targetSdk/compileSdk 35, JDK 17, namespace/applicationId `com.artt.minibrowser`.
+- minSdk 26, targetSdk/compileSdk 37 (minor 1), JDK 17, namespace/applicationId `com.artt.minibrowser`.
 - GeckoView пин: `org.mozilla.geckoview:geckoview:154.0.20260814215756` (последний релиз на момент плана).
+- **Пины тулчейна ратифицированы ревью T2** (GV 154 требует minCompileSdk=37): Gradle 9.5.0, AGP 9.3.1, Kotlin 2.4.10, KSP 2.3.11; `buildToolsVersion` и отдельный `kotlin-android`-плагин не используются.
 - Mozilla Android Components НЕ подключать.
 - Сборка на NixOS: JDK через `nix shell` (см. shell.nix в Задаче 1), SDK в `/home/artt/Android/Sdk` (прописывается в `local.properties`, файл в .gitignore).
 - Эмулятор уже создан (`~/.android/avd`). adb: `~/Android/Sdk/platform-tools/adb`.
