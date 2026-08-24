@@ -8,6 +8,12 @@ import kotlin.test.assertEquals
 class SearchEnginesTest {
     @Test fun urlPassthrough() =
         assertEquals("https://a.b/c", buildLoadUri("https://a.b/c", SearchEngine.GOOGLE))
+    @Test fun schemeUrisPassThrough() {
+        assertEquals("chrome://crash", buildLoadUri("chrome://crash", SearchEngine.GOOGLE))
+        assertEquals("about:blank", buildLoadUri("about:blank", SearchEngine.GOOGLE))
+    }
+    @Test fun hostPortStillGetsHttps() =
+        assertEquals("https://192.168.0.1:8080", buildLoadUri("192.168.0.1:8080", SearchEngine.GOOGLE))
     @Test fun bareDomainGetsHttps() =
         assertEquals("https://example.com", buildLoadUri("example.com", SearchEngine.GOOGLE))
     @Test fun wordsGoToSearch() =
