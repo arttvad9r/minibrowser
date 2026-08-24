@@ -10,6 +10,7 @@ class BookmarksRepository(private val dao: AppDao) {
         dao.upsertBookmark(Bookmark(url, title.ifBlank { host }, host, max + 1))
     }
     suspend fun remove(url: String) = dao.deleteBookmark(url)
+    suspend fun clearAll() = dao.clearBookmarks()
     suspend fun rename(url: String, title: String) = dao.renameBookmark(url, title)
     suspend fun isBookmarked(url: String) = dao.bookmarkCount(url) > 0
 }

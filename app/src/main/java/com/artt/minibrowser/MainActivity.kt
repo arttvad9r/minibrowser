@@ -26,6 +26,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -77,11 +80,14 @@ import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
+import com.artt.minibrowser.engine.enqueueDownload
 import com.artt.minibrowser.ui.SettingsScreen
 import com.artt.minibrowser.ui.StartPage
 import com.artt.minibrowser.ui.TileGrid
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import java.io.File
 import java.text.DateFormat
@@ -112,7 +118,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        tabManager = TabManager(Engine.runtime, File(filesDir, "tabs"))
+        tabManager = TabManager(Engine.runtime, File(filesDir, "tabs"), applicationContext)
         val iconsDir = File(filesDir, "icons")
         // Расширения ставятся один раз за процесс; тумблер применяется сразу после первого чтения настроек.
         lifecycleScope.launch {
@@ -133,7 +139,6 @@ class MainActivity : ComponentActivity() {
 
             navigateHook = { uri ->
                 val t = tabs.firstOrNull { it.id == tabManager.currentId.value } ?: tabManager.newTab(null)
-                android.util.Log.d("MB", "hook: $uri -> tab ${t.id}")
                 t.session.loadUri(uri)
             }
             // Интент, пришедший до готовности хука (холодный старт), доставляем один раз.
@@ -149,11 +154,33 @@ class MainActivity : ComponentActivity() {
             }
 
             BackHandler(enabled = screen != Screen.Browser) { screen = Screen.Browser }
+            // Системный back на странице браузера — назад по истории вкладки.
+            BackHandler(enabled = screen == Screen.Browser && currentTab?.canGoBack == true) {
+                currentTab?.session?.goBack()
+            }
+            var showFind by remember { mutableStateOf(false) }
 
             val toggleAdblock: (Boolean) -> Unit = { b ->
                 scope.launch {
                     settingsRepo.setAdblock(b)
                     ExtensionLoader.setAdblock(Engine.runtime, b)
+                }
+            }
+            val onShare: () -> Unit = {
+                currentTab?.url?.let { u ->
+                    startActivity(
+                        Intent.createChooser(
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"; putExtra(Intent.EXTRA_TEXT, u)
+                            },
+                            "Поделиться")
+                    )
+                }
+            }
+            val onDownload: () -> Unit = {
+                currentTab?.url?.let { u ->
+                    val fallback = u.substringAfterLast('/').substringBefore('?').ifBlank { "page" }
+                    runCatching { enqueueDownload(applicationContext, u, fallback) }
                 }
             }
 
@@ -193,19 +220,23 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                             BottomBar(
-                                 currentTab,
-                                 prefs.searchEngine,
-                                 tabCount = tabs.size,
-                                 bookmarked = bookmarked,
-                                 adblockEnabled = prefs.adblockEnabled,
-                                 onToggleAdblock = toggleAdblock,
+                            if (showFind && currentSession != null) {
+                                FindBar(currentSession) { showFind = false }
+                            }
+                            BottomBar(
+                                currentTab,
+                                prefs.searchEngine,
+                                tabCount = tabs.size,
+                                bookmarked = bookmarked,
+                                adblockEnabled = prefs.adblockEnabled,
+                                onToggleAdblock = toggleAdblock,
                                 onNavigate = { uri ->
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
                                 onTray = { showTray = true },
                                 onNewTab = { showTray = false; tabManager.newTab(null) },
                                 onNewPrivateTab = { tabManager.newTab(null, private = true) },
+                                onFind = { showFind = true },
                                 onToggleBookmark = {
                                     val t = currentTab ?: return@BottomBar
                                     scope.launch {
@@ -217,6 +248,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onBookmarks = { screen = Screen.Bookmarks },
                                 onHistory = { screen = Screen.History },
+                                onShare = onShare,
+                                onDownload = onDownload,
                                 onSettings = { screen = Screen.Settings },
                                 onSuggest = { q -> historyRepo.suggest(q) })
                         }
@@ -229,6 +262,14 @@ class MainActivity : ComponentActivity() {
                                     onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
                                     onAdblock = toggleAdblock,
                                     onHomepage = { u -> scope.launch { settingsRepo.setHomepage(u) } },
+                                    onClearData = { withBookmarks ->
+                                        scope.launch {
+                                            historyRepo.clear()
+                                            if (withBookmarks) bookmarksRepo.clearAll()
+                                            iconsDir.deleteRecursively()
+                                            bmReload++
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -287,6 +328,9 @@ private fun BottomBar(
     onTray: () -> Unit,
     onNewTab: () -> Unit,
     onNewPrivateTab: () -> Unit,
+    onFind: () -> Unit,
+    onShare: () -> Unit,
+    onDownload: () -> Unit,
     onToggleBookmark: () -> Unit,
     onBookmarks: () -> Unit,
     onHistory: () -> Unit,
@@ -359,11 +403,82 @@ private fun BottomBar(
                     onClick = { menuOpen = false; onToggleBookmark() })
                 DropdownMenuItem(text = { Text("Закладки") }, onClick = { menuOpen = false; onBookmarks() })
                 DropdownMenuItem(text = { Text("История") }, onClick = { menuOpen = false; onHistory() })
+                DropdownMenuItem(text = { Text("Найти на странице") }, onClick = { menuOpen = false; onFind() })
+                DropdownMenuItem(
+                    text = { Text("Версия для ПК") },
+                    trailingIcon = { Checkbox(checked = tab?.desktop == true, onCheckedChange = null) },
+                    enabled = tab != null,
+                    onClick = {
+                        menuOpen = false
+                        val t = tab ?: return@DropdownMenuItem
+                        t.desktop = !t.desktop
+                        t.session.settings.userAgentMode =
+                            if (t.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+                            else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+                        t.session.settings.viewportMode =
+                            if (t.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP
+                            else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
+                        t.session.reload()
+                    })
+                DropdownMenuItem(
+                    text = { Text("Скачать") },
+                    enabled = tab?.url?.startsWith("http") == true,
+                    onClick = { menuOpen = false; onDownload() })
+                DropdownMenuItem(
+                    text = { Text("Поделиться") },
+                    enabled = tab?.url?.startsWith("http") == true,
+                    onClick = { menuOpen = false; onShare() })
                 DropdownMenuItem(
                     text = { Text("Блокировка рекламы") },
                     trailingIcon = { Checkbox(checked = adblockEnabled, onCheckedChange = null) },
                     onClick = { menuOpen = false; onToggleAdblock(!adblockEnabled) })
                 DropdownMenuItem(text = { Text("Настройки") }, onClick = { menuOpen = false; onSettings() })
+            }
+        }
+    }
+}
+
+@Composable
+private fun FindBar(session: GeckoSession, onClose: () -> Unit) {
+    var q by remember { mutableStateOf("") }
+    var current by remember { mutableIntStateOf(0) }
+    var total by remember { mutableIntStateOf(0) }
+    val doFind: (Boolean) -> Unit = { backward ->
+        if (q.isBlank()) {
+            session.finder.clear(); total = 0; current = 0
+        } else {
+            session.finder.find(
+                q,
+                if (backward) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD,
+            ).accept { r ->
+                total = r?.total ?: 0; current = r?.current ?: 0
+            }
+        }
+    }
+    Surface(tonalElevation = 3.dp) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = q,
+                onValueChange = { q = it; doFind(false) },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                placeholder = { Text("Найти на странице") })
+            Text(
+                if (total > 0) "${current + 1}/$total" else "",
+                Modifier.padding(horizontal = 6.dp),
+                style = MaterialTheme.typography.bodySmall)
+            IconButton(onClick = { doFind(true) },
+                modifier = Modifier.semantics { contentDescription = "Предыдущее" }) {
+                Icon(Icons.Filled.KeyboardArrowUp, "Предыдущее")
+            }
+            IconButton(onClick = { doFind(false) },
+                modifier = Modifier.semantics { contentDescription = "Следующее" }) {
+                Icon(Icons.Filled.KeyboardArrowDown, "Следующее")
+            }
+            IconButton(onClick = { session.finder.clear(); onClose() },
+                modifier = Modifier.semantics { contentDescription = "Закрыть поиск" }) {
+                Icon(Icons.Filled.Close, "Закрыть поиск")
             }
         }
     }
@@ -381,6 +496,12 @@ private fun TabTray(
         tabs.forEach { tab ->
             Row(Modifier.fillMaxWidth().clickable { onSelect(tab.id) }.padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically) {
+                if (tab.isPrivate) {
+                    Icon(
+                        Icons.Filled.Lock, "Приватная вкладка",
+                        Modifier.padding(end = 8.dp),
+                        tint = MaterialTheme.colorScheme.primary)
+                }
                 Column(Modifier.weight(1f)) {
                     Text(
                         tab.title.ifBlank { tab.url.ifBlank { "Новая вкладка" } },

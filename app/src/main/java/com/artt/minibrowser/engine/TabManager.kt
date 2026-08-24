@@ -20,9 +20,14 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var title by mutableStateOf("")
     var progress by mutableFloatStateOf(-1f)
     var canGoBack by mutableStateOf(false)
+    var desktop by mutableStateOf(false)
 }
 
-class TabManager(private val runtime: GeckoRuntime, storeDir: File) {
+class TabManager(
+    private val runtime: GeckoRuntime,
+    storeDir: File,
+    private val context: android.content.Context,
+) {
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
     val tabs get() = _tabs
     val currentId = MutableStateFlow<Long?>(null)
@@ -99,6 +104,11 @@ class TabManager(private val runtime: GeckoRuntime, storeDir: File) {
             override fun onTitleChange(session: GeckoSession, title: String?) {
                 tab.title = title.orEmpty()
                 if (!tab.isPrivate) HistorySink.updateTitle(tab.url, title)
+            }
+            // Файлы по прямым ссылкам (attachment) — в системный DownloadManager.
+            override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
+                val fallback = response.uri.substringAfterLast('/').substringBefore('?').ifBlank { "file" }
+                runCatching { enqueueDownload(context, response.uri, fallback, response.headers) }
             }
             override fun onCrash(session: GeckoSession) {
                 // Восстановление крашнутой сессии с тем же URL.

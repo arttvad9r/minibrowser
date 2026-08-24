@@ -10,6 +10,8 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,8 +40,10 @@ fun SettingsScreen(
     onTheme: (Int) -> Unit,
     onAdblock: (Boolean) -> Unit,
     onHomepage: (String) -> Unit,
+    onClearData: (withBookmarks: Boolean) -> Unit,
 ) {
     var homepage by remember { mutableStateOf(prefs.homepage) }
+    var showClearDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -72,7 +77,38 @@ fun SettingsScreen(
                 Text("Блокировка рекламы", Modifier.weight(1f))
                 Switch(checked = prefs.adblockEnabled, onCheckedChange = null)
             }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Очистить данные (история, кэш иконок)", Modifier.weight(1f))
+                TextButton(onClick = { showClearDialog = true }) { Text("Очистить") }
+            }
         }
+    }
+    if (showClearDialog) {
+        var withBookmarks by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Очистить данные") },
+            text = {
+                Column {
+                    Text("Будут удалены история посещений и кэш иконок.")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = withBookmarks, onCheckedChange = { withBookmarks = it })
+                        Text("Также удалить все закладки")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showClearDialog = false; onClearData(withBookmarks) }) {
+                    Text("Очистить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
+            },
+        )
     }
 }
 

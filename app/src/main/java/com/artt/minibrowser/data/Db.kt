@@ -56,6 +56,9 @@ data class Bookmark(
     @Query("DELETE FROM bookmarks WHERE url = :url")
     suspend fun deleteBookmark(url: String)
 
+    @Query("DELETE FROM bookmarks")
+    suspend fun clearBookmarks()
+
     @Query("UPDATE bookmarks SET title = :title WHERE url = :url")
     suspend fun renameBookmark(url: String, title: String)
 
