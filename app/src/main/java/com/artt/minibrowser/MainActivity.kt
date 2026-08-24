@@ -25,8 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -64,6 +63,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
+import com.artt.minibrowser.data.Bookmark
+import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.data.Suggestion
@@ -73,6 +74,8 @@ import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.ui.SettingsScreen
+import com.artt.minibrowser.ui.StartPage
+import com.artt.minibrowser.ui.TileGrid
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoView
 import java.io.File
@@ -84,11 +87,13 @@ enum class Screen { Browser, Settings, History, Bookmarks }
 class MainActivity : ComponentActivity() {
     private val settingsRepo by lazy { SettingsRepository(this) }
     private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
+    private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private lateinit var tabManager: TabManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         tabManager = TabManager(Engine.runtime, File(filesDir, "tabs"))
+        val iconsDir = File(filesDir, "icons")
 
         setContent {
             val prefs by settingsRepo.prefs.collectAsStateWithLifecycle(Prefs())
@@ -101,6 +106,15 @@ class MainActivity : ComponentActivity() {
             val currentId by tabManager.currentId.collectAsStateWithLifecycle()
             val currentTab = tabs.firstOrNull { it.id == currentId }
             val currentSession = currentTab?.session
+
+            var bookmarks by remember { mutableStateOf(emptyList<Bookmark>()) }
+            var bmReload by remember { mutableIntStateOf(0) }
+            LaunchedEffect(bmReload) { bookmarks = bookmarksRepo.all() }
+            var bookmarked by remember { mutableStateOf(false) }
+            LaunchedEffect(currentTab?.url) {
+                val u = currentTab?.url
+                bookmarked = !u.isNullOrBlank() && u.startsWith("http") && bookmarksRepo.isBookmarked(u)
+            }
 
             BackHandler(enabled = screen != Screen.Browser) { screen = Screen.Browser }
 
@@ -123,17 +137,46 @@ class MainActivity : ComponentActivity() {
                                         progress = { currentTab.progress },
                                         Modifier.fillMaxWidth().height(2.dp))
                                 }
+                                val showStart = screen == Screen.Browser &&
+                                    (currentTab?.url.isNullOrBlank() || currentTab?.url == "about:blank")
+                                if (showStart) {
+                                    Surface(Modifier.fillMaxSize()) {
+                                        StartPage(
+                                            bookmarks, iconsDir, prefs.searchEngine,
+                                            onSearch = { q ->
+                                                if (q.isNotBlank()) {
+                                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(buildLoadUri(q, prefs.searchEngine))
+                                                }
+                                            },
+                                            onOpen = { uri -> currentTab?.session?.loadUri(uri) },
+                                            onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
+                                            onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } })
+                                    }
+                                }
                             }
                             BottomBar(
                                 currentTab,
                                 prefs.searchEngine,
                                 tabCount = tabs.size,
+                                bookmarked = bookmarked,
                                 onNavigate = { uri ->
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
                                 onTray = { showTray = true },
-                                onSettings = { screen = Screen.Settings },
+                                onNewTab = { showTray = false; tabManager.newTab(null) },
+                                onNewPrivateTab = { tabManager.newTab(null, private = true) },
+                                onToggleBookmark = {
+                                    val t = currentTab ?: return@BottomBar
+                                    scope.launch {
+                                        if (bookmarked) bookmarksRepo.remove(t.url)
+                                        else bookmarksRepo.add(t.url, t.title)
+                                        bookmarked = !bookmarked
+                                        bmReload++
+                                    }
+                                },
+                                onBookmarks = { screen = Screen.Bookmarks },
                                 onHistory = { screen = Screen.History },
+                                onSettings = { screen = Screen.Settings },
                                 onSuggest = { q -> historyRepo.suggest(q) })
                         }
                         if (screen == Screen.Settings) {
@@ -157,7 +200,17 @@ class MainActivity : ComponentActivity() {
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 })
                         }
-                        if (screen == Screen.Bookmarks) Surface(Modifier.fillMaxSize()) { Placeholder("Закладки") { screen = Screen.Browser } }
+                        if (screen == Screen.Bookmarks) Surface(Modifier.fillMaxSize()) {
+                            BookmarksScreen(
+                                bookmarks, iconsDir,
+                                onBack = { screen = Screen.Browser },
+                                onOpen = { uri ->
+                                    screen = Screen.Browser
+                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                },
+                                onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
+                                onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } })
+                        }
                         if (showTray) {
                             ModalBottomSheet(onDismissRequest = { showTray = false }) {
                                 TabTray(
@@ -184,16 +237,22 @@ private fun BottomBar(
     tab: Tab?,
     engine: SearchEngine,
     tabCount: Int,
+    bookmarked: Boolean,
     onNavigate: (String) -> Unit,
     onTray: () -> Unit,
-    onSettings: () -> Unit,
+    onNewTab: () -> Unit,
+    onNewPrivateTab: () -> Unit,
+    onToggleBookmark: () -> Unit,
+    onBookmarks: () -> Unit,
     onHistory: () -> Unit,
+    onSettings: () -> Unit,
     onSuggest: suspend (String) -> List<Suggestion>,
 ) {
     // Пока поле в фокусе — текст пользователя, иначе живой URL текущей вкладки.
     var text by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf(emptyList<Suggestion>()) }
+    var menuOpen by remember { mutableStateOf(false) }
     val shown = if (focused) text else (tab?.url ?: "")
     val focusManager = LocalFocusManager.current
     LaunchedEffect(focused, shown) {
@@ -241,8 +300,23 @@ private fun BottomBar(
         IconButton(onClick = onTray, modifier = Modifier.semantics { contentDescription = "Вкладки" }) {
             Text("$tabCount", style = MaterialTheme.typography.titleMedium)
         }
-        IconButton(onClick = onHistory) { Icon(Icons.Filled.List, "История") }
-        IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Настройки") }
+        Box {
+            IconButton(onClick = { menuOpen = true },
+                modifier = Modifier.semantics { contentDescription = "Меню" }) {
+                Icon(Icons.Filled.MoreVert, "Меню")
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(text = { Text("Новая вкладка") }, onClick = { menuOpen = false; onNewTab() })
+                DropdownMenuItem(text = { Text("Приватная вкладка") }, onClick = { menuOpen = false; onNewPrivateTab() })
+                DropdownMenuItem(
+                    text = { Text(if (bookmarked) "Убрать из закладок" else "В закладки") },
+                    enabled = tab?.url?.startsWith("http") == true,
+                    onClick = { menuOpen = false; onToggleBookmark() })
+                DropdownMenuItem(text = { Text("Закладки") }, onClick = { menuOpen = false; onBookmarks() })
+                DropdownMenuItem(text = { Text("История") }, onClick = { menuOpen = false; onHistory() })
+                DropdownMenuItem(text = { Text("Настройки") }, onClick = { menuOpen = false; onSettings() })
+            }
+        }
     }
 }
 
@@ -323,9 +397,24 @@ private fun visitsLabel(visits: Int) =
     }
 
 @Composable
-private fun Placeholder(title: String, onBack: () -> Unit) {
-    Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
-        Text("$title — появится позже", style = MaterialTheme.typography.titleLarge)
+private fun BookmarksScreen(
+    bookmarks: List<Bookmark>,
+    iconsDir: File,
+    onBack: () -> Unit,
+    onOpen: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
+            Text("Закладки", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+        }
+        if (bookmarks.isEmpty()) {
+            Text("Закладок нет", Modifier.padding(16.dp))
+        } else {
+            TileGrid(bookmarks, iconsDir, Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                onOpen = onOpen, onRename = onRename, onDelete = onDelete)
+        }
     }
 }
