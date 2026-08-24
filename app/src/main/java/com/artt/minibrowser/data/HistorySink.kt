@@ -1,6 +1,17 @@
 package com.artt.minibrowser.data
 
-// Заглушка: тело заполнится в задаче 6 (Room-история).
+import kotlinx.coroutines.launch
+
+// Пишет историю в фоне через application-scope DbHolder (см. Db.kt).
 object HistorySink {
-    fun record(url: String, title: String?) {}
+    private val repo by lazy { HistoryRepository(DbHolder.db.dao()) }
+
+    fun record(url: String, title: String?) {
+        // Пустой заголовок (страница ещё не отдала title) — сохраняем прежний.
+        DbHolder.scope.launch { repo.record(url, title?.takeIf { it.isNotBlank() }) }
+    }
+
+    fun updateTitle(url: String, title: String?) {
+        DbHolder.scope.launch { repo.updateTitle(url, title) }
+    }
 }

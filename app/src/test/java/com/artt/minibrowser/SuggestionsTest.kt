@@ -1,0 +1,32 @@
+package com.artt.minibrowser
+
+import com.artt.minibrowser.data.Scored
+import com.artt.minibrowser.data.Suggestion
+import com.artt.minibrowser.data.rankSuggestions
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+class SuggestionsTest {
+    private val h = listOf(
+        Scored("https://youtube.com/watch?v=1", "видео котики", 100, 5),
+        Scored("https://ya.ru", "Яндекс", 200, 1),
+        Scored("https://vk.com/feed", "Новости | VK", 300, 2),
+    )
+    @Test fun filtersAndSortsByFreshness() {
+        val r = rankSuggestions(h, emptyList(), "")
+        assertEquals("https://vk.com/feed", r.first().url)
+    }
+    @Test fun queryMatchesUrlOrTitle() {
+        val r = rankSuggestions(h, emptyList(), "котики")
+        assertEquals(listOf("https://youtube.com/watch?v=1"), r.map { it.url })
+    }
+    @Test fun bookmarksAlwaysFirst() {
+        val r = rankSuggestions(h, listOf("https://ya.ru"), "")
+        assertEquals("https://ya.ru", r.first().url)
+    }
+    @Test fun cappedAtEight() {
+        val big = (1..20).map { Scored("https://x$it.com", "t$it", it.toLong(), 1) }
+        assertTrue(rankSuggestions(big, emptyList(), "").size <= 8)
+    }
+}

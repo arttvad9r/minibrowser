@@ -96,7 +96,10 @@ class TabManager(private val runtime: GeckoRuntime, storeDir: File) {
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? = null
         }
         tab.session.contentDelegate = object : GeckoSession.ContentDelegate {
-            override fun onTitleChange(session: GeckoSession, title: String?) { tab.title = title.orEmpty() }
+            override fun onTitleChange(session: GeckoSession, title: String?) {
+                tab.title = title.orEmpty()
+                if (!tab.isPrivate) HistorySink.updateTitle(tab.url, title)
+            }
             override fun onCrash(session: GeckoSession) {
                 // Восстановление крашнутой сессии с тем же URL.
                 val url = tab.url

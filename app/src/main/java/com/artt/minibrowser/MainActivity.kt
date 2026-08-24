@@ -16,12 +16,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -34,7 +41,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,15 +51,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.artt.minibrowser.data.DbHolder
+import com.artt.minibrowser.data.HistoryEntry
+import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.data.SettingsRepository
+import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.Engine
 import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.Tab
@@ -60,11 +76,14 @@ import com.artt.minibrowser.ui.SettingsScreen
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoView
 import java.io.File
+import java.text.DateFormat
+import java.util.Date
 
 enum class Screen { Browser, Settings, History, Bookmarks }
 
 class MainActivity : ComponentActivity() {
     private val settingsRepo by lazy { SettingsRepository(this) }
+    private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
     private lateinit var tabManager: TabManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -113,7 +132,9 @@ class MainActivity : ComponentActivity() {
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
                                 onTray = { showTray = true },
-                                onSettings = { screen = Screen.Settings })
+                                onSettings = { screen = Screen.Settings },
+                                onHistory = { screen = Screen.History },
+                                onSuggest = { q -> historyRepo.suggest(q) })
                         }
                         if (screen == Screen.Settings) {
                             Surface(Modifier.fillMaxSize()) {
@@ -127,7 +148,15 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
-                        if (screen == Screen.History) Surface(Modifier.fillMaxSize()) { Placeholder("История") { screen = Screen.Browser } }
+                        if (screen == Screen.History) Surface(Modifier.fillMaxSize()) {
+                            HistoryScreen(
+                                historyRepo,
+                                onBack = { screen = Screen.Browser },
+                                onOpen = { uri ->
+                                    screen = Screen.Browser
+                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                })
+                        }
                         if (screen == Screen.Bookmarks) Surface(Modifier.fillMaxSize()) { Placeholder("Закладки") { screen = Screen.Browser } }
                         if (showTray) {
                             ModalBottomSheet(onDismissRequest = { showTray = false }) {
@@ -158,28 +187,61 @@ private fun BottomBar(
     onNavigate: (String) -> Unit,
     onTray: () -> Unit,
     onSettings: () -> Unit,
+    onHistory: () -> Unit,
+    onSuggest: suspend (String) -> List<Suggestion>,
 ) {
     // Пока поле в фокусе — текст пользователя, иначе живой URL текущей вкладки.
     var text by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
+    var suggestions by remember { mutableStateOf(emptyList<Suggestion>()) }
     val shown = if (focused) text else (tab?.url ?: "")
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(focused, shown) {
+        suggestions = if (focused) onSuggest(text) else emptyList()
+    }
+    val navigate: (String) -> Unit = { q ->
+        if (q.isNotBlank()) onNavigate(buildLoadUri(q, engine))
+        focusManager.clearFocus(force = true)
+    }
     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = shown,
-            onValueChange = { text = it },
-            modifier = Modifier.weight(1f).onFocusChanged {
-                focused = it.isFocused
-                if (!it.isFocused) text = ""
-            },
-            singleLine = true, placeholder = { Text("Поиск или адрес") })
-        TextButton(onClick = {
-            if (shown.isNotBlank()) onNavigate(buildLoadUri(shown, engine))
-            text = ""
-        }) { Text("→") }
+        Box(Modifier.weight(1f)) {
+            OutlinedTextField(
+                value = shown,
+                onValueChange = { text = it },
+                modifier = Modifier.fillMaxWidth().onFocusChanged {
+                    focused = it.isFocused
+                    if (!it.isFocused) text = ""
+                },
+                singleLine = true, placeholder = { Text("Поиск или адрес") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { navigate(text) }))
+            DropdownMenu(
+                expanded = focused && suggestions.isNotEmpty(),
+                onDismissRequest = {},
+                // focusable=false: иначе попап перехватывает ввод с клавиатуры у текстового поля.
+                properties = PopupProperties(focusable = false)) {
+                suggestions.forEach { s ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(s.label.ifBlank { s.url }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(s.url, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        },
+                        onClick = {
+                            focusManager.clearFocus()
+                            onNavigate(s.url)
+                        })
+                }
+            }
+        }
+        TextButton(onClick = { navigate(shown); text = "" }) { Text("→") }
         IconButton(onClick = onTray, modifier = Modifier.semantics { contentDescription = "Вкладки" }) {
             Text("$tabCount", style = MaterialTheme.typography.titleMedium)
         }
+        IconButton(onClick = onHistory) { Icon(Icons.Filled.List, "История") }
         IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Настройки") }
     }
 }
@@ -214,6 +276,51 @@ private fun TabTray(
         TextButton(onClick = onNew) { Text("+ Новая вкладка") }
     }
 }
+
+@Composable
+private fun HistoryScreen(repo: HistoryRepository, onBack: () -> Unit, onOpen: (String) -> Unit) {
+    var entries by remember { mutableStateOf(emptyList<HistoryEntry>()) }
+    var reload by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
+    LaunchedEffect(reload) { entries = repo.recent(200) }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
+            Text("История", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            TextButton(onClick = { scope.launch { repo.clear(); reload++ } }) { Text("Очистить") }
+        }
+        if (entries.isEmpty()) {
+            Text("История пуста", Modifier.padding(16.dp))
+        } else {
+            LazyColumn {
+                items(entries) { e ->
+                    Row(Modifier.fillMaxWidth().clickable { onOpen(e.url) }.padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(e.title.ifBlank { e.url }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(e.url, Modifier.weight(1f, fill = false),
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall)
+                                Text("  ·  ${visitsLabel(e.visits)}",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Text(dateFormat.format(Date(e.visitedAt)), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun visitsLabel(visits: Int) =
+    when (visits) {
+        1 -> "1 визит"
+        in 2..4 -> "$visits визита"
+        else -> "$visits визитов"
+    }
 
 @Composable
 private fun Placeholder(title: String, onBack: () -> Unit) {

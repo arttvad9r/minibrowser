@@ -1,0 +1,81 @@
+package com.artt.minibrowser.data
+
+import android.content.Context
+import androidx.room.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+
+data class Scored(val url: String, val title: String, val visitedAt: Long, val visits: Int)
+data class Suggestion(val label: String, val url: String)
+
+fun rankSuggestions(history: List<Scored>, bookmarks: List<String>, q: String): List<Suggestion> {
+    val needle = q.trim()
+    val matched = history.filter { needle.isEmpty() ||
+        it.url.contains(needle, true) || it.title.contains(needle, true) }
+        .sortedByDescending { it.visitedAt }
+    val bm = bookmarks.filter { needle.isEmpty() || it.contains(needle, true) }
+    return (bm.map { Suggestion(it, it) } + matched.take(8).map { Suggestion(it.title.ifEmpty { it.url }, it.url) })
+        .distinctBy { it.url }.take(8)
+}
+
+@Entity(tableName = "history")
+data class HistoryEntry(
+    @PrimaryKey val url: String, val title: String, val visitedAt: Long, val visits: Int,
+)
+
+@Entity(tableName = "bookmarks")
+data class Bookmark(
+    @PrimaryKey val url: String, val title: String, val host: String, val position: Int,
+)
+
+@Dao interface AppDao {
+    // --- history ---
+    @Query("SELECT * FROM history ORDER BY visitedAt DESC LIMIT :limit")
+    suspend fun recentHistory(limit: Int): List<HistoryEntry>
+
+    @Query("SELECT * FROM history WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' ORDER BY visits DESC LIMIT 50")
+    suspend fun searchHistory(q: String): List<HistoryEntry>
+
+    @Query("SELECT * FROM history WHERE url = :url")
+    suspend fun historyByUrl(url: String): HistoryEntry?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertHistory(e: HistoryEntry)
+
+    @Query("DELETE FROM history")
+    suspend fun clearHistory()
+
+    // --- bookmarks ---
+    @Query("SELECT * FROM bookmarks ORDER BY position")
+    suspend fun bookmarks(): List<Bookmark>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertBookmark(b: Bookmark)
+
+    @Query("DELETE FROM bookmarks WHERE url = :url")
+    suspend fun deleteBookmark(url: String)
+
+    @Query("UPDATE bookmarks SET title = :title WHERE url = :url")
+    suspend fun renameBookmark(url: String, title: String)
+
+    @Query("SELECT COUNT(*) FROM bookmarks WHERE url = :url")
+    suspend fun bookmarkCount(url: String): Int
+}
+
+@Database(entities = [HistoryEntry::class, Bookmark::class], version = 1, exportSchema = false)
+abstract class AppDb : RoomDatabase() { abstract fun dao(): AppDao }
+
+// Application-scope: HistorySink вызывается из TabManager без жизненного цикла,
+// поэтому скоуп живёт здесь (переживает активити, гаснет только с процессом).
+object DbHolder {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    lateinit var db: AppDb
+        private set
+
+    fun init(context: Context) {
+        if (!::db.isInitialized) {
+            db = Room.databaseBuilder(context, AppDb::class.java, "minibrowser.db").build()
+        }
+    }
+}
