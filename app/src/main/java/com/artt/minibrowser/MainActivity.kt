@@ -2,6 +2,7 @@
 
 package com.artt.minibrowser
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -60,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
@@ -69,6 +72,7 @@ import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.Engine
+import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.engine.TabManager
@@ -76,6 +80,7 @@ import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.ui.SettingsScreen
 import com.artt.minibrowser.ui.StartPage
 import com.artt.minibrowser.ui.TileGrid
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoView
 import java.io.File
@@ -90,10 +95,29 @@ class MainActivity : ComponentActivity() {
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private lateinit var tabManager: TabManager
 
+    // Навигация из VIEW-интентов; заполняется в setContent.
+    private var navigateHook: ((String) -> Unit)? = null
+    private var pendingUri: String? = null
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        openFromIntent(intent)
+    }
+
+    private fun openFromIntent(intent: Intent?) {
+        val uri = intent?.data?.toString() ?: return
+        val hook = navigateHook
+        if (hook != null) hook(uri) else pendingUri = uri
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         tabManager = TabManager(Engine.runtime, File(filesDir, "tabs"))
         val iconsDir = File(filesDir, "icons")
+        // Расширения ставятся один раз за процесс; тумблер применяется сразу после первого чтения настроек.
+        lifecycleScope.launch {
+            ExtensionLoader.installAll(Engine.runtime, settingsRepo.prefs.first().adblockEnabled)
+        }
 
         setContent {
             val prefs by settingsRepo.prefs.collectAsStateWithLifecycle(Prefs())
@@ -107,6 +131,14 @@ class MainActivity : ComponentActivity() {
             val currentTab = tabs.firstOrNull { it.id == currentId }
             val currentSession = currentTab?.session
 
+            navigateHook = { uri ->
+                val t = tabs.firstOrNull { it.id == tabManager.currentId.value } ?: tabManager.newTab(null)
+                android.util.Log.d("MB", "hook: $uri -> tab ${t.id}")
+                t.session.loadUri(uri)
+            }
+            // Интент, пришедший до готовности хука (холодный старт), доставляем один раз.
+            pendingUri?.let { u -> pendingUri = null; navigateHook?.invoke(u) }
+
             var bookmarks by remember { mutableStateOf(emptyList<Bookmark>()) }
             var bmReload by remember { mutableIntStateOf(0) }
             LaunchedEffect(bmReload) { bookmarks = bookmarksRepo.all() }
@@ -117,6 +149,13 @@ class MainActivity : ComponentActivity() {
             }
 
             BackHandler(enabled = screen != Screen.Browser) { screen = Screen.Browser }
+
+            val toggleAdblock: (Boolean) -> Unit = { b ->
+                scope.launch {
+                    settingsRepo.setAdblock(b)
+                    ExtensionLoader.setAdblock(Engine.runtime, b)
+                }
+            }
 
             MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
                 Surface(Modifier.fillMaxSize()) {
@@ -154,11 +193,13 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                            BottomBar(
-                                currentTab,
-                                prefs.searchEngine,
-                                tabCount = tabs.size,
-                                bookmarked = bookmarked,
+                             BottomBar(
+                                 currentTab,
+                                 prefs.searchEngine,
+                                 tabCount = tabs.size,
+                                 bookmarked = bookmarked,
+                                 adblockEnabled = prefs.adblockEnabled,
+                                 onToggleAdblock = toggleAdblock,
                                 onNavigate = { uri ->
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
@@ -186,7 +227,7 @@ class MainActivity : ComponentActivity() {
                                     onBack = { screen = Screen.Browser },
                                     onEngine = { e -> scope.launch { settingsRepo.setSearchEngine(e) } },
                                     onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
-                                    onAdblock = { b -> scope.launch { settingsRepo.setAdblock(b) } },
+                                    onAdblock = toggleAdblock,
                                     onHomepage = { u -> scope.launch { settingsRepo.setHomepage(u) } },
                                 )
                             }
@@ -224,6 +265,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // Холодный старт с VIEW-интентом: хук ещё не готов — uri уйдёт в pendingUri.
+        openFromIntent(intent)
     }
 
     override fun onPause() {
@@ -238,6 +281,8 @@ private fun BottomBar(
     engine: SearchEngine,
     tabCount: Int,
     bookmarked: Boolean,
+    adblockEnabled: Boolean,
+    onToggleAdblock: (Boolean) -> Unit,
     onNavigate: (String) -> Unit,
     onTray: () -> Unit,
     onNewTab: () -> Unit,
@@ -314,6 +359,10 @@ private fun BottomBar(
                     onClick = { menuOpen = false; onToggleBookmark() })
                 DropdownMenuItem(text = { Text("Закладки") }, onClick = { menuOpen = false; onBookmarks() })
                 DropdownMenuItem(text = { Text("История") }, onClick = { menuOpen = false; onHistory() })
+                DropdownMenuItem(
+                    text = { Text("Блокировка рекламы") },
+                    trailingIcon = { Checkbox(checked = adblockEnabled, onCheckedChange = null) },
+                    onClick = { menuOpen = false; onToggleAdblock(!adblockEnabled) })
                 DropdownMenuItem(text = { Text("Настройки") }, onClick = { menuOpen = false; onSettings() })
             }
         }

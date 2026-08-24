@@ -17,6 +17,12 @@ android {
         versionName = "0.1"
     }
     buildFeatures { compose = true }
+    // Дефолтный паттерн AAPT вырезает каталоги, начинающиеся с "_"
+    // (<dir>_*), из-за чего из APK пропадает _locales расширений.
+    androidResources {
+        ignoreAssetsPattern =
+            "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
 
