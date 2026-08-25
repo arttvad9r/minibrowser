@@ -256,6 +256,7 @@ class MainActivity : ComponentActivity() {
             val currentTab = tabs.firstOrNull { it.id == currentId }
             val currentSession = currentTab?.session
             val focusManager = LocalFocusManager.current
+            val clearPageFocus = remember(focusManager) { { focusManager.clearFocus(force = true) } }
             val omniboxFocus = remember { FocusRequester() }
 
             // Уход с браузера закрывает подсказки омнибокса (попап рисуется поверх любых экранов).
@@ -401,30 +402,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             Box(Modifier.weight(1f)) {
-                                AndroidView(
-                                    factory = { ctx ->
-                                        GeckoView(ctx).apply {
-                                            // Тап по странице снимает фокус с омнибокса — закрывает подсказки.
-                                            setOnTouchListener { _, ev ->
-                                                if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
-                                                    focusManager.clearFocus(force = true)
-                                                }
-                                                false
-                                            }
-                                        }
-                                    },
-                                    update = { v ->
-                                        if (v.session !== currentSession) {
-                                            v.releaseSession()
-                                            currentSession?.let(v::setSession)
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxSize())
-                                if (currentTab != null && currentTab.progress >= 0) {
-                                    LinearProgressIndicator(
-                                        progress = { currentTab.progress },
-                                        Modifier.fillMaxWidth().height(2.dp))
-                                }
+                                GeckoContent(currentSession, clearPageFocus, Modifier.fillMaxSize())
+                                PageProgress(currentTab)
                                 if (showStart) {
                                     StartPage(
                                         bookmarks, iconsDir, recent, currentTab?.isPrivate == true,
@@ -535,6 +514,42 @@ class MainActivity : ComponentActivity() {
         permissionCompletion = null
         fileCompletion = null
         super.onDestroy()
+    }
+}
+
+@Composable
+private fun GeckoContent(
+    session: GeckoSession?,
+    onPageTouch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AndroidView(
+        factory = { context ->
+            GeckoView(context).apply {
+                setOnTouchListener { _, event ->
+                    if (event.actionMasked == MotionEvent.ACTION_DOWN) onPageTouch()
+                    false
+                }
+            }
+        },
+        update = { view ->
+            if (view.session !== session) {
+                view.releaseSession()
+                session?.let(view::setSession)
+            }
+        },
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun PageProgress(tab: Tab?) {
+    val progress = tab?.progress ?: -1f
+    if (progress >= 0f) {
+        LinearProgressIndicator(
+            progress = { progress },
+            Modifier.fillMaxWidth().height(2.dp),
+        )
     }
 }
 

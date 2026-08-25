@@ -117,6 +117,36 @@ internal data class PersistTabCandidate(
     val isPrivate: Boolean,
 )
 
+internal data class PersistenceTabSnapshot(
+    val id: Long,
+    val url: String,
+    val title: String,
+    val desktop: Boolean,
+    val lastAccess: Long,
+    val latestSessionState: GeckoSession.SessionState?,
+    val serializedSessionState: String?,
+    val isPrivate: Boolean,
+)
+
+internal data class PersistenceSnapshot(
+    val selectedId: Long?,
+    val tabs: List<PersistenceTabSnapshot>,
+)
+
+internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): PersistedBrowserState = PersistedBrowserState(
+    selectedId = snapshot.selectedId,
+    tabs = snapshot.tabs.filterNot { it.isPrivate }.map {
+        PersistedTab(
+            id = it.id,
+            url = it.url,
+            title = it.title,
+            desktop = it.desktop,
+            sessionState = it.latestSessionState?.toString() ?: it.serializedSessionState,
+            lastAccess = it.lastAccess,
+        )
+    },
+)
+
 internal fun snapshotPersistedState(selectedId: Long?, tabs: List<PersistTabCandidate>): PersistedBrowserState = PersistedBrowserState(
     selectedId = selectedId,
     tabs = tabs.filterNot { it.isPrivate }.map {
@@ -137,6 +167,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var loadError by mutableStateOf<String?>(null)
     internal val progressGate = ProgressGate()
     internal var restoreUrlOnOpen = false
+    @Volatile internal var latestSessionState: GeckoSession.SessionState? = null
     internal var persistedSessionState: String? = null
     internal var lastAccess = System.currentTimeMillis()
 }
@@ -156,6 +187,7 @@ class TabManager(
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
     private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val persistRequests = PersistSignalQueue()
+    @Volatile private var latestPersistenceSnapshot = PersistenceSnapshot(null, emptyList())
     val tabs get() = _tabs
     val currentId = MutableStateFlow<Long?>(null)
     private var seq = 0L
@@ -164,7 +196,8 @@ class TabManager(
         persistScope.launch {
             while (true) {
                 persistRequests.nextForWrite()
-                runCatching { TabStore.saveState(storeDir, snapshotForPersistence()) }
+                val snapshot = latestPersistenceSnapshot
+                runCatching { TabStore.saveState(storeDir, serializePersistenceSnapshot(snapshot)) }
                     .onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
             }
         }
@@ -283,12 +316,24 @@ class TabManager(
     }
 
     private fun requestPersist(immediate: Boolean) {
+        latestPersistenceSnapshot = capturePersistenceSnapshot()
         persistRequests.send(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
     }
 
-    private fun snapshotForPersistence(): PersistedBrowserState = snapshotPersistedState(
-        currentId.value,
-        _tabs.value.map { PersistTabCandidate(it.id, it.url, it.title, it.desktop, it.persistedSessionState, it.lastAccess, it.isPrivate) },
+    private fun capturePersistenceSnapshot(): PersistenceSnapshot = PersistenceSnapshot(
+        selectedId = currentId.value,
+        tabs = _tabs.value.map {
+            PersistenceTabSnapshot(
+                id = it.id,
+                url = it.url,
+                title = it.title,
+                desktop = it.desktop,
+                lastAccess = it.lastAccess,
+                latestSessionState = it.latestSessionState,
+                serializedSessionState = it.persistedSessionState,
+                isPrivate = it.isPrivate,
+            )
+        },
     )
 
     private fun restore() {
@@ -326,7 +371,7 @@ class TabManager(
                 }
             }
             override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
-                tab.persistedSessionState = state.toString()
+                tab.latestSessionState = state
                 if (!tab.isPrivate) {
                     requestPersist(immediate = false)
                 }

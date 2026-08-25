@@ -3,7 +3,10 @@ package com.artt.minibrowser
 import com.artt.minibrowser.engine.PersistTabCandidate
 import com.artt.minibrowser.engine.PersistSignal
 import com.artt.minibrowser.engine.PersistSignalQueue
+import com.artt.minibrowser.engine.PersistenceSnapshot
+import com.artt.minibrowser.engine.PersistenceTabSnapshot
 import com.artt.minibrowser.engine.mergePersistSignal
+import com.artt.minibrowser.engine.serializePersistenceSnapshot
 import com.artt.minibrowser.engine.snapshotPersistedState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -22,6 +25,21 @@ class PersistenceSignalTest {
         val snapshot = snapshotPersistedState(1, listOf(normal, private))
         assertEquals("https://latest.example", snapshot.tabs.single().url)
         assertEquals("Latest", snapshot.tabs.single().title)
+    }
+
+    @Test fun immutablePersistenceSnapshotKeepsMetadataAndFiltersPrivateTabs() {
+        val snapshot = PersistenceSnapshot(
+            selectedId = 1,
+            tabs = listOf(
+                PersistenceTabSnapshot(1, "https://latest.example", "Latest", true, 12L, null, "state-c", false),
+                PersistenceTabSnapshot(2, "https://private.example", "Private", false, 13L, null, "private-state", true),
+            ),
+        )
+        val persisted = serializePersistenceSnapshot(snapshot)
+        assertEquals(1L, persisted.selectedId)
+        assertEquals(1, persisted.tabs.size)
+        assertEquals("https://latest.example", persisted.tabs.single().url)
+        assertEquals("state-c", persisted.tabs.single().sessionState)
     }
 
     @Test
