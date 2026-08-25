@@ -26,6 +26,8 @@ internal fun selectSafeExternalUri(direct: String?, fallback: String?): String? 
     return safeDirect ?: fallback?.takeIf(::isValidWebUri)
 }
 
+internal fun isAllowedPopupTarget(uri: String?): Boolean = uri != null && isValidWebUri(uri)
+
 fun createSafeExternalIntent(value: String): Intent? = runCatching {
     val scheme = value.substringBefore(':', "").lowercase()
     val parsed = if (scheme == "intent") {

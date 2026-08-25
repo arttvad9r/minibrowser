@@ -6,11 +6,13 @@ import android.app.DatePickerDialog
 import android.app.Dialog
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import android.widget.LinearLayout
 import android.text.InputType
 import android.widget.EditText
 import android.widget.Toast
 import android.widget.TimePicker
+import com.artt.minibrowser.BuildConfig
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -397,8 +399,34 @@ class GeckoPromptController(
     override fun onPopupPrompt(
         session: GeckoSession,
         prompt: GeckoSession.PromptDelegate.PopupPrompt,
-    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> =
-        GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY))
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+        val targetUri = prompt.targetUri
+        if (BuildConfig.DEBUG) Log.d("MinibrowserNavigation", "popup prompt uri=$targetUri")
+        if (!isAllowedPopupTarget(targetUri)) {
+            return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.DENY))
+        }
+        val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        val guard = PromptGuard(prompt, result)
+        activity.runOnUiThread {
+            if (!isPromptOpen(prompt)) return@runOnUiThread
+            val host = runCatching { Uri.parse(targetUri).host }.getOrNull().orEmpty()
+            val message = if (host.isBlank()) {
+                "Сайт пытается открыть новую страницу."
+            } else {
+                "Сайт пытается открыть страницу на $host."
+            }
+            val dialog = AlertDialog.Builder(activity)
+                .setTitle("Открыть новое окно?")
+                .setMessage(message)
+                .setNegativeButton("Отмена") { _, _ -> guard.complete { prompt.confirm(AllowOrDeny.DENY) } }
+                .setPositiveButton("Открыть") { _, _ -> guard.complete { prompt.confirm(AllowOrDeny.ALLOW) } }
+                .setOnCancelListener { guard.complete { prompt.confirm(AllowOrDeny.DENY) } }
+                .create()
+            bindPromptDialog(prompt, dialog)
+            dialog.show()
+        }
+        return result
+    }
 
     override fun onFilePrompt(
         session: GeckoSession,

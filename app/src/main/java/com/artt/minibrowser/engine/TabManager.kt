@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
+import com.artt.minibrowser.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -402,6 +403,9 @@ class TabManager(
                 session: GeckoSession,
                 request: GeckoSession.NavigationDelegate.LoadRequest,
             ): GeckoResult<AllowOrDeny> {
+                if (BuildConfig.DEBUG) {
+                    Log.d("MinibrowserNavigation", "load uri=${request.uri} target=${request.target} trigger=${request.triggerUri} userGesture=${request.hasUserGesture} redirect=${request.isRedirect}")
+                }
                 if (isAllowedWebUri(request.uri) || request.uri == "about:blank") {
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
@@ -426,6 +430,7 @@ class TabManager(
             // target="_blank"/window.open (так открывают результаты поисковиков) — новая вкладка с автопереключением.
             // Возвращённую сессию открываем сами, uri в неё грузит сам GeckoView.
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
+                if (BuildConfig.DEBUG) Log.d("MinibrowserNavigation", "new session uri=$uri")
                 val newSession = newWindowSession(tab.isPrivate)
                 // GeckoView opens and owns this session after the result is returned.
                 return GeckoResult.fromValue(newSession)

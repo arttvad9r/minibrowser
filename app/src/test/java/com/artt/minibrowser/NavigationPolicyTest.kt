@@ -4,6 +4,7 @@ import com.artt.minibrowser.engine.NavigationTarget
 import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.selectSafeExternalUri
+import com.artt.minibrowser.engine.isAllowedPopupTarget
 import com.artt.minibrowser.browser.NavigationController
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -43,5 +44,18 @@ class NavigationPolicyTest {
         assertEquals(null, selectSafeExternalUri("evil://payload", "https:"))
         assertEquals(null, selectSafeExternalUri("evil://payload", "https://"))
         assertEquals(null, selectSafeExternalUri("evil://payload", "mailto:test@example.com"))
+    }
+
+    @Test fun popupPolicyAllowsOnlyValidWebTargets() {
+        assertEquals(true, isAllowedPopupTarget("https://drive.google.com/"))
+        assertEquals(true, isAllowedPopupTarget("https://www.youtube.com/"))
+        assertEquals(false, isAllowedPopupTarget("javascript:alert(1)"))
+        assertEquals(false, isAllowedPopupTarget("data:text/html,hello"))
+        assertEquals(false, isAllowedPopupTarget("file:///tmp/page"))
+        assertEquals(false, isAllowedPopupTarget("chrome://settings"))
+        assertEquals(false, isAllowedPopupTarget("https://"))
+        assertEquals(false, isAllowedPopupTarget("not a uri"))
+        assertEquals(false, isAllowedPopupTarget("  "))
+        assertEquals(false, isAllowedPopupTarget(null))
     }
 }
