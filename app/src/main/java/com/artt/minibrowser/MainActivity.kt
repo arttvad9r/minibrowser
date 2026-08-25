@@ -357,7 +357,6 @@ class MainActivity : ComponentActivity() {
                                     onEngine = { e -> scope.launch { settingsRepo.setSearchEngine(e) } },
                                     onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
                                     onAdblock = toggleAdblock,
-                                    onHomepage = { u -> scope.launch { settingsRepo.setHomepage(u) } },
                                     onTranslateLang = { lang -> scope.launch { settingsRepo.setTranslateTarget(lang) } },
                                     onClearData = { withBookmarks ->
                                         scope.launch {
@@ -488,9 +487,9 @@ private fun TopBar(
                             style = MaterialTheme.typography.bodyLarge,
                         )
                     }
-                    BasicTextFieldCompat(
-                        shown,
-                        onTextChange = { text = it },
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = shown,
+                        onValueChange = { text = it },
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(omniboxFocus)
@@ -498,7 +497,10 @@ private fun TopBar(
                                 focused = it.isFocused
                                 if (!it.isFocused) text = ""
                             },
-                        onSearch = { navigate(text) },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { navigate(text) }),
                     )
                 }
             }
@@ -583,24 +585,6 @@ private fun TopBar(
 }
 
 // bookmarked передаётся из MainActivity (состояние «текущий url в закладках»).
-
-@Composable
-private fun BasicTextFieldCompat(
-    value: String,
-    onTextChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    onSearch: () -> Unit,
-) {
-    androidx.compose.foundation.text.BasicTextField(
-        value = value,
-        onValueChange = onTextChange,
-        modifier = modifier,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-    )
-}
 
 @Composable
 private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {

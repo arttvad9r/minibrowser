@@ -26,7 +26,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
 
 class TabManager(
     private val runtime: GeckoRuntime,
-    storeDir: File,
+    private val storeDir: File,
     private val context: android.content.Context,
 ) {
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
@@ -35,7 +35,6 @@ class TabManager(
     private var seq = 0L
 
     init {
-        if (TabStore.dir == null) TabStore.dir = storeDir
         restore()
     }
 
@@ -73,10 +72,10 @@ class TabManager(
 
     // Приватные и ещё не начавшие загрузку вкладки не сохраняются.
     fun persist() =
-        TabStore.save(_tabs.value.filter { !it.isPrivate && it.url.isNotBlank() }.map { it.url })
+        TabStore.save(storeDir, _tabs.value.filter { !it.isPrivate && it.url.isNotBlank() }.map { it.url })
 
     private fun restore() {
-        TabStore.load().forEach { newTab(it) }
+        TabStore.load(storeDir).forEach { newTab(it) }
         if (_tabs.value.isEmpty()) newTab(null)
     }
 
@@ -99,7 +98,7 @@ class TabManager(
                 tab.url = url.orEmpty()
             }
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { tab.canGoBack = canGoBack }
-            // target="_blank"/window.open (так открывают результаты поисковики) — новая вкладка с автопереключением.
+            // target="_blank"/window.open (так открывают результаты поисковиков) — новая вкладка с автопереключением.
             // Возвращённую сессию открываем сами, uri в неё грузит сам GeckoView.
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
                 val s = GeckoSession(

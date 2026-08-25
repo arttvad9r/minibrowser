@@ -6,7 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-data class Scored(val url: String, val title: String, val visitedAt: Long, val visits: Int)
+data class Scored(val url: String, val title: String, val visitedAt: Long)
 data class Suggestion(val label: String, val url: String)
 
 fun rankSuggestions(history: List<Scored>, bookmarks: List<String>, q: String): List<Suggestion> {
@@ -34,7 +34,7 @@ data class Bookmark(
     @Query("SELECT * FROM history ORDER BY visitedAt DESC LIMIT :limit")
     suspend fun recentHistory(limit: Int): List<HistoryEntry>
 
-    @Query("SELECT * FROM history WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' ORDER BY visits DESC LIMIT 50")
+    @Query("SELECT * FROM history WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' LIMIT 50")
     suspend fun searchHistory(q: String): List<HistoryEntry>
 
     @Query("SELECT * FROM history WHERE url = :url")

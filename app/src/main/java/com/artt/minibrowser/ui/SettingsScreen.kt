@@ -25,8 +25,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,11 +52,9 @@ fun SettingsScreen(
     onEngine: (SearchEngine) -> Unit,
     onTheme: (Int) -> Unit,
     onAdblock: (Boolean) -> Unit,
-    onHomepage: (String) -> Unit,
     onClearData: (withBookmarks: Boolean) -> Unit,
     onTranslateLang: (String) -> Unit,
 ) {
-    var homepage by remember(prefs.homepage) { mutableStateOf(prefs.homepage) }
     var showClearDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
@@ -84,28 +80,6 @@ fun SettingsScreen(
 
             GroupLabel("Внешний вид")
             ThemeSelector(prefs.theme, onTheme)
-
-            GroupLabel("Основное")
-            SettingsGroup {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Text("Домашняя страница", style = MaterialTheme.typography.bodyLarge)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = homepage,
-                        onValueChange = { homepage = it; onHomepage(it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        placeholder = { Text("example.com") },
-                        shape = Radius.button,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.outline,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        ),
-                    )
-                }
-            }
 
             GroupLabel("Перевод")
             SettingsGroup {

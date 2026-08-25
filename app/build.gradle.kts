@@ -15,6 +15,8 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1"
+        // Личное устройство arm64; без фильтра в APK попадают все 4 ABI GeckoView (~300 МБ лишних).
+        ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures { compose = true }
     // Релиз подписываем debug-ключом: ставится поверх debug-сборки на личном телефоне.

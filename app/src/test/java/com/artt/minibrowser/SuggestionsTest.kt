@@ -9,9 +9,9 @@ import kotlin.test.assertTrue
 
 class SuggestionsTest {
     private val h = listOf(
-        Scored("https://youtube.com/watch?v=1", "видео котики", 100, 5),
-        Scored("https://ya.ru", "Яндекс", 200, 1),
-        Scored("https://vk.com/feed", "Новости | VK", 300, 2),
+        Scored("https://youtube.com/watch?v=1", "видео котики", 100),
+        Scored("https://ya.ru", "Яндекс", 200),
+        Scored("https://vk.com/feed", "Новости | VK", 300),
     )
     @Test fun filtersAndSortsByFreshness() {
         val r = rankSuggestions(h, emptyList(), "")
@@ -26,7 +26,7 @@ class SuggestionsTest {
         assertEquals("https://ya.ru", r.first().url)
     }
     @Test fun cappedAtEight() {
-        val big = (1..20).map { Scored("https://x$it.com", "t$it", it.toLong(), 1) }
+        val big = (1..20).map { Scored("https://x$it.com", "t$it", it.toLong()) }
         assertTrue(rankSuggestions(big, emptyList(), "").size <= 8)
     }
 }

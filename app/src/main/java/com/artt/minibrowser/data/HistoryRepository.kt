@@ -16,7 +16,7 @@ class HistoryRepository(private val dao: AppDao) {
     suspend fun suggest(q: String): List<Suggestion> {
         val rows = if (q.isBlank()) dao.recentHistory(30) else dao.searchHistory(q.trim())
         val marks = dao.bookmarks().map { it.url }
-        return rankSuggestions(rows.map { Scored(it.url, it.title, it.visitedAt, it.visits) }, marks, q)
+        return rankSuggestions(rows.map { Scored(it.url, it.title, it.visitedAt) }, marks, q)
     }
 
     // Для экрана истории: полный список без капа подсказок.
