@@ -59,35 +59,51 @@ internal fun mergePersistSignal(current: PersistSignal, next: PersistSignal): Pe
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 internal class PersistSignalQueue(
-    private val awaitNextOrTimeout: suspend (ReceiveChannel<PersistSignal>, Long) -> PersistSignal? = { channel, timeoutMs ->
-        select<PersistSignal?> {
+    private val nowNanos: () -> Long = System::nanoTime,
+    private val awaitNextOrTimeout: suspend (ReceiveChannel<Unit>, Long) -> Unit? = { channel, timeoutMs ->
+        select<Unit?> {
             channel.onReceive { it }
             onTimeout(timeoutMs) { null }
         }
     },
 ) {
-    private val signals = Channel<PersistSignal>(Channel.UNLIMITED)
+    private val wakeups = Channel<Unit>(Channel.CONFLATED)
+    private val pendingLock = Any()
+    private var pending: PersistSignal? = null
 
     fun send(signal: PersistSignal) {
-        signals.trySend(signal)
+        synchronized(pendingLock) {
+            pending = pending?.let { mergePersistSignal(it, signal) } ?: signal
+        }
+        wakeups.trySend(Unit)
     }
 
     suspend fun nextForWrite(): PersistSignal {
-        var effective = signals.receive()
+        var effective = receivePending()
         if (effective == PersistSignal.Dirty) {
-            val deadline = System.nanoTime() + 350_000_000L
-            while (true) {
-                val remainingMs = ((deadline - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
-                val next = awaitNextOrTimeout(signals, remainingMs) ?: break
-                effective = mergePersistSignal(effective, next)
+            val deadline = nowNanos() + 350_000_000L
+            while (effective == PersistSignal.Dirty) {
+                val remainingNs = deadline - nowNanos()
+                if (remainingNs <= 0L) break
+                val next = awaitNextOrTimeout(wakeups, (remainingNs + 999_999L) / 1_000_000L) ?: break
+                takePending()?.let { effective = mergePersistSignal(effective, it) }
                 if (effective == PersistSignal.Immediate) break
             }
         }
+        return takePending()?.let { mergePersistSignal(effective, it) } ?: effective
+    }
+
+    private suspend fun receivePending(): PersistSignal {
         while (true) {
-            val next = signals.tryReceive().getOrNull() ?: break
-            effective = mergePersistSignal(effective, next)
+            takePending()?.let { return it }
+            wakeups.receive()
         }
-        return effective
+    }
+
+    private fun takePending(): PersistSignal? = synchronized(pendingLock) {
+        val value = pending
+        pending = null
+        value
     }
 }
 
@@ -245,7 +261,6 @@ class TabManager(
 
     fun setAppVisible(visible: Boolean) {
         _tabs.value.filter { it.session.isOpen }.forEach { tab ->
-            if (!visible && tab.id == currentId.value) tab.session.flushSessionState()
             val active = visible && tab.id == currentId.value
             tab.session.setActive(active)
             tab.session.setFocused(active)

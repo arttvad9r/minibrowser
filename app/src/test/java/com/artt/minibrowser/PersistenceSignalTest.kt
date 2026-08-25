@@ -56,4 +56,28 @@ class PersistenceSignalTest {
         queue.send(PersistSignal.Immediate)
         assertEquals(PersistSignal.Immediate, queue.nextForWrite())
     }
+
+    @Test
+    fun dirtyFloodStopsWaitingAfterHardDeadline() = runBlocking {
+        var now = 0L
+        var awaitCalls = 0
+        val queue = PersistSignalQueue(
+            nowNanos = { now },
+            awaitNextOrTimeout = { _, _ ->
+                awaitCalls++
+                check(awaitCalls <= 4) { "wait called after the 350ms deadline" }
+                now = when (awaitCalls) {
+                    1 -> 100_000_000L
+                    2 -> 200_000_000L
+                    3 -> 349_000_000L
+                    else -> 351_000_000L
+                }
+                Unit
+            },
+        )
+        queue.send(PersistSignal.Dirty)
+
+        assertEquals(PersistSignal.Dirty, queue.nextForWrite())
+        assertEquals(4, awaitCalls)
+    }
 }
