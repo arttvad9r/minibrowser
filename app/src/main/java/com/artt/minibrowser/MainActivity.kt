@@ -4,12 +4,14 @@
 package com.artt.minibrowser
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,7 +36,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -63,6 +65,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,9 +93,13 @@ import androidx.compose.ui.window.Popup
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.artt.minibrowser.data.Bookmark
+import com.artt.minibrowser.browser.BrowserScreen
+import com.artt.minibrowser.browser.NavigationController
+import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryEntry
@@ -103,11 +110,15 @@ import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.Engine
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
+import com.artt.minibrowser.engine.NavigationTarget
+import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
+import com.artt.minibrowser.engine.createSafeExternalIntent
 import com.artt.minibrowser.engine.enqueueDownload
+import com.artt.minibrowser.engine.formatFindCounter
 import com.artt.minibrowser.ui.AddBookmarkSheet
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BookmarkActionsSheet
@@ -133,32 +144,57 @@ import java.text.DateFormat
 import java.util.Calendar
 import java.util.Date
 
-enum class Screen { Browser, Settings, History, Bookmarks }
-
 class MainActivity : ComponentActivity() {
     private val settingsRepo by lazy { SettingsRepository(this) }
     private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private lateinit var tabManager: TabManager
+    private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
 
-    // Навигация из VIEW-интентов; заполняется в setContent.
-    private var navigateHook: ((String) -> Unit)? = null
-    private var pendingUri: String? = null
+    private val externalNavigation = NavigationController()
+    private var permissionResult: ((Boolean) -> Unit)? = null
+    private var filePickResult: ((Array<Uri>) -> Unit)? = null
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { grants ->
+        permissionResult?.invoke(grants.isNotEmpty() && grants.values.all { it })
+        permissionResult = null
+    }
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        filePickResult?.invoke(uris.toTypedArray())
+        filePickResult = null
+    }
+
+    private fun openExternalUri(value: String) {
+        val intent = createSafeExternalIntent(value) ?: return
+        if (intent.resolveActivity(packageManager) != null) {
+            startActivity(Intent.createChooser(intent, "Открыть с помощью"))
+        }
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        openFromIntent(intent)
-    }
-
-    private fun openFromIntent(intent: Intent?) {
-        val uri = intent?.data?.toString() ?: return
-        val hook = navigateHook
-        if (hook != null) hook(uri) else pendingUri = uri
+        setIntent(intent)
+        externalNavigation.accept(intent.data?.toString())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        tabManager = TabManager(Engine.runtime, File(filesDir, "tabs"), applicationContext)
+        tabManager = TabManager(
+            Engine.runtime,
+            File(filesDir, "tabs"),
+            this,
+            permissionRequester = { permissions, callback ->
+                permissionResult = callback
+                permissionLauncher.launch(permissions)
+            },
+            filePicker = { mimeTypes, callback ->
+                filePickResult = callback
+                filePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
+            },
+        )
         val iconsDir = File(filesDir, "icons")
         // Расширения ставятся один раз за процесс; тумблер применяется сразу после первого чтения настроек.
         lifecycleScope.launch {
@@ -169,8 +205,11 @@ class MainActivity : ComponentActivity() {
             val prefs by settingsRepo.prefs.collectAsStateWithLifecycle(Prefs())
             val scope = rememberCoroutineScope()
             val darkTheme = when (prefs.theme) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
-            var screen by remember { mutableStateOf(Screen.Browser) }
-            var showSwitcher by remember { mutableStateOf(false) }
+            val browserUi by browserViewModel.state.collectAsStateWithLifecycle()
+            val screen = browserUi.screen
+            val showSwitcher = browserUi.showSwitcher
+            val showFind = browserUi.showFind
+            val showSiteInfo = browserUi.showSiteInfo
 
             val tabs by tabManager.tabs.collectAsStateWithLifecycle()
             val currentId by tabManager.currentId.collectAsStateWithLifecycle()
@@ -181,7 +220,7 @@ class MainActivity : ComponentActivity() {
 
             // Уход с браузера закрывает подсказки омнибокса (попап рисуется поверх любых экранов).
             LaunchedEffect(screen, showSwitcher) {
-                if (screen != Screen.Browser || showSwitcher) focusManager.clearFocus(force = true)
+                if (screen != BrowserScreen.Browser || showSwitcher) focusManager.clearFocus(force = true)
             }
             // Светлая тема — тёмные иконки системных баров, тёмная — светлые.
             LaunchedEffect(darkTheme) {
@@ -189,13 +228,14 @@ class MainActivity : ComponentActivity() {
                 c.isAppearanceLightStatusBars = !darkTheme
                 c.isAppearanceLightNavigationBars = !darkTheme
             }
-
-            navigateHook = { uri ->
-                val t = tabs.firstOrNull { it.id == tabManager.currentId.value } ?: tabManager.newTab(null)
-                t.session.loadUri(uri)
+            LaunchedEffect(currentTab?.isPrivate) {
+                if (currentTab?.isPrivate == true) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             }
-            // Интент, пришедший до готовности хука (холодный старт), доставляем один раз.
-            pendingUri?.let { u -> pendingUri = null; navigateHook?.invoke(u) }
+
+            LaunchedEffect(Unit) {
+                externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
+            }
 
             var bookmarks by remember { mutableStateOf(emptyList<Bookmark>()) }
             var bmReload by remember { mutableIntStateOf(0) }
@@ -208,21 +248,25 @@ class MainActivity : ComponentActivity() {
             // Недавние страницы для домашнего экрана.
             var recent by remember { mutableStateOf(emptyList<HistoryEntry>()) }
             var recentReload by remember { mutableIntStateOf(0) }
-            val showStart = screen == Screen.Browser &&
+            val showStart = screen == BrowserScreen.Browser &&
                 (currentTab?.url.isNullOrBlank() || currentTab.url == "about:blank")
             LaunchedEffect(showStart, currentTab?.url, recentReload) {
                 if (showStart) recent = historyRepo.recent(3)
             }
 
-            BackHandler(enabled = screen != Screen.Browser) { screen = Screen.Browser }
+            BackHandler(enabled = screen != BrowserScreen.Browser) { browserViewModel.screen(BrowserScreen.Browser) }
             // Системный back на странице браузера — назад по истории вкладки.
-            BackHandler(enabled = screen == Screen.Browser && currentTab?.canGoBack == true) {
+            BackHandler(enabled = screen == BrowserScreen.Browser && currentTab?.canGoBack == true) {
                 currentTab?.session?.goBack()
             }
             // Во время fullscreen-видео back выходит из полноэкранного режима.
             val inFullscreen = currentTab?.fullscreen == true
             BackHandler(enabled = inFullscreen) { currentSession?.exitFullScreen() }
-            BackHandler(enabled = showSwitcher) { showSwitcher = false }
+            BackHandler(enabled = showSwitcher) { browserViewModel.showSwitcher(false) }
+            BackHandler(enabled = showFind) {
+                currentSession?.finder?.clear()
+                browserViewModel.showFind(false)
+            }
             LaunchedEffect(inFullscreen) {
                 val c = WindowCompat.getInsetsController(window, window.decorView)
                 if (inFullscreen) {
@@ -232,8 +276,6 @@ class MainActivity : ComponentActivity() {
                     c.show(WindowInsetsCompat.Type.systemBars())
                 }
             }
-            var showFind by remember { mutableStateOf(false) }
-
             val toggleAdblock: (Boolean) -> Unit = { b ->
                 scope.launch {
                     settingsRepo.setAdblock(b)
@@ -276,13 +318,15 @@ class MainActivity : ComponentActivity() {
                                 bookmarked = bookmarked,
                                 iconsDir = iconsDir,
                                 omniboxFocus = omniboxFocus,
-                                onNavigate = { uri ->
-                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
-                                },
-                                onSwitcher = { showSwitcher = true },
+                                 onNavigate = { uri ->
+                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                 },
+                                 onExternal = ::openExternalUri,
+                                 onSiteInfo = { browserViewModel.showSiteInfo(true) },
+                                 onSwitcher = { browserViewModel.showSwitcher(true) },
                                 onNewTab = { tabManager.newTab(null) },
                                 onNewPrivateTab = { tabManager.newTab(null, private = true) },
-                                onFind = { showFind = true },
+                                 onFind = { browserViewModel.showFind(true) },
                                 onToggleBookmark = {
                                     val t = currentTab ?: return@TopBar
                                     scope.launch {
@@ -292,11 +336,11 @@ class MainActivity : ComponentActivity() {
                                         bmReload++
                                     }
                                 },
-                                onBookmarks = { screen = Screen.Bookmarks },
-                                onHistory = { screen = Screen.History },
+                                 onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
+                                 onHistory = { browserViewModel.screen(BrowserScreen.History) },
                                 onShare = onShare,
                                 onDownload = onDownload,
-                                onSettings = { screen = Screen.Settings },
+                                 onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
                                 onSuggest = { q -> historyRepo.suggest(q) },
                                 onToggleAdblock = toggleAdblock,
                                 adblockEnabled = prefs.adblockEnabled,
@@ -305,7 +349,9 @@ class MainActivity : ComponentActivity() {
                                     buildTranslateUri(u, prefs.translateTarget)?.let(currentTab.session::loadUri)
                                 })
                             if (showFind && currentSession != null && !inFullscreen) {
-                                FindBar(currentSession) { showFind = false }
+                                key(currentTab.id) {
+                                    FindBar(currentSession) { browserViewModel.showFind(false) }
+                                }
                             }
                             Box(Modifier.weight(1f)) {
                                 AndroidView(
@@ -333,12 +379,12 @@ class MainActivity : ComponentActivity() {
                                         Modifier.fillMaxWidth().height(2.dp))
                                 }
                                 if (showStart) {
-                                     StartPage(
-                                         bookmarks, iconsDir, recent, currentTab?.isPrivate == true,
+                                    StartPage(
+                                        bookmarks, iconsDir, recent, currentTab?.isPrivate == true,
                                         onSearchFocus = { omniboxFocus.requestFocus() },
                                         onOpen = { uri -> currentTab?.session?.loadUri(uri) },
-                                        onAllBookmarks = { screen = Screen.Bookmarks },
-                                        onAllHistory = { screen = Screen.History },
+                                         onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
+                                         onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
                                         onRefreshRecent = { recentReload++ },
                                         onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
                                         onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } },
@@ -349,13 +395,16 @@ class MainActivity : ComponentActivity() {
                                             }
                                         })
                                 }
+                                if (!showStart && currentTab?.loadError != null) {
+                                    ErrorOverlay(currentTab.loadError.orEmpty()) { currentSession?.reload() }
+                                }
                             }
                         }
-                        if (screen == Screen.Settings) {
+                        if (screen == BrowserScreen.Settings) {
                             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                                 SettingsScreen(
                                     prefs,
-                                    onBack = { screen = Screen.Browser },
+                                     onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                     onEngine = { e -> scope.launch { settingsRepo.setSearchEngine(e) } },
                                     onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
                                     onAdblock = toggleAdblock,
@@ -365,6 +414,7 @@ class MainActivity : ComponentActivity() {
                                             historyRepo.clear()
                                             if (withBookmarks) bookmarksRepo.clearAll()
                                             iconsDir.deleteRecursively()
+                                            tabManager.clearWebData()
                                             bmReload++
                                             recentReload++
                                         }
@@ -372,22 +422,22 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
-                        if (screen == Screen.History) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                        if (screen == BrowserScreen.History) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                             HistoryScreen(
                                 historyRepo,
                                 iconsDir,
-                                onBack = { screen = Screen.Browser },
+                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                 onOpen = { uri ->
-                                    screen = Screen.Browser
+                                     browserViewModel.screen(BrowserScreen.Browser)
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 })
                         }
-                        if (screen == Screen.Bookmarks) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                        if (screen == BrowserScreen.Bookmarks) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                             BookmarksScreen(
                                 bookmarks, iconsDir,
-                                onBack = { screen = Screen.Browser },
+                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                 onOpen = { uri ->
-                                    screen = Screen.Browser
+                                     browserViewModel.screen(BrowserScreen.Browser)
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
                                 onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
@@ -397,22 +447,33 @@ class MainActivity : ComponentActivity() {
                         if (showSwitcher) {
                             TabSwitcher(
                                 tabs, currentId, iconsDir,
-                                onSelect = { tabManager.select(it); showSwitcher = false },
+                                 onSelect = { tabManager.select(it); browserViewModel.showSwitcher(false) },
                                 onClose = { tabManager.closeTab(it) },
-                                onNew = { showSwitcher = false; tabManager.newTab(null) },
-                                onDismiss = { showSwitcher = false })
+                                 onNew = { browserViewModel.showSwitcher(false); tabManager.newTab(null) },
+                                 onDismiss = { browserViewModel.showSwitcher(false) })
+                        }
+                        if (showSiteInfo && currentTab != null) {
+                            SiteInfoSheet(currentTab) { browserViewModel.showSiteInfo(false) }
                         }
                     }
                 }
             }
         }
         // Холодный старт с VIEW-интентом: хук ещё не готов — uri уйдёт в pendingUri.
-        openFromIntent(intent)
+        externalNavigation.accept(intent?.data?.toString())
     }
 
     override fun onPause() {
         super.onPause()
-        if (::tabManager.isInitialized) tabManager.persist()
+        if (::tabManager.isInitialized) {
+            tabManager.setAppVisible(false)
+            tabManager.persist()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::tabManager.isInitialized) tabManager.setAppVisible(true)
     }
 }
 
@@ -429,6 +490,8 @@ private fun TopBar(
     adblockEnabled: Boolean,
     onToggleAdblock: (Boolean) -> Unit,
     onNavigate: (String) -> Unit,
+    onExternal: (String) -> Unit,
+    onSiteInfo: () -> Unit,
     onSwitcher: () -> Unit,
     onNewTab: () -> Unit,
     onNewPrivateTab: () -> Unit,
@@ -456,7 +519,11 @@ private fun TopBar(
         suggestions = if (focused) onSuggest(text) else emptyList()
     }
     val navigate: (String) -> Unit = { q ->
-        if (q.isNotBlank()) onNavigate(buildLoadUri(q, engine))
+        when (val target = com.artt.minibrowser.engine.resolveNavigation(q, engine)) {
+            is NavigationTarget.External -> onExternal(target.uri)
+            is NavigationTarget.Web, is NavigationTarget.Internal, is NavigationTarget.Search ->
+                onNavigate(buildLoadUri(q, engine))
+        }
         focusManager.clearFocus(force = true)
     }
     Row(
@@ -478,12 +545,15 @@ private fun TopBar(
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                 Icon(
-                     if (tab?.isPrivate == true) AppIcons.Incognito else Icons.Filled.Search,
-                     null,
-                     Modifier.size(20.dp),
-                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                 )
+                 IconButton(onClick = onSiteInfo, modifier = Modifier.size(32.dp)) {
+                     Icon(
+                         if (tab?.securityState == SecurityState.Secure) Icons.Filled.Lock
+                         else if (tab?.isPrivate == true) AppIcons.Incognito else Icons.Filled.Search,
+                         null,
+                         Modifier.size(20.dp),
+                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                     )
+                 }
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f)) {
                     if (shown.isEmpty()) {
@@ -861,7 +931,7 @@ private fun FindBar(session: GeckoSession, onClose: () -> Unit) {
         ) {
             BrowserTextField(q, { q = it; doFind(false) }, Modifier.weight(1f), placeholder = "Найти на странице")
             if (total > 0) {
-                Text("${current + 1}/$total", style = MaterialTheme.typography.bodySmall,
+                Text(formatFindCounter(current, total), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -875,6 +945,43 @@ private fun FindBar(session: GeckoSession, onClose: () -> Unit) {
 private fun IconBtn(icon: ImageVector, desc: String, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = desc }) {
         Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SiteInfoSheet(tab: Tab, onDismiss: () -> Unit) {
+    val host = hostOf(tab.url).ifBlank { tab.url.ifBlank { "Новая вкладка" } }
+    val message = when (tab.securityState) {
+        SecurityState.Secure -> "Соединение защищено"
+        SecurityState.Exception -> "Есть исключение безопасности"
+        SecurityState.Insecure -> "Соединение не защищено"
+        SecurityState.Unknown -> "Состояние соединения неизвестно"
+    }
+    BrowserBottomSheet(onDismissRequest = onDismiss) {
+        Text(host, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
+        SheetRow(AppIcons.Shield, "Блокировка рекламы", trailing = { Text("Вкл", color = MaterialTheme.colorScheme.onSurfaceVariant) })
+    }
+}
+
+@Composable
+private fun ErrorOverlay(message: String, onRetry: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(message, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text("Проверьте адрес и соединение", style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(12.dp))
+        TextButton(onClick = onRetry) { Text("Повторить") }
     }
 }
 

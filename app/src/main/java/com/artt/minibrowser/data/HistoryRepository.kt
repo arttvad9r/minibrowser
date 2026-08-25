@@ -2,15 +2,13 @@ package com.artt.minibrowser.data
 
 class HistoryRepository(private val dao: AppDao) {
     suspend fun record(url: String, title: String?) {
-        val now = System.currentTimeMillis()
-        val prev = dao.historyByUrl(url)
-        dao.upsertHistory(HistoryEntry(url, title ?: prev?.title ?: url, now, (prev?.visits ?: 0) + 1))
+        dao.recordVisit(url, title, System.currentTimeMillis())
     }
 
     // Заголовок приходит после onVisited — обновляем существующую запись, визит не дублируем.
     suspend fun updateTitle(url: String, title: String?) {
         if (title.isNullOrBlank()) return
-        dao.historyByUrl(url)?.let { dao.upsertHistory(it.copy(title = title)) }
+        dao.updateHistoryTitle(url, title, System.currentTimeMillis())
     }
 
     suspend fun suggest(q: String): List<Suggestion> {

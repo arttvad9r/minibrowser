@@ -2,6 +2,8 @@ package com.artt.minibrowser.data
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +45,18 @@ data class Bookmark(
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertHistory(e: HistoryEntry)
 
+    @Transaction
+    suspend fun recordVisit(url: String, title: String?, now: Long) {
+        val previous = historyByUrl(url)
+        upsertHistory(HistoryEntry(url, title ?: previous?.title ?: url, now, (previous?.visits ?: 0) + 1))
+    }
+
+    @Transaction
+    suspend fun updateHistoryTitle(url: String, title: String, now: Long) {
+        val previous = historyByUrl(url)
+        upsertHistory(previous?.copy(title = title) ?: HistoryEntry(url, title, now, 0))
+    }
+
     @Query("DELETE FROM history")
     suspend fun clearHistory()
 
@@ -69,19 +83,26 @@ data class Bookmark(
     suspend fun bookmarkCount(url: String): Int
 }
 
-@Database(entities = [HistoryEntry::class, Bookmark::class], version = 1, exportSchema = false)
+@Database(entities = [HistoryEntry::class, Bookmark::class], version = 2, exportSchema = false)
 abstract class AppDb : RoomDatabase() { abstract fun dao(): AppDao }
 
 // Application-scope: HistorySink вызывается из TabManager без жизненного цикла,
 // поэтому скоуп живёт здесь (переживает активити, гаснет только с процессом).
 object DbHolder {
+    private val migration1to2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
+        }
+    }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     lateinit var db: AppDb
         private set
 
     fun init(context: Context) {
         if (!::db.isInitialized) {
-            db = Room.databaseBuilder(context, AppDb::class.java, "minibrowser.db").build()
+            db = Room.databaseBuilder(context, AppDb::class.java, "minibrowser.db")
+                .addMigrations(migration1to2)
+                .build()
         }
     }
 }

@@ -1,0 +1,14 @@
+{
+  "ublock": {
+    "version": "1.73.0",
+    "id": "uBlock0@raymondhill.net",
+    "url": "https://github.com/gorhill/uBlock/releases/download/1.73.0/uBlock0_1.73.0.firefox.signed.xpi",
+    "sha256": "bccc51a773150af4af6e1fd62c7bfdeb7238b79ff2381b998fa9f2e38f64786a"
+  },
+  "vot": {
+    "version": "1.11.8",
+    "id": "vot-ext@firefox",
+    "url": "https://github.com/ilyhalight/voice-over-translation/releases/download/1.11.8/vot-extension-firefox.xpi",
+    "sha256": "f08a6eeced38cc59e4b43e065ea3e0e1e95bf59d669f716233ba85fddce193b0"
+  }
+}

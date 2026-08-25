@@ -1,6 +1,7 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.engine.parseFilename
+import com.artt.minibrowser.engine.sanitizeFilename
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -16,4 +17,14 @@ class DownloadNameTest {
 
     @Test fun nullDispositionFallsBack() =
         assertEquals("file", parseFilename(null, "file"))
+
+    @Test fun sanitizesTraversalAndSeparators() {
+        assertEquals("secret.txt", sanitizeFilename("../../secret.txt", "file"))
+        assertEquals("foo_bar.txt", sanitizeFilename("..\\foo/bar.txt", "file"))
+    }
+
+    @Test fun sanitizesControlsAndLength() {
+        assertEquals("report.pdf", sanitizeFilename("report\u0000.pdf\n", "file"))
+        assert(sanitizeFilename("x".repeat(300), "file").length <= 120)
+    }
 }

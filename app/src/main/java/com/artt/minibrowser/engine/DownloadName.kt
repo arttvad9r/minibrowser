@@ -4,15 +4,29 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+
+fun sanitizeFilename(raw: String?, fallback: String): String {
+    val safeFallback = fallback.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('.', ' ', '_').ifBlank { "file" }
+    val candidate = raw.orEmpty()
+        .replace('\\', '_')
+        .replace('/', '_')
+        .replace("..", "")
+        .filterNot { it.isISOControl() }
+        .trim('.', ' ', '_')
+        .take(120)
+        .trim('.', ' ', '_')
+    return candidate.ifBlank { safeFallback }
+}
 
 fun parseFilename(disposition: String?, fallback: String): String {
-    if (disposition == null) return fallback
+    if (disposition == null) return sanitizeFilename(null, fallback)
     Regex("filename\\*=UTF-8''([^;]+)", RegexOption.IGNORE_CASE).find(disposition)?.let {
-        return URLDecoder.decode(it.groupValues[1].trim(), "UTF-8")
+        return sanitizeFilename(URLDecoder.decode(it.groupValues[1].trim().replace("+", "%2B"), StandardCharsets.UTF_8.name()), fallback)
     }
-    Regex("filename=\"([^\"]+)\"").find(disposition)?.let { return it.groupValues[1] }
-    Regex("filename=([^;]+)").find(disposition)?.let { return it.groupValues[1].trim() }
-    return fallback
+    Regex("filename=\"([^\"]+)\"").find(disposition)?.let { return sanitizeFilename(it.groupValues[1], fallback) }
+    Regex("filename=([^;]+)").find(disposition)?.let { return sanitizeFilename(it.groupValues[1].trim(), fallback) }
+    return sanitizeFilename(null, fallback)
 }
 
 // ponytail: setDestinationInExternalPublicDir на API 26–28 требует WRITE_EXTERNAL_STORAGE;
@@ -23,7 +37,8 @@ fun enqueueDownload(
     filenameFallback: String,
     headers: Map<String, String> = emptyMap(),
 ) {
-    val name = parseFilename(headers["Content-Disposition"], filenameFallback)
+    val disposition = headers.entries.firstOrNull { it.key.equals("Content-Disposition", ignoreCase = true) }?.value
+    val name = parseFilename(disposition, filenameFallback)
     val req = DownloadManager.Request(Uri.parse(uri))
         .setTitle(name)
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)

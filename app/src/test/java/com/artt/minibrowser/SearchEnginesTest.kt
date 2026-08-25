@@ -10,9 +10,9 @@ import kotlin.test.assertNull
 class SearchEnginesTest {
     @Test fun urlPassthrough() =
         assertEquals("https://a.b/c", buildLoadUri("https://a.b/c", SearchEngine.GOOGLE))
-    @Test fun schemeUrisPassThrough() {
-        assertEquals("chrome://crash", buildLoadUri("chrome://crash", SearchEngine.GOOGLE))
+    @Test fun internalUrisOnlyAllowBlankPage() {
         assertEquals("about:blank", buildLoadUri("about:blank", SearchEngine.GOOGLE))
+        assertEquals("https://www.google.com/search?q=chrome%3A%2F%2Fcrash", buildLoadUri("chrome://crash", SearchEngine.GOOGLE))
     }
     @Test fun hostPortStillGetsHttps() =
         assertEquals("https://192.168.0.1:8080", buildLoadUri("192.168.0.1:8080", SearchEngine.GOOGLE))
