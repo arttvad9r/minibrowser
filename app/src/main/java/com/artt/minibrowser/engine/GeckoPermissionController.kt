@@ -25,6 +25,16 @@ internal fun contentPermissionAction(permission: Int): PermissionAction = when (
     else -> PermissionAction.DENY
 }
 
+internal fun resolveContentPermissionValue(action: PermissionAction, existingValue: Int): Int = when (action) {
+    PermissionAction.DENY -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+    PermissionAction.ALLOW -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+    else -> when (existingValue) {
+        GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW,
+        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY -> existingValue
+        else -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+    }
+}
+
 class GeckoPermissionController(
     private val activity: Activity,
     private val requestPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)?,
@@ -61,20 +71,12 @@ class GeckoPermissionController(
         session: GeckoSession,
         perm: GeckoSession.PermissionDelegate.ContentPermission,
     ): GeckoResult<Int> {
-        if (perm.value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW ||
-            perm.value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
-        ) {
-            return GeckoResult.fromValue(perm.value)
+        val action = contentPermissionAction(perm.permission)
+        val resolvedValue = resolveContentPermissionValue(action, perm.value)
+        if (resolvedValue != GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT) {
+            return GeckoResult.fromValue(resolvedValue)
         }
         val result = GeckoResult<Int>()
-        val action = contentPermissionAction(perm.permission)
-        if (action == PermissionAction.ALLOW || action == PermissionAction.DENY) {
-            return GeckoResult.fromValue(if (action == PermissionAction.ALLOW) {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
-            } else {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
-            })
-        }
         val host = hostOfPermission(perm.uri)
         val topHost = hostOfPermission(perm.uri)
         val message = when (action) {
@@ -88,16 +90,18 @@ class GeckoPermissionController(
                     "Стороннее содержимое хочет получить доступ к cookies этого сайта."
                 }
             }
+            PermissionAction.ALLOW, PermissionAction.DENY -> ""
         }
         activity.runOnUiThread {
-            perm.notifyShown()
-            AlertDialog.Builder(activity)
+            val dialog = AlertDialog.Builder(activity)
                 .setTitle(host)
                 .setMessage(message)
                 .setNegativeButton("Запретить") { _, _ -> result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
                 .setPositiveButton("Разрешить") { _, _ -> result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) }
                 .setOnCancelListener { result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
-                .show()
+                .create()
+            dialog.setOnShowListener { perm.notifyShown() }
+            dialog.show()
         }
         return result
     }

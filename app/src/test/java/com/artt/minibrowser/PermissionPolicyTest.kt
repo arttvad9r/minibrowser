@@ -2,11 +2,24 @@ package com.artt.minibrowser
 
 import com.artt.minibrowser.engine.PermissionAction
 import com.artt.minibrowser.engine.contentPermissionAction
+import com.artt.minibrowser.engine.resolveContentPermissionValue
 import org.mozilla.geckoview.GeckoSession
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class PermissionPolicyTest {
+    @Test fun hardDenyOverridesPersistedAllow() {
+        val deny = GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+        val allow = GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+        val prompt = GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+        assertEquals(deny, resolveContentPermissionValue(PermissionAction.DENY, allow))
+        assertEquals(deny, resolveContentPermissionValue(PermissionAction.DENY, prompt))
+        assertEquals(allow, resolveContentPermissionValue(PermissionAction.PROMPT_GEOLOCATION, allow))
+        assertEquals(deny, resolveContentPermissionValue(PermissionAction.PROMPT_GEOLOCATION, deny))
+        assertEquals(prompt, resolveContentPermissionValue(PermissionAction.PROMPT_GEOLOCATION, prompt))
+        assertEquals(allow, resolveContentPermissionValue(PermissionAction.ALLOW, prompt))
+    }
+
     @Test fun mapsContentPermissionsToExplicitActions() {
         assertEquals(PermissionAction.ALLOW, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE))
         assertEquals(PermissionAction.DENY, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE))

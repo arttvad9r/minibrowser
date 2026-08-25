@@ -57,15 +57,21 @@ object ExtensionLoader {
 
     private fun setInstalled(runtime: GeckoRuntime, id: String, enabled: Boolean) {
         val c = runtime.webExtensionController
-        c.list().accept { list ->
-            list?.firstOrNull { it.id == id }?.let { applyExtensionPolicy(c, it, id, enabled) }
-                ?: setState(id, Status.Error, "$id is not installed")
-        }
+        c.list().accept(
+            { list ->
+                list?.firstOrNull { it.id == id }?.let { applyExtensionPolicy(c, it, id, enabled) }
+                    ?: setState(id, Status.Error, "$id is not installed")
+            },
+            { error -> setState(id, Status.Error, error?.message ?: "$id extension list failed") },
+        )
     }
 
     private fun applyExtensionPolicy(c: WebExtensionController, ext: org.mozilla.geckoview.WebExtension, id: String, enabled: Boolean) {
         c.setAllowedInPrivateBrowsing(ext, privateAllowedInPrivate(id)).accept(
-            { setEnabled(c, ext, id, enabled) },
+            { updated ->
+                updated?.let { setEnabled(c, it, id, enabled) }
+                    ?: setState(id, Status.Error, "$id private browsing policy returned no extension")
+            },
             { error -> setState(id, Status.Error, error?.message ?: "$id private browsing policy failed") },
         )
     }
