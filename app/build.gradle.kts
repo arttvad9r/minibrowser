@@ -13,6 +13,7 @@ android {
         applicationId = "com.artt.minibrowser"
         minSdk = 26
         targetSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 1
         versionName = "0.1"
         // Личное устройство arm64; без фильтра в APK попадают все 4 ABI GeckoView (~300 МБ лишних).
@@ -58,4 +59,7 @@ dependencies {
     implementation("androidx.room:room-ktx:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.4.10")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }

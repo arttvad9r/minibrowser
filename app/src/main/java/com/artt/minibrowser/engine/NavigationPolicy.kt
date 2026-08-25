@@ -17,16 +17,17 @@ fun isExternalScheme(value: String): Boolean = value.substringBefore(':', "").lo
 
 fun createSafeExternalIntent(value: String): Intent? = runCatching {
     val scheme = value.substringBefore(':', "").lowercase()
-    val intent = if (scheme == "intent") {
+    val parsed = if (scheme == "intent") {
         Intent.parseUri(value, Intent.URI_INTENT_SCHEME)
     } else {
         Intent(Intent.ACTION_VIEW, Uri.parse(value))
     }
-    intent.component = null
-    intent.`package` = null
-    intent.selector = null
-    val dataScheme = intent.data?.scheme?.lowercase()
-    if (scheme == "intent" && dataScheme !in setOf("http", "https", "mailto", "tel", "sms", "geo", "market")) null else intent
+    val directUri = parsed.data
+    val fallbackUri = parsed.getStringExtra("browser_fallback_url")?.let(Uri::parse)
+    val approvedSchemes = setOf("http", "https", "mailto", "tel", "sms", "geo", "market")
+    val safeUri = directUri?.takeIf { it.scheme?.lowercase() in approvedSchemes }
+        ?: fallbackUri?.takeIf { it.scheme?.lowercase() in setOf("http", "https") }
+    safeUri?.let { Intent(Intent.ACTION_VIEW, it) }
 }.getOrNull()
 
 fun isAllowedWebUri(value: String): Boolean = runCatching {

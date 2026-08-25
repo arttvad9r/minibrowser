@@ -62,6 +62,27 @@ class GeckoPermissionController(
     ) {
         val camera = video.orEmpty().firstOrNull { it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_CAMERA }
         val microphone = audio.orEmpty().firstOrNull { it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_MICROPHONE }
+        val host = runCatching { android.net.Uri.parse(uri).host }.getOrNull().orEmpty().ifBlank { "Сайт" }
+        val requested = buildList {
+            if (camera != null) add("камере")
+            if (microphone != null) add("микрофону")
+        }.joinToString(" и ")
+        activity.runOnUiThread {
+            AlertDialog.Builder(activity)
+                .setTitle(host)
+                .setMessage("Разрешить доступ к $requested?")
+                .setNegativeButton("Запретить") { _, _ -> callback.reject() }
+                .setPositiveButton("Разрешить") { _, _ -> requestAndroidMediaPermissions(camera, microphone, callback) }
+                .setOnCancelListener { callback.reject() }
+                .show()
+        }
+    }
+
+    private fun requestAndroidMediaPermissions(
+        camera: GeckoSession.PermissionDelegate.MediaSource?,
+        microphone: GeckoSession.PermissionDelegate.MediaSource?,
+        callback: GeckoSession.PermissionDelegate.MediaCallback,
+    ) {
         val needed = buildList {
             if (camera != null) add(Manifest.permission.CAMERA)
             if (microphone != null) add(Manifest.permission.RECORD_AUDIO)

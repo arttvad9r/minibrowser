@@ -1,5 +1,6 @@
 package com.artt.minibrowser.engine
 
+import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.SupervisorJob
@@ -10,14 +11,17 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 // ponytail: иконки через DDG-сервис (наружу уходит только домен);
 // заменить на парсинг <link rel="icon"> страницы, если нужна автономность
 object FaviconFetcher {
     private const val MAX_BYTES = 1024 * 1024
+    private const val NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000L
     private val scope = kotlinx.coroutines.CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val memory = ConcurrentHashMap<String, File>()
     private val inFlight = ConcurrentHashMap<String, Deferred<File>>()
+    private val negative = ConcurrentHashMap<String, Long>()
 
     fun cacheFile(host: String, iconsDir: File): File {
         val md5 = MessageDigest.getInstance("MD5").digest(host.lowercase().trim().toByteArray())
@@ -28,15 +32,13 @@ object FaviconFetcher {
     suspend fun fetch(host: String, iconsDir: File): File {
         val key = host.lowercase().trim()
         val dst = cacheFile(key, iconsDir)
-        if (memory[key]?.exists() == true || dst.exists()) {
-            memory[key] = dst
-            return dst
-        }
+        if (dst.exists()) return dst
+        if (negative[key]?.let { it > System.currentTimeMillis() } == true) return dst
         val deferred = inFlight.computeIfAbsent(key) {
             scope.async { fetchOnce(key, dst) }
         }
         return try {
-            deferred.await().also { if (it.exists()) memory[key] = it }
+            deferred.await().also { if (!it.exists()) negative[key] = System.currentTimeMillis() + NEGATIVE_TTL_MS }
         } finally {
             inFlight.remove(key, deferred)
         }
@@ -44,6 +46,7 @@ object FaviconFetcher {
 
     private suspend fun fetchOnce(host: String, dst: File): File = withContext(Dispatchers.IO) {
         dst.parentFile?.mkdirs()
+        val temp = File("${dst.path}.tmp")
         val conn = URL("https://icons.duckduckgo.com/ip3/$host.ico").openConnection() as HttpURLConnection
         conn.connectTimeout = 5000
         conn.readTimeout = 5000
@@ -54,7 +57,7 @@ object FaviconFetcher {
             if (type.isNotBlank() && !type.startsWith("image/") && type != "application/octet-stream") return@withContext dst
             runCatching {
                 conn.inputStream.use { input ->
-                    dst.outputStream().use { output ->
+                    temp.outputStream().use { output ->
                         val buffer = ByteArray(8192)
                         var total = 0
                         while (true) {
@@ -66,7 +69,16 @@ object FaviconFetcher {
                         }
                     }
                 }
-            }.onFailure { dst.delete() }
+                if (BitmapFactory.decodeFile(temp.path) == null) error("invalid favicon image")
+                runCatching {
+                    Files.move(temp.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+                }.getOrElse {
+                    if (!temp.renameTo(dst)) error("favicon atomic move failed")
+                }
+            }.onFailure {
+                temp.delete()
+                dst.delete()
+            }
         } finally {
             conn.disconnect()
         }

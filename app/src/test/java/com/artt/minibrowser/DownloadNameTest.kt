@@ -2,6 +2,7 @@ package com.artt.minibrowser
 
 import com.artt.minibrowser.engine.parseFilename
 import com.artt.minibrowser.engine.sanitizeFilename
+import com.artt.minibrowser.engine.header
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -26,5 +27,12 @@ class DownloadNameTest {
     @Test fun sanitizesControlsAndLength() {
         assertEquals("report.pdf", sanitizeFilename("report\u0000.pdf\n", "file"))
         assert(sanitizeFilename("x".repeat(300), "file").length <= 120)
+    }
+
+    @Test fun headersAreCaseInsensitive() {
+        assertEquals(
+            "attachment; filename=\"x.txt\"",
+            mapOf("content-disposition" to "attachment; filename=\"x.txt\"").header("Content-Disposition"),
+        )
     }
 }

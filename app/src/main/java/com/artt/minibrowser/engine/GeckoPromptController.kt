@@ -13,7 +13,7 @@ import org.mozilla.geckoview.GeckoSession
 /** Small native prompt bridge; it deliberately denies unattended popup/auth actions. */
 class GeckoPromptController(
     private val activity: Activity,
-    private val pickFiles: ((Array<String>, (Array<Uri>) -> Unit) -> Unit)? = null,
+    private val pickFiles: ((Int, Array<String>, (Array<Uri>) -> Unit) -> Unit)? = null,
 ) : GeckoSession.PromptDelegate {
     override fun onAlertPrompt(
         session: GeckoSession,
@@ -42,6 +42,12 @@ class GeckoPromptController(
         }
         return result
     }
+
+    override fun onButtonPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.ButtonPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> =
+        dialog(prompt.title.orEmpty(), prompt.message.orEmpty(), { prompt.confirm(GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE) }, { prompt.dismiss() })
 
     override fun onAuthPrompt(
         session: GeckoSession,
@@ -83,13 +89,21 @@ class GeckoPromptController(
         val choices = prompt.choices.orEmpty().filterNot { it.disabled || it.separator }
         if (choices.isEmpty()) return GeckoResult.fromValue(prompt.dismiss())
         activity.runOnUiThread {
-            AlertDialog.Builder(activity)
-                .setTitle(prompt.title.orEmpty())
-                .setItems(choices.map { it.label }.toTypedArray()) { _, index ->
+            val builder = AlertDialog.Builder(activity).setTitle(prompt.title.orEmpty())
+            if (prompt.type == GeckoSession.PromptDelegate.ChoicePrompt.Type.MULTIPLE) {
+                val selected = choices.map { it.selected }.toBooleanArray()
+                builder.setMultiChoiceItems(choices.map { it.label }.toTypedArray(), selected) { _, index, checked ->
+                    selected[index] = checked
+                }.setNegativeButton("Отмена") { _, _ -> result.complete(prompt.dismiss()) }
+                    .setPositiveButton("ОК") { _, _ ->
+                        result.complete(prompt.confirm(choices.filterIndexed { index, _ -> selected[index] }.toTypedArray()))
+                    }
+            } else {
+                builder.setItems(choices.map { it.label }.toTypedArray()) { _, index ->
                     result.complete(prompt.confirm(choices[index]))
                 }
-                .setOnCancelListener { result.complete(prompt.dismiss()) }
-                .show()
+            }
+            builder.setOnCancelListener { result.complete(prompt.dismiss()) }.show()
         }
         return result
     }
@@ -111,7 +125,7 @@ class GeckoPromptController(
         prompt: GeckoSession.PromptDelegate.FilePrompt,
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
         val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-        pickFiles?.invoke(prompt.mimeTypes ?: emptyArray()) { uris ->
+        pickFiles?.invoke(prompt.type, prompt.mimeTypes ?: emptyArray()) { uris ->
             if (uris.isEmpty()) result.complete(prompt.dismiss())
             else result.complete(prompt.confirm(activity, uris))
         } ?: result.complete(prompt.dismiss())
@@ -122,7 +136,7 @@ class GeckoPromptController(
         title: String,
         message: String,
         positive: () -> GeckoSession.PromptDelegate.PromptResponse,
-        negative: () -> GeckoSession.PromptDelegate.PromptResponse = { throw CancellationException() },
+        negative: () -> GeckoSession.PromptDelegate.PromptResponse,
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
         val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
         activity.runOnUiThread {
@@ -131,11 +145,10 @@ class GeckoPromptController(
                 .setMessage(message)
                 .setNegativeButton("Отмена") { _, _ -> result.complete(negative()) }
                 .setPositiveButton("ОК") { _, _ -> result.complete(positive()) }
-                .setOnCancelListener { result.completeExceptionally(CancellationException()) }
+                .setOnCancelListener { result.complete(negative()) }
                 .show()
         }
         return result
     }
 
-    private class CancellationException : RuntimeException()
 }

@@ -3,6 +3,7 @@ package com.artt.minibrowser.engine
 import android.app.Activity
 import android.os.SystemClock
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -15,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -38,6 +41,15 @@ internal class ProgressGate(private val intervalMs: Long = 100) {
 
 enum class SecurityState { Unknown, Secure, Insecure, Exception }
 
+internal fun shouldCloseSession(isOpen: Boolean): Boolean = isOpen
+
+internal fun closeIfOpen(session: GeckoSession) {
+    if (shouldCloseSession(session.isOpen)) {
+        runCatching { session.stop() }
+        runCatching { session.close() }
+    }
+}
+
 class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     // Compose state: смена сессии при краш-восстановлении должна перерисовать AndroidView.
     var session: GeckoSession by mutableStateOf(session)
@@ -60,19 +72,34 @@ class TabManager(
     private val storeDir: File,
     private val context: android.content.Context,
     permissionRequester: ((Array<String>, (Boolean) -> Unit) -> Unit)? = null,
-    filePicker: ((Array<String>, (Array<android.net.Uri>) -> Unit) -> Unit)? = null,
+    filePicker: ((Int, Array<String>, (Array<android.net.Uri>) -> Unit) -> Unit)? = null,
 ) {
+    private data class PersistRequest(val state: PersistedBrowserState, val immediate: Boolean)
     private val promptController = (context as? Activity)?.let { GeckoPromptController(it, filePicker) }
     private val permissionController = (context as? Activity)?.let {
         GeckoPermissionController(it, permissionRequester)
     }
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
     private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val persistRequests = Channel<PersistRequest>(Channel.CONFLATED)
     val tabs get() = _tabs
     val currentId = MutableStateFlow<Long?>(null)
     private var seq = 0L
 
     init {
+        persistScope.launch {
+            for (first in persistRequests) {
+                var request = first
+                if (!request.immediate) delay(350)
+                while (true) {
+                    val next = persistRequests.tryReceive().getOrNull() ?: break
+                    request = next
+                    if (request.immediate) break
+                }
+                runCatching { TabStore.saveState(storeDir, request.state) }
+                    .onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
+            }
+        }
         restore()
     }
 
@@ -96,12 +123,7 @@ class TabManager(
     private fun createTab(private: Boolean): Tab = createTab(private, null)
 
     private fun createTab(private: Boolean, persisted: PersistedTab?): Tab {
-        val s = GeckoSession(
-            GeckoSessionSettings.Builder()
-                .usePrivateMode(private)
-                .suspendMediaWhenInactive(true)
-                .build()
-        )
+        val s = GeckoSession(sessionSettings(private))
         val id = persisted?.id ?: ++seq
         seq = maxOf(seq, id)
         val tab = Tab(s, id, private)
@@ -158,7 +180,8 @@ class TabManager(
         val idx = _tabs.value.indexOfFirst { it.id == id }
         if (idx < 0) return
         val dying = _tabs.value[idx]
-        dying.session.stop(); dying.session.close()
+        if (dying.session.isOpen) dying.session.flushSessionState()
+        closeIfOpen(dying.session)
         _tabs.value = _tabs.value - dying
         if (currentId.value == id) {
             val next = _tabs.value.getOrNull(idx.coerceAtMost(_tabs.value.size - 1))
@@ -171,6 +194,7 @@ class TabManager(
 
     fun setAppVisible(visible: Boolean) {
         _tabs.value.filter { it.session.isOpen }.forEach { tab ->
+            if (!visible && tab.id == currentId.value) tab.session.flushSessionState()
             val active = visible && tab.id == currentId.value
             tab.session.setActive(active)
             tab.session.setFocused(active)
@@ -179,10 +203,7 @@ class TabManager(
 
     fun clearWebData(): GeckoResult<Void> {
         _tabs.value.forEach { tab ->
-            if (tab.session.isOpen) {
-                tab.session.stop()
-                tab.session.close()
-            }
+            closeIfOpen(tab.session)
         }
         _tabs.value = emptyList()
         currentId.value = null
@@ -192,6 +213,11 @@ class TabManager(
     }
 
     fun persist() {
+        _tabs.value.filter { it.session.isOpen && !it.isPrivate }.forEach { it.session.flushSessionState() }
+        requestPersist(immediate = true)
+    }
+
+    private fun requestPersist(immediate: Boolean) {
         val snapshot = PersistedBrowserState(
             selectedId = currentId.value,
             tabs = _tabs.value.filterNot { it.isPrivate }.map {
@@ -205,10 +231,7 @@ class TabManager(
                 )
             },
         )
-        persistScope.launch {
-            runCatching { TabStore.saveState(storeDir, snapshot) }
-                .onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
-        }
+        persistRequests.trySend(PersistRequest(snapshot, immediate))
     }
 
     private fun restore() {
@@ -229,6 +252,7 @@ class TabManager(
             override fun onPageStart(session: GeckoSession, url: String) {
                 tab.progressGate.accept(progress = 5)
                 tab.loadError = null
+                tab.securityState = SecurityState.Unknown
                 tab.progress = 0.05f; tab.url = url
             }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
@@ -242,6 +266,12 @@ class TabManager(
                     securityInfo.isException -> SecurityState.Exception
                     securityInfo.isSecure -> SecurityState.Secure
                     else -> SecurityState.Insecure
+                }
+            }
+            override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
+                if (!tab.isPrivate) {
+                    tab.persistedSessionState = state.toString()
+                    requestPersist(immediate = false)
                 }
             }
         }
@@ -296,23 +326,19 @@ class TabManager(
             override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
                 val fallback = response.uri.substringAfterLast('/').substringBefore('?').ifBlank { "file" }
                 runCatching { enqueueDownload(context, response.uri, fallback, response.headers) }
+                    .onFailure {
+                        Log.e("MinibrowserDownload", "Failed to enqueue download", it)
+                        (context as? Activity)?.runOnUiThread {
+                            Toast.makeText(context, "Не удалось начать загрузку", Toast.LENGTH_SHORT).show()
+                        }
+                    }
             }
             override fun onCrash(session: GeckoSession) {
-                // Восстановление крашнутой сессии с тем же URL.
-                val url = tab.url
-                session.close()
-                val fresh = GeckoSession(
-                    GeckoSessionSettings.Builder()
-                        .usePrivateMode(tab.isPrivate)
-                        .suspendMediaWhenInactive(true)
-                        .build()
-                )
-                fresh.open(runtime)
-                fresh.setActive(tab.id == currentId.value)
-                fresh.setFocused(tab.id == currentId.value)
-                tab.session = fresh
-                attachDelegates(tab)
-                fresh.loadUri(url.ifEmpty { "about:blank" })
+                recoverDeadSession(tab)
+            }
+
+            override fun onKill(session: GeckoSession) {
+                recoverDeadSession(tab)
             }
         }
         tab.session.historyDelegate = object : GeckoSession.HistoryDelegate {
@@ -350,5 +376,32 @@ class TabManager(
         tab.session.settings.viewportMode =
             if (tab.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP
             else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
+    }
+
+    private fun sessionSettings(private: Boolean): GeckoSessionSettings =
+        GeckoSessionSettings.Builder()
+            .usePrivateMode(private)
+            .suspendMediaWhenInactive(true)
+            .build()
+
+    private fun recoverDeadSession(tab: Tab) {
+        val wasActive = tab.id == currentId.value
+        closeIfOpen(tab.session)
+        val fresh = GeckoSession(sessionSettings(tab.isPrivate))
+        tab.session = fresh
+        attachDelegates(tab)
+        fresh.open(runtime)
+        applyDesktop(tab)
+        fresh.setActive(wasActive)
+        fresh.setFocused(wasActive)
+        val restored = tab.persistedSessionState?.let { encoded ->
+            runCatching {
+                GeckoSession.SessionState.fromString(encoded)?.let {
+                    fresh.restoreState(it)
+                    true
+                } ?: false
+            }.getOrDefault(false)
+        } == true
+        if (!restored) fresh.loadUri(tab.url.ifEmpty { "about:blank" })
     }
 }

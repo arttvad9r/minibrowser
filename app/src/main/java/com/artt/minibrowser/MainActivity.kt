@@ -98,6 +98,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.browser.BrowserScreen
+import com.artt.minibrowser.browser.ActivityRequestCoordinator
 import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.data.BookmarksRepository
@@ -117,7 +118,6 @@ import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
 import com.artt.minibrowser.engine.createSafeExternalIntent
-import com.artt.minibrowser.engine.enqueueDownload
 import com.artt.minibrowser.engine.formatFindCounter
 import com.artt.minibrowser.ui.AddBookmarkSheet
 import com.artt.minibrowser.ui.AppIcons
@@ -152,19 +152,27 @@ class MainActivity : ComponentActivity() {
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
 
     private val externalNavigation = NavigationController()
-    private var permissionResult: ((Boolean) -> Unit)? = null
-    private var filePickResult: ((Array<Uri>) -> Unit)? = null
+    private val permissionRequests = ActivityRequestCoordinator<Boolean>()
+    private val fileRequests = ActivityRequestCoordinator<Array<Uri>>()
+    private var permissionCompletion: ((Boolean) -> Unit)? = null
+    private var fileCompletion: ((Array<Uri>) -> Unit)? = null
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
-        permissionResult?.invoke(grants.isNotEmpty() && grants.values.all { it })
-        permissionResult = null
+        permissionCompletion?.invoke(grants.isNotEmpty() && grants.values.all { it })
+        permissionCompletion = null
     }
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        filePickResult?.invoke(uris.toTypedArray())
-        filePickResult = null
+        fileCompletion?.invoke(uris.toTypedArray())
+        fileCompletion = null
+    }
+    private val singleFilePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        fileCompletion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
+        fileCompletion = null
     }
 
     private fun openExternalUri(value: String) {
@@ -187,12 +195,29 @@ class MainActivity : ComponentActivity() {
             File(filesDir, "tabs"),
             this,
             permissionRequester = { permissions, callback ->
-                permissionResult = callback
-                permissionLauncher.launch(permissions)
+                permissionRequests.enqueue(
+                    start = { complete ->
+                        permissionCompletion = { granted -> callback(granted); complete(granted) }
+                        permissionLauncher.launch(permissions)
+                    },
+                    cancel = { callback(false) },
+                )
             },
-            filePicker = { mimeTypes, callback ->
-                filePickResult = callback
-                filePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
+            filePicker = { type, mimeTypes, callback ->
+                fileRequests.enqueue(
+                    start = { complete ->
+                        fileCompletion = { uris ->
+                            callback(uris)
+                            complete(uris)
+                        }
+                        if (type == org.mozilla.geckoview.GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
+                            filePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
+                        } else {
+                            singleFilePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
+                        }
+                    },
+                    cancel = { callback(emptyArray()) },
+                )
             },
         )
         val iconsDir = File(filesDir, "icons")
@@ -203,6 +228,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val prefs by settingsRepo.prefs.collectAsStateWithLifecycle(Prefs())
+            val extensionStates by ExtensionLoader.state.collectAsStateWithLifecycle()
+            val adblockStatus = extensionStates[ExtensionLoader.UBLOCK_ID]?.status
             val scope = rememberCoroutineScope()
             val darkTheme = when (prefs.theme) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
             val browserUi by browserViewModel.state.collectAsStateWithLifecycle()
@@ -293,12 +320,6 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
-            val onDownload: () -> Unit = {
-                currentTab?.url?.let { u ->
-                    val fallback = u.substringAfterLast('/').substringBefore('?').ifBlank { "page" }
-                    runCatching { enqueueDownload(applicationContext, u, fallback) }
-                }
-            }
 
             MinibrowserTheme(darkTheme = darkTheme) {
                 Box(
@@ -339,11 +360,11 @@ class MainActivity : ComponentActivity() {
                                  onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
                                  onHistory = { browserViewModel.screen(BrowserScreen.History) },
                                 onShare = onShare,
-                                onDownload = onDownload,
                                  onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
                                 onSuggest = { q -> historyRepo.suggest(q) },
                                 onToggleAdblock = toggleAdblock,
-                                adblockEnabled = prefs.adblockEnabled,
+                                 adblockEnabled = prefs.adblockEnabled,
+                                 adblockStatus = adblockStatus,
                                 onTranslate = {
                                     val u = currentTab?.url ?: return@TopBar
                                     buildTranslateUri(u, prefs.translateTarget)?.let(currentTab.session::loadUri)
@@ -408,6 +429,7 @@ class MainActivity : ComponentActivity() {
                                     onEngine = { e -> scope.launch { settingsRepo.setSearchEngine(e) } },
                                     onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
                                     onAdblock = toggleAdblock,
+                                    adblockStatus = adblockStatus,
                                     onTranslateLang = { lang -> scope.launch { settingsRepo.setTranslateTarget(lang) } },
                                     onClearData = { withBookmarks ->
                                         scope.launch {
@@ -475,6 +497,12 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         if (::tabManager.isInitialized) tabManager.setAppVisible(true)
     }
+
+    override fun onDestroy() {
+        permissionRequests.cancelAll()
+        fileRequests.cancelAll()
+        super.onDestroy()
+    }
 }
 
 // ---------- Верхняя панель: омнибокс + подсказки + действия ----------
@@ -488,6 +516,7 @@ private fun TopBar(
     iconsDir: File,
     omniboxFocus: FocusRequester,
     adblockEnabled: Boolean,
+    adblockStatus: ExtensionLoader.Status?,
     onToggleAdblock: (Boolean) -> Unit,
     onNavigate: (String) -> Unit,
     onExternal: (String) -> Unit,
@@ -497,7 +526,6 @@ private fun TopBar(
     onNewPrivateTab: () -> Unit,
     onFind: () -> Unit,
     onShare: () -> Unit,
-    onDownload: () -> Unit,
     onToggleBookmark: () -> Unit,
     onBookmarks: () -> Unit,
     onHistory: () -> Unit,
@@ -546,13 +574,16 @@ private fun TopBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                  IconButton(onClick = onSiteInfo, modifier = Modifier.size(32.dp)) {
-                     Icon(
-                         if (tab?.securityState == SecurityState.Secure) Icons.Filled.Lock
-                         else if (tab?.isPrivate == true) AppIcons.Incognito else Icons.Filled.Search,
-                         null,
-                         Modifier.size(20.dp),
-                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                     )
+                     Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                         if (tab?.isPrivate == true) {
+                             Icon(AppIcons.Incognito, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                         } else if (tab?.securityState != SecurityState.Secure) {
+                             Icon(Icons.Filled.Search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                         }
+                         if (tab?.securityState == SecurityState.Secure) {
+                             Icon(Icons.Filled.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                         }
+                     }
                  }
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f)) {
@@ -643,6 +674,7 @@ private fun TopBar(
             tab = tab,
             bookmarked = bookmarked,
             adblockEnabled = adblockEnabled,
+            adblockStatus = adblockStatus,
             onDismiss = { menuOpen = false },
             onNewTab = onNewTab,
             onNewPrivateTab = onNewPrivateTab,
@@ -651,7 +683,6 @@ private fun TopBar(
             onHistory = onHistory,
             onFind = onFind,
             onShare = onShare,
-            onDownload = onDownload,
             onTranslate = onTranslate,
             onToggleAdblock = onToggleAdblock,
             onSettings = onSettings,
@@ -701,6 +732,7 @@ private fun MenuSheet(
     tab: Tab?,
     bookmarked: Boolean,
     adblockEnabled: Boolean,
+    adblockStatus: ExtensionLoader.Status?,
     onDismiss: () -> Unit,
     onNewTab: () -> Unit,
     onNewPrivateTab: () -> Unit,
@@ -709,7 +741,6 @@ private fun MenuSheet(
     onHistory: () -> Unit,
     onFind: () -> Unit,
     onShare: () -> Unit,
-    onDownload: () -> Unit,
     onTranslate: () -> Unit,
     onToggleAdblock: (Boolean) -> Unit,
     onSettings: () -> Unit,
@@ -740,12 +771,19 @@ private fun MenuSheet(
                 )
             },
             onClick = { onDismiss(); onToggleDesktop() })
-        SheetRow(AppIcons.Download, "Скачать", enabled = httpPage, onClick = { onDismiss(); onDownload() })
         SheetRow(Icons.Filled.Share, "Поделиться", enabled = httpPage, onClick = { onDismiss(); onShare() })
         SheetRow(AppIcons.Globe, "Перевести страницу", enabled = httpPage, onClick = { onDismiss(); onTranslate() })
         MenuDivider()
-        ToggleRow(AppIcons.Shield, "Блокировка рекламы", adblockEnabled, onToggleAdblock,
-            subtitle = "Блокирует рекламу и трекеры")
+        when (adblockStatus) {
+            null, ExtensionLoader.Status.Installing ->
+                SheetRow(AppIcons.Shield, "Блокировка рекламы", enabled = false, trailing = { Text("Запуск…", color = MaterialTheme.colorScheme.onSurfaceVariant) })
+            ExtensionLoader.Status.Error ->
+                SheetRow(AppIcons.Shield, "Блокировка рекламы — ошибка", onClick = { onToggleAdblock(true) })
+            ExtensionLoader.Status.Enabled ->
+                ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
+            ExtensionLoader.Status.Disabled ->
+                ToggleRow(AppIcons.Shield, "Блокировка рекламы", false, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
+        }
         SheetRow(Icons.Filled.Settings, "Настройки", onClick = { onDismiss(); onSettings() })
     }
 }

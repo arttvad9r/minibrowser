@@ -21,7 +21,10 @@ fun rankSuggestions(history: List<Scored>, bookmarks: List<String>, q: String): 
         .distinctBy { it.url }.take(8)
 }
 
-@Entity(tableName = "history")
+@Entity(
+    tableName = "history",
+    indices = [Index(value = ["visitedAt"])],
+)
 data class HistoryEntry(
     @PrimaryKey val url: String, val title: String, val visitedAt: Long, val visits: Int,
 )
@@ -89,7 +92,7 @@ abstract class AppDb : RoomDatabase() { abstract fun dao(): AppDao }
 // Application-scope: HistorySink вызывается из TabManager без жизненного цикла,
 // поэтому скоуп живёт здесь (переживает активити, гаснет только с процессом).
 object DbHolder {
-    private val migration1to2 = object : Migration(1, 2) {
+    internal val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
         }
@@ -101,7 +104,7 @@ object DbHolder {
     fun init(context: Context) {
         if (!::db.isInitialized) {
             db = Room.databaseBuilder(context, AppDb::class.java, "minibrowser.db")
-                .addMigrations(migration1to2)
+                .addMigrations(MIGRATION_1_2)
                 .build()
         }
     }

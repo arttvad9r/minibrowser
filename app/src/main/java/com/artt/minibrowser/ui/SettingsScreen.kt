@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.engine.SearchEngine
+import com.artt.minibrowser.engine.ExtensionLoader
 
 @Composable
 fun SettingsScreen(
@@ -52,6 +53,7 @@ fun SettingsScreen(
     onEngine: (SearchEngine) -> Unit,
     onTheme: (Int) -> Unit,
     onAdblock: (Boolean) -> Unit,
+    adblockStatus: ExtensionLoader.Status?,
     onClearData: (withBookmarks: Boolean) -> Unit,
     onTranslateLang: (String) -> Unit,
 ) {
@@ -92,12 +94,12 @@ fun SettingsScreen(
             GroupLabel("Конфиденциальность")
             SettingsGroup {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    ToggleRow(
-                        AppIcons.Shield, "Блокировка рекламы",
-                        checked = prefs.adblockEnabled,
-                        onChecked = onAdblock,
-                        subtitle = "Блокирует рекламу и трекеры",
-                    )
+                    when (adblockStatus) {
+                        null, ExtensionLoader.Status.Installing -> SettingsRow("Блокировка рекламы", subtitle = "Запуск…")
+                        ExtensionLoader.Status.Error -> SettingsRow("Блокировка рекламы", subtitle = "Ошибка запуска", onClick = { onAdblock(true) })
+                        ExtensionLoader.Status.Enabled -> ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onAdblock, subtitle = "Блокирует рекламу и трекеры")
+                        ExtensionLoader.Status.Disabled -> ToggleRow(AppIcons.Shield, "Блокировка рекламы", false, onAdblock, subtitle = "Блокирует рекламу и трекеры")
+                    }
                 }
                 HorizontalDividerThin()
                 SettingsRow("Очистить данные", subtitle = "История и кэш иконок", onClick = { showClearDialog = true })
