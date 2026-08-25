@@ -17,6 +17,12 @@ android {
         versionName = "0.1"
     }
     buildFeatures { compose = true }
+    // Релиз подписываем debug-ключом: ставится поверх debug-сборки на личном телефоне.
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
     // Дефолтный паттерн AAPT вырезает каталоги, начинающиеся с "_"
     // (<dir>_*), из-за чего из APK пропадает _locales расширений.
     androidResources {
