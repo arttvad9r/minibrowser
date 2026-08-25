@@ -21,6 +21,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var progress by mutableFloatStateOf(-1f)
     var canGoBack by mutableStateOf(false)
     var desktop by mutableStateOf(false)
+    var fullscreen by mutableStateOf(false)
 }
 
 class TabManager(
@@ -98,12 +99,30 @@ class TabManager(
                 tab.url = url.orEmpty()
             }
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { tab.canGoBack = canGoBack }
-            override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? = null
+            // target="_blank"/window.open (так открывают результаты поисковики) — новая вкладка с автопереключением.
+            // Возвращённую сессию открываем сами, uri в неё грузит сам GeckoView.
+            override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
+                val s = GeckoSession(
+                    GeckoSessionSettings.Builder()
+                        .usePrivateMode(tab.isPrivate)
+                        .build()
+                )
+                val t = Tab(s, ++seq, tab.isPrivate)
+                attachDelegates(t)
+                _tabs.value += t
+                currentId.value = t.id
+                s.open(runtime)
+                return GeckoResult.fromValue(s)
+            }
         }
         tab.session.contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
                 tab.title = title.orEmpty()
                 if (!tab.isPrivate) HistorySink.updateTitle(tab.url, title)
+            }
+            // Движок сам разворачивает видео; приложение по этому колбэку прячет бары и тулбар.
+            override fun onFullScreen(session: GeckoSession, fullscreen: Boolean) {
+                tab.fullscreen = fullscreen
             }
             // Файлы по прямым ссылкам (attachment) — в системный DownloadManager.
             override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {

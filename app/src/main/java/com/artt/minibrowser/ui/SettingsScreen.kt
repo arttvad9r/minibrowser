@@ -1,12 +1,22 @@
 package com.artt.minibrowser.ui
 
+// Настройки: карточки-группы вместо плоского списка radio buttons.
+// Выбор — compact selection list; тема — визуальный selector из трёх карточек.
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,8 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,8 +36,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.engine.SearchEngine
 
@@ -41,51 +56,82 @@ fun SettingsScreen(
     onAdblock: (Boolean) -> Unit,
     onHomepage: (String) -> Unit,
     onClearData: (withBookmarks: Boolean) -> Unit,
+    onTranslateLang: (String) -> Unit,
 ) {
-    var homepage by remember { mutableStateOf(prefs.homepage) }
+    var homepage by remember(prefs.homepage) { mutableStateOf(prefs.homepage) }
     var showClearDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+            }
             Text("Настройки", style = MaterialTheme.typography.titleLarge)
         }
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            SectionTitle("Поисковик")
-            SearchEngine.entries.forEach { e ->
-                RadioRow(e.label, e == prefs.searchEngine) { onEngine(e) }
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .imePadding(),
+        ) {
+            GroupLabel("Поиск")
+            SettingsGroup {
+                SearchEngine.entries.forEach { e ->
+                    ChoiceRow(e.label, e == prefs.searchEngine) { onEngine(e) }
+                }
             }
-            SectionTitle("Тема")
-            listOf("Системная" to 0, "Светлая" to 1, "Тёмная" to 2).forEach { (label, v) ->
-                RadioRow(label, v == prefs.theme) { onTheme(v) }
+
+            GroupLabel("Внешний вид")
+            ThemeSelector(prefs.theme, onTheme)
+
+            GroupLabel("Основное")
+            SettingsGroup {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text("Домашняя страница", style = MaterialTheme.typography.bodyLarge)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = homepage,
+                        onValueChange = { homepage = it; onHomepage(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("example.com") },
+                        shape = Radius.button,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.outline,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                    )
+                }
             }
-            SectionTitle("Домашняя страница")
-            OutlinedTextField(
-                value = homepage,
-                onValueChange = { homepage = it; onHomepage(it) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                singleLine = true,
-                placeholder = { Text("example.com") },
-            )
-            SectionTitle("Прочее")
-            Row(
-                Modifier.fillMaxWidth()
-                    .selectable(selected = prefs.adblockEnabled, role = Role.Switch) { onAdblock(!prefs.adblockEnabled) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Блокировка рекламы", Modifier.weight(1f))
-                Switch(checked = prefs.adblockEnabled, onCheckedChange = null)
+
+            GroupLabel("Перевод")
+            SettingsGroup {
+                listOf("Русский" to "ru", "English" to "en", "Deutsch" to "de", "Français" to "fr")
+                    .forEach { (label, lang) ->
+                        ChoiceRow(label, lang == prefs.translateTarget) { onTranslateLang(lang) }
+                    }
             }
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Очистить данные (история, кэш иконок)", Modifier.weight(1f))
-                TextButton(onClick = { showClearDialog = true }) { Text("Очистить") }
+
+            GroupLabel("Конфиденциальность")
+            SettingsGroup {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    ToggleRow(
+                        AppIcons.Shield, "Блокировка рекламы",
+                        checked = prefs.adblockEnabled,
+                        onChecked = onAdblock,
+                        subtitle = "Блокирует рекламу и трекеры",
+                    )
+                }
+                HorizontalDividerThin()
+                SettingsRow("Очистить данные", subtitle = "История и кэш иконок", onClick = { showClearDialog = true })
             }
+            Spacer(Modifier.height(32.dp))
         }
     }
+
     if (showClearDialog) {
         var withBookmarks by remember { mutableStateOf(false) }
         AlertDialog(
@@ -101,9 +147,7 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showClearDialog = false; onClearData(withBookmarks) }) {
-                    Text("Очистить")
-                }
+                TextButton(onClick = { showClearDialog = false; onClearData(withBookmarks) }) { Text("Очистить") }
             },
             dismissButton = {
                 TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
@@ -113,24 +157,62 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+private fun GroupLabel(text: String) {
     Text(
-        text,
-        Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
+        text.uppercase(),
+        Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp),
+        style = MaterialTheme.typography.labelMedium,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
 @Composable
-private fun RadioRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun HorizontalDividerThin() {
+    androidx.compose.material3.HorizontalDivider(
+        Modifier.padding(horizontal = 16.dp),
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+/** Выбор темы: три визуальные карточки, выбранная — тонкая графитовая обводка. */
+@Composable
+private fun ThemeSelector(selected: Int, onSelect: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        ThemeOption("Системная", AppIcons.SystemTheme, 0, selected, onSelect, Modifier.weight(1f))
+        ThemeOption("Светлая", AppIcons.Sun, 1, selected, onSelect, Modifier.weight(1f))
+        ThemeOption("Тёмная", AppIcons.Moon, 2, selected, onSelect, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun ThemeOption(
+    label: String,
+    icon: ImageVector,
+    value: Int,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isSel = value == selected
+    Column(
+        modifier
+            .clip(Radius.button)
+            .background(if (isSel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                width = if (isSel) 1.5.dp else 1.dp,
+                color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                shape = Radius.button,
+            )
+            .clickable { onSelect(value) }
+            .padding(vertical = 14.dp)
+            .semantics { contentDescription = label },
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        RadioButton(selected = selected, onClick = null)
-        Text(label, Modifier.padding(start = 8.dp))
+        Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
+        Spacer(Modifier.height(6.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
     }
 }

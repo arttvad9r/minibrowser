@@ -2,8 +2,10 @@ package com.artt.minibrowser
 
 import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.buildLoadUri
+import com.artt.minibrowser.engine.buildTranslateUri
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class SearchEnginesTest {
     @Test fun urlPassthrough() =
@@ -23,4 +25,17 @@ class SearchEnginesTest {
         assertEquals("http://localhost:8080/x", buildLoadUri("http://localhost:8080/x", SearchEngine.GOOGLE))
     @Test fun emptyIsBlank() =
         assertEquals("about:blank", buildLoadUri("  ", SearchEngine.GOOGLE))
+    @Test fun translateUriBuildsProxyUrl() =
+        assertEquals(
+            "https://en-wikipedia-org.translate.goog/wiki/Main_Page?_x_tr_sl=auto&_x_tr_tl=ru&_x_tr_hl=ru",
+            buildTranslateUri("https://en.wikipedia.org/wiki/Main_Page", "ru"))
+    @Test fun translateUriEscapesDashesAndKeepsQuery() =
+        assertEquals(
+            "https://my--site-com.translate.goog/a?b=1&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=ru",
+            buildTranslateUri("https://my-site.com/a?b=1", "en"))
+    @Test fun translateUriRejectsGarbage() {
+        assertNull(buildTranslateUri("https://a.translate.goog/x", "ru"))
+        assertNull(buildTranslateUri("about:blank", "ru"))
+        assertNull(buildTranslateUri("https://a.b/c", "  "))
+    }
 }

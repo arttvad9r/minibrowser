@@ -17,6 +17,7 @@ data class Prefs(
     val theme: Int = 0,          // 0 система, 1 светлая, 2 тёмная
     val adblockEnabled: Boolean = true,
     val homepage: String = "",
+    val translateTarget: String = "ru",
 )
 
 class SettingsRepository(private val context: Context) {
@@ -25,6 +26,7 @@ class SettingsRepository(private val context: Context) {
         val theme = intPreferencesKey("theme")
         val adblock = booleanPreferencesKey("adblock_enabled")
         val homepage = stringPreferencesKey("homepage")
+        val translate = stringPreferencesKey("translate_target")
     }
 
     val prefs: Flow<Prefs> = context.dataStore.data.map { p ->
@@ -34,6 +36,7 @@ class SettingsRepository(private val context: Context) {
             theme = p[K.theme] ?: 0,
             adblockEnabled = p[K.adblock] ?: true,
             homepage = p[K.homepage] ?: "",
+            translateTarget = p[K.translate] ?: "ru",
         )
     }
 
@@ -41,4 +44,5 @@ class SettingsRepository(private val context: Context) {
     suspend fun setTheme(t: Int) = context.dataStore.edit { it[K.theme] = t }
     suspend fun setAdblock(b: Boolean) = context.dataStore.edit { it[K.adblock] = b }
     suspend fun setHomepage(u: String) = context.dataStore.edit { it[K.homepage] = u }
+    suspend fun setTranslateTarget(lang: String) = context.dataStore.edit { it[K.translate] = lang }
 }
