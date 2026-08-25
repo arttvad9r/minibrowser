@@ -174,6 +174,12 @@ class MainActivity : ComponentActivity() {
         fileCompletion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
         fileCompletion = null
     }
+    private val folderPickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        fileCompletion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
+        fileCompletion = null
+    }
 
     private fun openExternalUri(value: String) {
         val intent = createSafeExternalIntent(value) ?: return
@@ -210,10 +216,15 @@ class MainActivity : ComponentActivity() {
                             callback(uris)
                             complete(uris)
                         }
-                        if (type == org.mozilla.geckoview.GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
-                            filePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
-                        } else {
-                            singleFilePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
+                        when (type) {
+                            GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
+                                filePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
+                            GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
+                                folderPickerLauncher.launch(null)
+                            GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE ->
+                                singleFilePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
+                            else ->
+                                singleFilePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
                         }
                     },
                     cancel = { callback(emptyArray()) },
@@ -309,6 +320,9 @@ class MainActivity : ComponentActivity() {
                     ExtensionLoader.setAdblock(Engine.runtime, b)
                 }
             }
+            val retryAdblock: () -> Unit = {
+                ExtensionLoader.retryAdblock(Engine.runtime, prefs.adblockEnabled)
+            }
             val onShare: () -> Unit = {
                 currentTab?.url?.let { u ->
                     startActivity(
@@ -362,7 +376,8 @@ class MainActivity : ComponentActivity() {
                                 onShare = onShare,
                                  onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
                                 onSuggest = { q -> historyRepo.suggest(q) },
-                                onToggleAdblock = toggleAdblock,
+                                 onToggleAdblock = toggleAdblock,
+                                 onRetryAdblock = retryAdblock,
                                  adblockEnabled = prefs.adblockEnabled,
                                  adblockStatus = adblockStatus,
                                 onTranslate = {
@@ -428,7 +443,8 @@ class MainActivity : ComponentActivity() {
                                      onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                     onEngine = { e -> scope.launch { settingsRepo.setSearchEngine(e) } },
                                     onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
-                                    onAdblock = toggleAdblock,
+                                     onAdblock = toggleAdblock,
+                                     onRetryAdblock = retryAdblock,
                                     adblockStatus = adblockStatus,
                                     onTranslateLang = { lang -> scope.launch { settingsRepo.setTranslateTarget(lang) } },
                                     onClearData = { withBookmarks ->
@@ -501,6 +517,8 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         permissionRequests.cancelAll()
         fileRequests.cancelAll()
+        permissionCompletion = null
+        fileCompletion = null
         super.onDestroy()
     }
 }
@@ -518,6 +536,7 @@ private fun TopBar(
     adblockEnabled: Boolean,
     adblockStatus: ExtensionLoader.Status?,
     onToggleAdblock: (Boolean) -> Unit,
+    onRetryAdblock: () -> Unit,
     onNavigate: (String) -> Unit,
     onExternal: (String) -> Unit,
     onSiteInfo: () -> Unit,
@@ -685,6 +704,7 @@ private fun TopBar(
             onShare = onShare,
             onTranslate = onTranslate,
             onToggleAdblock = onToggleAdblock,
+            onRetryAdblock = onRetryAdblock,
             onSettings = onSettings,
             onToggleDesktop = {
                 val t = tab ?: return@MenuSheet
@@ -743,6 +763,7 @@ private fun MenuSheet(
     onShare: () -> Unit,
     onTranslate: () -> Unit,
     onToggleAdblock: (Boolean) -> Unit,
+    onRetryAdblock: () -> Unit,
     onSettings: () -> Unit,
     onToggleDesktop: () -> Unit,
 ) {
@@ -778,7 +799,7 @@ private fun MenuSheet(
             null, ExtensionLoader.Status.Installing ->
                 SheetRow(AppIcons.Shield, "Блокировка рекламы", enabled = false, trailing = { Text("Запуск…", color = MaterialTheme.colorScheme.onSurfaceVariant) })
             ExtensionLoader.Status.Error ->
-                SheetRow(AppIcons.Shield, "Блокировка рекламы — ошибка", onClick = { onToggleAdblock(true) })
+                SheetRow(AppIcons.Shield, "Блокировка рекламы", trailing = { Text("Ошибка · повторить", color = MaterialTheme.colorScheme.error) }, onClick = { onDismiss(); onRetryAdblock() })
             ExtensionLoader.Status.Enabled ->
                 ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
             ExtensionLoader.Status.Disabled ->

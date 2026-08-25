@@ -53,6 +53,7 @@ fun SettingsScreen(
     onEngine: (SearchEngine) -> Unit,
     onTheme: (Int) -> Unit,
     onAdblock: (Boolean) -> Unit,
+    onRetryAdblock: () -> Unit,
     adblockStatus: ExtensionLoader.Status?,
     onClearData: (withBookmarks: Boolean) -> Unit,
     onTranslateLang: (String) -> Unit,
@@ -96,13 +97,13 @@ fun SettingsScreen(
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                     when (adblockStatus) {
                         null, ExtensionLoader.Status.Installing -> SettingsRow("Блокировка рекламы", subtitle = "Запуск…")
-                        ExtensionLoader.Status.Error -> SettingsRow("Блокировка рекламы", subtitle = "Ошибка запуска", onClick = { onAdblock(true) })
+                        ExtensionLoader.Status.Error -> SettingsRow("Блокировка рекламы", subtitle = "Ошибка запуска · Нажмите, чтобы повторить", onClick = onRetryAdblock)
                         ExtensionLoader.Status.Enabled -> ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onAdblock, subtitle = "Блокирует рекламу и трекеры")
                         ExtensionLoader.Status.Disabled -> ToggleRow(AppIcons.Shield, "Блокировка рекламы", false, onAdblock, subtitle = "Блокирует рекламу и трекеры")
                     }
                 }
                 HorizontalDividerThin()
-                SettingsRow("Очистить данные", subtitle = "История и кэш иконок", onClick = { showClearDialog = true })
+                SettingsRow("Очистить данные", subtitle = "История, cookies, данные сайтов и кэш", onClick = { showClearDialog = true })
             }
             Spacer(Modifier.height(32.dp))
         }
@@ -115,7 +116,7 @@ fun SettingsScreen(
             title = { Text("Очистить данные") },
             text = {
                 Column {
-                    Text("Будут удалены история посещений и кэш иконок.")
+                    Text("Будут удалены:\n• история посещений;\n• cookies и данные сайтов;\n• кэш браузера;\n• кэш иконок.\n\nВозможно, потребуется снова войти в аккаунты на сайтах.")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = withBookmarks, onCheckedChange = { withBookmarks = it })
                         Text("Также удалить все закладки")

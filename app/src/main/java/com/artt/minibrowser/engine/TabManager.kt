@@ -17,8 +17,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -50,6 +51,28 @@ internal fun closeIfOpen(session: GeckoSession) {
     }
 }
 
+internal enum class PersistSignal { Dirty, Immediate }
+
+internal fun mergePersistSignal(current: PersistSignal, next: PersistSignal): PersistSignal =
+    if (current == PersistSignal.Immediate || next == PersistSignal.Immediate) PersistSignal.Immediate else PersistSignal.Dirty
+
+internal data class PersistTabCandidate(
+    val id: Long,
+    val url: String,
+    val title: String,
+    val desktop: Boolean,
+    val sessionState: String?,
+    val lastAccess: Long,
+    val isPrivate: Boolean,
+)
+
+internal fun snapshotPersistedState(selectedId: Long?, tabs: List<PersistTabCandidate>): PersistedBrowserState = PersistedBrowserState(
+    selectedId = selectedId,
+    tabs = tabs.filterNot { it.isPrivate }.map {
+        PersistedTab(it.id, it.url, it.title, it.desktop, it.sessionState, it.lastAccess)
+    },
+)
+
 class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     // Compose state: смена сессии при краш-восстановлении должна перерисовать AndroidView.
     var session: GeckoSession by mutableStateOf(session)
@@ -67,6 +90,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     internal var lastAccess = System.currentTimeMillis()
 }
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class TabManager(
     private val runtime: GeckoRuntime,
     private val storeDir: File,
@@ -74,14 +98,13 @@ class TabManager(
     permissionRequester: ((Array<String>, (Boolean) -> Unit) -> Unit)? = null,
     filePicker: ((Int, Array<String>, (Array<android.net.Uri>) -> Unit) -> Unit)? = null,
 ) {
-    private data class PersistRequest(val state: PersistedBrowserState, val immediate: Boolean)
     private val promptController = (context as? Activity)?.let { GeckoPromptController(it, filePicker) }
     private val permissionController = (context as? Activity)?.let {
         GeckoPermissionController(it, permissionRequester)
     }
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
     private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val persistRequests = Channel<PersistRequest>(Channel.CONFLATED)
+    private val persistRequests = Channel<PersistSignal>(Channel.CONFLATED)
     val tabs get() = _tabs
     val currentId = MutableStateFlow<Long?>(null)
     private var seq = 0L
@@ -89,14 +112,18 @@ class TabManager(
     init {
         persistScope.launch {
             for (first in persistRequests) {
-                var request = first
-                if (!request.immediate) delay(350)
-                while (true) {
-                    val next = persistRequests.tryReceive().getOrNull() ?: break
-                    request = next
-                    if (request.immediate) break
+                var signal = first
+                if (signal == PersistSignal.Dirty) {
+                    while (true) {
+                        val next = select<PersistSignal?> {
+                            persistRequests.onReceive { it }
+                            onTimeout(350) { null }
+                        } ?: break
+                        signal = mergePersistSignal(signal, next)
+                        if (signal == PersistSignal.Immediate) break
+                    }
                 }
-                runCatching { TabStore.saveState(storeDir, request.state) }
+                runCatching { TabStore.saveState(storeDir, snapshotForPersistence()) }
                     .onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
             }
         }
@@ -180,7 +207,6 @@ class TabManager(
         val idx = _tabs.value.indexOfFirst { it.id == id }
         if (idx < 0) return
         val dying = _tabs.value[idx]
-        if (dying.session.isOpen) dying.session.flushSessionState()
         closeIfOpen(dying.session)
         _tabs.value = _tabs.value - dying
         if (currentId.value == id) {
@@ -218,21 +244,13 @@ class TabManager(
     }
 
     private fun requestPersist(immediate: Boolean) {
-        val snapshot = PersistedBrowserState(
-            selectedId = currentId.value,
-            tabs = _tabs.value.filterNot { it.isPrivate }.map {
-                PersistedTab(
-                    id = it.id,
-                    url = it.url,
-                    title = it.title,
-                    desktop = it.desktop,
-                    sessionState = it.persistedSessionState,
-                    lastAccess = it.lastAccess,
-                )
-            },
-        )
-        persistRequests.trySend(PersistRequest(snapshot, immediate))
+        persistRequests.trySend(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
     }
+
+    private fun snapshotForPersistence(): PersistedBrowserState = snapshotPersistedState(
+        currentId.value,
+        _tabs.value.map { PersistTabCandidate(it.id, it.url, it.title, it.desktop, it.persistedSessionState, it.lastAccess, it.isPrivate) },
+    )
 
     private fun restore() {
         val saved = TabStore.loadState(storeDir)
@@ -269,8 +287,8 @@ class TabManager(
                 }
             }
             override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
+                tab.persistedSessionState = state.toString()
                 if (!tab.isPrivate) {
-                    tab.persistedSessionState = state.toString()
                     requestPersist(immediate = false)
                 }
             }

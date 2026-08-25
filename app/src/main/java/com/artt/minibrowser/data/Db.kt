@@ -86,13 +86,18 @@ data class Bookmark(
     suspend fun bookmarkCount(url: String): Int
 }
 
-@Database(entities = [HistoryEntry::class, Bookmark::class], version = 2, exportSchema = false)
+@Database(entities = [HistoryEntry::class, Bookmark::class], version = 3, exportSchema = false)
 abstract class AppDb : RoomDatabase() { abstract fun dao(): AppDao }
 
 // Application-scope: HistorySink вызывается из TabManager без жизненного цикла,
 // поэтому скоуп живёт здесь (переживает активити, гаснет только с процессом).
 object DbHolder {
     internal val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
+        }
+    }
+    internal val MIGRATION_2_3 = object : Migration(2, 3) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
         }
@@ -104,7 +109,7 @@ object DbHolder {
     fun init(context: Context) {
         if (!::db.isInitialized) {
             db = Room.databaseBuilder(context, AppDb::class.java, "minibrowser.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
         }
     }

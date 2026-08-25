@@ -18,4 +18,18 @@ class ActivityRequestCoordinatorTest {
         assertEquals(listOf("first", "second"), started)
         assertEquals(listOf("first-done"), results)
     }
+
+    @Test
+    fun cancelAllCancelsActiveAndQueuedRequestsAndAllowsNewRequest() {
+        val coordinator = ActivityRequestCoordinator<String>()
+        val events = mutableListOf<String>()
+        lateinit var finish: (String) -> Unit
+        coordinator.enqueue({ complete -> events += "first"; finish = complete }, { events += "cancel-first" })
+        coordinator.enqueue({ complete -> events += "second"; complete("second") }, { events += "cancel-second" })
+        coordinator.enqueue({ complete -> events += "third"; complete("third") }, { events += "cancel-third" })
+        coordinator.cancelAll()
+        finish("late")
+        coordinator.enqueue({ complete -> events += "new"; complete("new") }, { events += "cancel-new" })
+        assertEquals(listOf("first", "cancel-first", "cancel-second", "cancel-third", "new"), events)
+    }
 }

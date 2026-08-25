@@ -3,6 +3,7 @@ package com.artt.minibrowser
 import com.artt.minibrowser.engine.NavigationTarget
 import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.resolveNavigation
+import com.artt.minibrowser.engine.selectSafeExternalUri
 import com.artt.minibrowser.browser.NavigationController
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,5 +25,12 @@ class NavigationPolicyTest {
     @Test fun schemesAreNotPassedToGeckoAsArbitraryUris() {
         assertEquals(NavigationTarget.External("intent://example.com"), resolveNavigation("intent://example.com", SearchEngine.GOOGLE))
         assertEquals(NavigationTarget.Search("chrome://crash"), resolveNavigation("chrome://crash", SearchEngine.GOOGLE))
+    }
+
+    @Test fun unsafeDirectUriUsesSafeFallback() {
+        assertEquals("https://example.com", selectSafeExternalUri("evil://payload", "https://example.com"))
+        assertEquals(null, selectSafeExternalUri("evil://payload", "custom://payload"))
+        assertEquals("https://example.com", selectSafeExternalUri(null, "https://example.com"))
+        assertEquals("https://example.com", selectSafeExternalUri("https://example.com", "https://other.example"))
     }
 }

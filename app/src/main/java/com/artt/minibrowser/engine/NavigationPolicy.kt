@@ -15,6 +15,12 @@ private val EXTERNAL_SCHEMES = setOf("mailto", "tel", "sms", "geo", "intent", "m
 
 fun isExternalScheme(value: String): Boolean = value.substringBefore(':', "").lowercase() in EXTERNAL_SCHEMES
 
+internal fun selectSafeExternalUri(direct: String?, fallback: String?): String? {
+    val directSchemes = setOf("http", "https", "mailto", "tel", "sms", "geo", "market")
+    return direct?.takeIf { it.substringBefore(':', "").lowercase() in directSchemes }
+        ?: fallback?.takeIf { it.substringBefore(':', "").lowercase() in setOf("http", "https") }
+}
+
 fun createSafeExternalIntent(value: String): Intent? = runCatching {
     val scheme = value.substringBefore(':', "").lowercase()
     val parsed = if (scheme == "intent") {
@@ -24,10 +30,8 @@ fun createSafeExternalIntent(value: String): Intent? = runCatching {
     }
     val directUri = parsed.data
     val fallbackUri = parsed.getStringExtra("browser_fallback_url")?.let(Uri::parse)
-    val approvedSchemes = setOf("http", "https", "mailto", "tel", "sms", "geo", "market")
-    val safeUri = directUri?.takeIf { it.scheme?.lowercase() in approvedSchemes }
-        ?: fallbackUri?.takeIf { it.scheme?.lowercase() in setOf("http", "https") }
-    safeUri?.let { Intent(Intent.ACTION_VIEW, it) }
+    val safeUri = selectSafeExternalUri(directUri?.toString(), fallbackUri?.toString())
+    safeUri?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)) }
 }.getOrNull()
 
 fun isAllowedWebUri(value: String): Boolean = runCatching {

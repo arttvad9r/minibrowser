@@ -18,15 +18,7 @@ object ExtensionLoader {
 
     fun installAll(runtime: GeckoRuntime, adblockEnabled: Boolean) {
         val c = runtime.webExtensionController
-        setState(UBLOCK_ID, Status.Installing)
-        c.ensureBuiltIn("resource://android/assets/extensions/ublock/", UBLOCK_ID)
-            .accept(
-                { ext ->
-                    if (ext == null) setState(UBLOCK_ID, Status.Error, "uBlock installation returned no extension")
-                    else setEnabled(c, ext, adblockEnabled)
-                },
-                { error -> setState(UBLOCK_ID, Status.Error, error?.message ?: "uBlock installation failed") },
-            )
+        installAdblock(runtime, adblockEnabled)
         setState(VOT_ID, Status.Installing)
         c.ensureBuiltIn("resource://android/assets/extensions/vot/", VOT_ID)
             .accept(
@@ -40,6 +32,23 @@ object ExtensionLoader {
             list?.firstOrNull { it.id == UBLOCK_ID }?.let { setEnabled(runtime.webExtensionController, it, enabled) }
                 ?: setState(UBLOCK_ID, Status.Error, "uBlock is not installed")
         }
+    }
+
+    fun retryAdblock(runtime: GeckoRuntime, desiredEnabled: Boolean) {
+        installAdblock(runtime, desiredEnabled)
+    }
+
+    private fun installAdblock(runtime: GeckoRuntime, desiredEnabled: Boolean) {
+        val c = runtime.webExtensionController
+        setState(UBLOCK_ID, Status.Installing)
+        c.ensureBuiltIn("resource://android/assets/extensions/ublock/", UBLOCK_ID)
+            .accept(
+                { ext ->
+                    if (ext == null) setState(UBLOCK_ID, Status.Error, "uBlock installation returned no extension")
+                    else setEnabled(c, ext, desiredEnabled)
+                },
+                { error -> setState(UBLOCK_ID, Status.Error, error?.message ?: "uBlock installation failed") },
+            )
     }
 
     private fun setEnabled(c: WebExtensionController, ext: org.mozilla.geckoview.WebExtension, enabled: Boolean) {
