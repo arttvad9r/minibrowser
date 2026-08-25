@@ -18,11 +18,17 @@ android {
         // Личное устройство arm64; без фильтра в APK попадают все 4 ABI GeckoView (~300 МБ лишних).
         ndk { abiFilters += "arm64-v8a" }
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     // Релиз подписываем debug-ключом: ставится поверх debug-сборки на личном телефоне.
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
     // Дефолтный паттерн AAPT вырезает каталоги, начинающиеся с "_"

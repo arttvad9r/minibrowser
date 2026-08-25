@@ -50,6 +50,9 @@ data class Bookmark(
     @Query("SELECT * FROM bookmarks ORDER BY position")
     suspend fun bookmarks(): List<Bookmark>
 
+    @Query("SELECT * FROM bookmarks WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' ORDER BY position LIMIT 50")
+    suspend fun bookmarksMatching(q: String): List<Bookmark>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertBookmark(b: Bookmark)
 

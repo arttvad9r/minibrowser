@@ -34,10 +34,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -331,8 +333,8 @@ class MainActivity : ComponentActivity() {
                                         Modifier.fillMaxWidth().height(2.dp))
                                 }
                                 if (showStart) {
-                                    StartPage(
-                                        bookmarks, iconsDir, recent,
+                                     StartPage(
+                                         bookmarks, iconsDir, recent, currentTab?.isPrivate == true,
                                         onSearchFocus = { omniboxFocus.requestFocus() },
                                         onOpen = { uri -> currentTab?.session?.loadUri(uri) },
                                         onAllBookmarks = { screen = Screen.Bookmarks },
@@ -458,7 +460,7 @@ private fun TopBar(
         focusManager.clearFocus(force = true)
     }
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -476,7 +478,12 @@ private fun TopBar(
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                 Icon(
+                     if (tab?.isPrivate == true) AppIcons.Incognito else Icons.Filled.Search,
+                     null,
+                     Modifier.size(20.dp),
+                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                 )
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f)) {
                     if (shown.isEmpty()) {
@@ -508,6 +515,11 @@ private fun TopBar(
             if (focused && suggestions.isNotEmpty()) {
                 val density = LocalDensity.current
                 val offsetY = with(density) { 8.dp.roundToPx() }
+                // Расширяем surface до полезной ширины top bar, а не оставляем узкой
+                // карточкой только по ширине поля ввода.
+                val suggestionsWidth = with(density) {
+                    (fieldSize.width + 48.dp.roundToPx() + 46.dp.roundToPx() + 48.dp.roundToPx() + 8.dp.roundToPx()).toDp()
+                }
                 Popup(
                     alignment = Alignment.TopStart,
                     offset = IntOffset(0, fieldSize.height + offsetY),
@@ -515,18 +527,22 @@ private fun TopBar(
                 ) {
                     Column(
                         Modifier
-                            .width(with(density) { fieldSize.width.toDp() })
+                            .width(suggestionsWidth)
+                            // Видно ~3 строки, остальное — прокрутка (список из 8 закрывал пол-экрана).
+                            .height(176.dp)
                             .clip(Radius.card)
                             .background(MaterialTheme.colorScheme.surface)
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
                     ) {
-                        suggestions.forEach { s ->
-                            SuggestionRow(s, iconsDir) {
-                                focusManager.clearFocus()
-                                onNavigate(s.url)
+                        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                            suggestions.forEach { s ->
+                                SuggestionRow(s, iconsDir) {
+                                    focusManager.clearFocus()
+                                    onNavigate(s.url)
+                                }
                             }
+                            Spacer(Modifier.height(8.dp))
                         }
-                        Spacer(Modifier.height(8.dp))
                     }
                 }
             }
@@ -601,7 +617,7 @@ private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(s.label.ifBlank { s.url }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
             if (s.label.isNotBlank()) {
-                Text(s.url, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Text(hostOf(s.url).ifBlank { s.url }, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -666,9 +682,9 @@ private fun MenuSheet(
 
 @Composable
 private fun MenuDivider() {
-    Spacer(Modifier.height(8.dp))
-    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
+        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(4.dp))
 }
 
 // ---------- Переключатель вкладок ----------
@@ -684,7 +700,7 @@ private fun TabSwitcher(
     onDismiss: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onDismiss, modifier = Modifier.semantics { contentDescription = "Закрыть" }) {
                 Icon(AppIcons.ChevronDown, null)
@@ -693,7 +709,7 @@ private fun TabSwitcher(
                 "${tabs.size} ${tabsPlural(tabs.size)}",
                 Modifier.weight(1f),
                 textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyLarge,
             )
             IconButton(onClick = onNew, modifier = Modifier.semantics { contentDescription = "Новая вкладка" }) {
                 Icon(Icons.Filled.Add, null)
@@ -701,9 +717,9 @@ private fun TabSwitcher(
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+             modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+             horizontalArrangement = Arrangement.spacedBy(14.dp),
+             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             items(tabs, key = { it.id }) { tab ->
                 TabCard(
@@ -734,20 +750,23 @@ private fun TabCard(
     Column(
         Modifier
             .clip(Radius.card)
-            .background(MaterialTheme.colorScheme.surface)
+             .background(
+                 if (tab.isPrivate) MaterialTheme.colorScheme.surfaceContainerLow
+                 else MaterialTheme.colorScheme.surface,
+             )
             .border(
-                if (isCurrent) 1.5.dp else 1.dp,
-                if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                1.dp,
+                if (isCurrent) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
                 Radius.card,
             )
             .clickable(onClick = onSelect),
     ) {
-        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 2.dp, top = 8.dp, bottom = 4.dp),
+        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 2.dp, top = 6.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically) {
             if (tab.isPrivate) {
-                Icon(AppIcons.Incognito, "Приватная вкладка", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(AppIcons.Incognito, "Приватная вкладка", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                Favicon(host, iconsDir, 16.dp)
+                Favicon(host, iconsDir, 18.dp)
             }
             Spacer(Modifier.width(6.dp))
             Text(
@@ -756,33 +775,34 @@ private fun TabCard(
                 },
                 Modifier.weight(1f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelMedium,
+                 style = MaterialTheme.typography.labelLarge,
             )
             Box(
                 Modifier
-                    .size(32.dp)
+                     .size(40.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onClose)
                     .semantics { contentDescription = "Закрыть вкладку" },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Close, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                 Icon(Icons.Filled.Close, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         // Мини-адресная строка, как на референсе.
         Row(
-            Modifier
-                .padding(horizontal = 10.dp)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
+             Modifier
+                 .padding(horizontal = 10.dp)
+                 .fillMaxWidth()
+                 .height(32.dp)
+                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 8.dp, vertical = 5.dp),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 host.ifBlank { "Поиск" },
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelSmall,
+                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -790,16 +810,16 @@ private fun TabCard(
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(0.78f)
+                 .aspectRatio(1f)
                 .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center,
         ) {
             if (tab.isPrivate) {
-                Icon(AppIcons.Incognito, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                 Icon(AppIcons.Incognito, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             } else if (host.isNotBlank()) {
                 Favicon(host, iconsDir, 40.dp)
             } else {
-                Icon(Icons.Filled.Search, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(AppIcons.Globe, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             }
         }
     }
@@ -873,10 +893,12 @@ private fun HistoryScreen(
     val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     LaunchedEffect(reload) { entries = repo.recent(200) }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
             Text("История", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = { scope.launch { repo.clear(); reload++ } }) { Text("Очистить") }
+            TextButton(onClick = { scope.launch { repo.clear(); reload++ } }) {
+                Text("Очистить", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         if (entries.isEmpty()) {
             EmptyState(AppIcons.History, "История пуста", "Посещённые страницы появятся здесь.")
@@ -887,7 +909,7 @@ private fun HistoryScreen(
                     item(key = "header_$label") {
                         Text(
                             label,
-                            Modifier.padding(start = 24.dp, top = 16.dp, bottom = 4.dp),
+                            Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -897,7 +919,7 @@ private fun HistoryScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .clickable { onOpen(e.url) }
-                                .padding(horizontal = 20.dp, vertical = 8.dp),
+                                .padding(horizontal = 20.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Favicon(hostOf(e.url), iconsDir, 28.dp)
@@ -952,7 +974,7 @@ private fun BookmarksScreen(
 ) {
     var selected by remember { mutableStateOf<Bookmark?>(null) }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
             Text("Закладки", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
         }
@@ -965,15 +987,15 @@ private fun BookmarksScreen(
                         Modifier
                             .fillMaxWidth()
                             .clickable { onOpen(bm.url) }
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                            .padding(horizontal = 20.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Favicon(bm.host, iconsDir, 36.dp)
+                        Favicon(bm.host, iconsDir, 40.dp)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(bm.title.ifBlank { bm.host }, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.bodyMedium)
-                            Text(bm.url, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            Text(hostOf(bm.url).ifBlank { bm.url }, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

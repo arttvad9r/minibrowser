@@ -3,6 +3,7 @@ package com.artt.minibrowser.engine
 import android.app.Application
 import android.os.Build
 import android.os.Bundle
+import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.DbHolder
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
@@ -19,6 +20,7 @@ class BrowserApp : Application() {
         Engine.runtime = GeckoRuntime.create(
             this,
             GeckoRuntimeSettings.Builder()
+                .aboutConfigEnabled(BuildConfig.DEBUG)
                 .extras(Bundle().apply { putInt("media.autoplay.default", 0) })
                 .build()
         )

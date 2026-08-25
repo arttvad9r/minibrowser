@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.HistoryEntry
 import java.io.File
@@ -61,6 +62,7 @@ fun StartPage(
     bookmarks: List<Bookmark>,
     iconsDir: File,
     recent: List<HistoryEntry>,
+    isPrivate: Boolean,
     onSearchFocus: () -> Unit,
     onOpen: (String) -> Unit,
     onAllBookmarks: () -> Unit,
@@ -84,20 +86,44 @@ fun StartPage(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
     ) {
-        Spacer(Modifier.height(56.dp))
-        Text(
-            "Minibrowser",
-            Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.displaySmall,
-        )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(40.dp))
+        if (isPrivate) {
+            Icon(
+                AppIcons.Incognito,
+                null,
+                Modifier.align(Alignment.CenterHorizontally).size(36.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f),
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Приватная вкладка",
+                Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Medium),
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "История посещений не сохраняется",
+                Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                "Minibrowser",
+                Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Medium),
+            )
+        }
+        Spacer(Modifier.height(if (isPrivate) 20.dp else 16.dp))
 
         // Большая строка поиска — активирует существующий омнибокс.
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(58.dp)
+                .height(56.dp)
                 .clip(Radius.search)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable(onClick = onSearchFocus)
@@ -109,20 +135,22 @@ fun StartPage(
             Spacer(Modifier.width(12.dp))
             Text("Поиск или адрес", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(20.dp))
 
-        SectionHeader("Закладки", actionLabel = "Все", onAction = onAllBookmarks)
-        Spacer(Modifier.height(12.dp))
-        BookmarkRow(bookmarks, iconsDir,
-            onOpen = onOpen,
-            onAdd = { showAdd = true },
-            onLongPress = { selected = it })
-        Spacer(Modifier.height(24.dp))
+        if (!isPrivate) {
+            SectionHeader("Закладки", actionLabel = "Все", onAction = onAllBookmarks)
+            Spacer(Modifier.height(8.dp))
+            BookmarkRow(bookmarks, iconsDir,
+                onOpen = onOpen,
+                onAdd = { showAdd = true },
+                onLongPress = { selected = it })
+            Spacer(Modifier.height(16.dp))
 
-        if (recent.isNotEmpty()) {
-            RecentCard(recent, iconsDir, onOpen = onOpen, onShowAll = onAllHistory, onRefresh = onRefreshRecent)
+            if (recent.isNotEmpty()) {
+                RecentCard(recent, iconsDir, onOpen = onOpen, onShowAll = onAllHistory, onRefresh = onRefreshRecent)
+            }
+            Spacer(Modifier.height(24.dp))
         }
-        Spacer(Modifier.height(32.dp))
     }
 
     val sel = selected
@@ -155,10 +183,10 @@ private fun BookmarkRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         bookmarks.forEach { bm ->
-            Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.width(68.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     Modifier
-                        .size(64.dp)
+                        .size(60.dp)
                         .clip(Radius.button)
                         .background(MaterialTheme.colorScheme.surface)
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.button)
@@ -167,7 +195,7 @@ private fun BookmarkRow(
                 ) {
                     Favicon(bm.host, iconsDir, 30.dp)
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     bm.title.ifBlank { bm.host },
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -177,10 +205,10 @@ private fun BookmarkRow(
                 )
             }
         }
-        Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.width(68.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
                 Modifier
-                    .size(64.dp)
+                    .size(60.dp)
                     .clip(Radius.button)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable(onClick = onAdd),
@@ -188,7 +216,7 @@ private fun BookmarkRow(
             ) {
                 Icon(Icons.Filled.Add, "Добавить закладку", Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 "Добавить",
                 maxLines = 1,
@@ -227,7 +255,7 @@ private fun RecentCard(
                 Modifier
                     .fillMaxWidth()
                     .clickable { onOpen(e.url) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Favicon(hostOf(e.url), iconsDir, 24.dp)
@@ -239,7 +267,7 @@ private fun RecentCard(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        e.url,
+                        hostOf(e.url).ifBlank { e.url },
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -252,7 +280,7 @@ private fun RecentCard(
             Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onShowAll)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             Text("Показать всю историю", style = MaterialTheme.typography.bodyMedium)
         }

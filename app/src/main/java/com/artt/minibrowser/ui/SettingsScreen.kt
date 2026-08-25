@@ -58,7 +58,7 @@ fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
             }
@@ -134,7 +134,7 @@ fun SettingsScreen(
 private fun GroupLabel(text: String) {
     Text(
         text.uppercase(),
-        Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp),
+        Modifier.padding(start = 4.dp, top = 20.dp, bottom = 6.dp),
         style = MaterialTheme.typography.labelMedium,
         fontSize = 12.sp,
         fontWeight = FontWeight.Medium,
@@ -176,17 +176,17 @@ private fun ThemeOption(
             .clip(Radius.button)
             .background(if (isSel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant)
             .border(
-                width = if (isSel) 1.5.dp else 1.dp,
-                color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                width = 1.dp,
+                color = if (isSel) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
                 shape = Radius.button,
             )
             .clickable { onSelect(value) }
-            .padding(vertical = 14.dp)
+            .padding(vertical = 10.dp)
             .semantics { contentDescription = label },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
         Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
     }
 }

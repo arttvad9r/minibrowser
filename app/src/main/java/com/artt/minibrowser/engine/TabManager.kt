@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import android.os.SystemClock
 import com.artt.minibrowser.data.HistorySink
 import com.artt.minibrowser.data.TabStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,18 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import java.io.File
+
+internal class ProgressGate(private val intervalMs: Long = 100) {
+    private var lastPublishedAt: Long? = null
+
+    fun accept(nowMs: Long = SystemClock.uptimeMillis(), progress: Int): Boolean {
+        if (progress >= 100 || lastPublishedAt == null || nowMs - lastPublishedAt!! >= intervalMs) {
+            lastPublishedAt = nowMs
+            return true
+        }
+        return false
+    }
+}
 
 class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     // Compose state: смена сессии при краш-восстановлении должна перерисовать AndroidView.
@@ -22,6 +35,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var canGoBack by mutableStateOf(false)
     var desktop by mutableStateOf(false)
     var fullscreen by mutableStateOf(false)
+    internal val progressGate = ProgressGate()
 }
 
 class TabManager(
@@ -42,6 +56,7 @@ class TabManager(
         val s = GeckoSession(
             GeckoSessionSettings.Builder()
                 .usePrivateMode(private)
+                .suspendMediaWhenInactive(true)
                 .build()
         )
         val tab = Tab(s, ++seq, private)
@@ -82,13 +97,14 @@ class TabManager(
     private fun attachDelegates(tab: Tab) {
         tab.session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
+                tab.progressGate.accept(progress = 5)
                 tab.progress = 0.05f; tab.url = url
             }
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 tab.progress = -1f
             }
             override fun onProgressChange(session: GeckoSession, progress: Int) {
-                tab.progress = progress / 100f
+                if (tab.progressGate.accept(progress = progress)) tab.progress = progress / 100f
             }
             override fun onSecurityChange(session: GeckoSession, securityInfo: GeckoSession.ProgressDelegate.SecurityInformation) {}
         }
@@ -104,6 +120,7 @@ class TabManager(
                 val s = GeckoSession(
                     GeckoSessionSettings.Builder()
                         .usePrivateMode(tab.isPrivate)
+                        .suspendMediaWhenInactive(true)
                         .build()
                 )
                 val t = Tab(s, ++seq, tab.isPrivate)
@@ -132,7 +149,12 @@ class TabManager(
                 // Восстановление крашнутой сессии с тем же URL.
                 val url = tab.url
                 session.close()
-                val fresh = GeckoSession(GeckoSessionSettings.Builder().usePrivateMode(tab.isPrivate).build())
+                val fresh = GeckoSession(
+                    GeckoSessionSettings.Builder()
+                        .usePrivateMode(tab.isPrivate)
+                        .suspendMediaWhenInactive(true)
+                        .build()
+                )
                 fresh.open(runtime)
                 tab.session = fresh
                 attachDelegates(tab)
