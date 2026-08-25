@@ -79,23 +79,66 @@ class PersistenceSignalTest {
     fun dirtyFloodStopsWaitingAfterHardDeadline() = runBlocking {
         var now = 0L
         var awaitCalls = 0
-        val queue = PersistSignalQueue(
+        lateinit var queue: PersistSignalQueue
+        queue = PersistSignalQueue(
             nowNanos = { now },
             awaitNextOrTimeout = { _, _ ->
                 awaitCalls++
-                check(awaitCalls <= 4) { "wait called after the 350ms deadline" }
+                check(awaitCalls <= 3) { "wait called after the 3s deadline" }
                 now = when (awaitCalls) {
-                    1 -> 100_000_000L
-                    2 -> 200_000_000L
-                    3 -> 349_000_000L
-                    else -> 351_000_000L
+                    1 -> 1_000_000_000L
+                    2 -> 2_000_000_000L
+                    3 -> 3_001_000_000L
+                    else -> 3_001_000_000L
                 }
+                queue.send(PersistSignal.Dirty)
                 Unit
             },
         )
         queue.send(PersistSignal.Dirty)
 
         assertEquals(PersistSignal.Dirty, queue.nextForWrite())
-        assertEquals(4, awaitCalls)
+        assertEquals(3, awaitCalls)
+    }
+
+    @Test
+    fun dirtySignalsExtendTrailingDebounceButNotHardMaximum() = runBlocking {
+        var now = 0L
+        var awaitCalls = 0
+        lateinit var queue: PersistSignalQueue
+        queue = PersistSignalQueue(
+            nowNanos = { now },
+            awaitNextOrTimeout = { _, timeoutMs ->
+                awaitCalls++
+                assertEquals(1_000L, timeoutMs)
+                now += 900_000_000L
+                if (awaitCalls < 3) queue.send(PersistSignal.Dirty)
+                null
+            },
+        )
+        queue.send(PersistSignal.Dirty)
+
+        assertEquals(PersistSignal.Dirty, queue.nextForWrite())
+        assertEquals(3, awaitCalls)
+    }
+
+    @Test
+    fun dirtySignalsCannotExtendDebouncePastThreeSeconds() = runBlocking {
+        var now = 0L
+        var awaitCalls = 0
+        lateinit var queue: PersistSignalQueue
+        queue = PersistSignalQueue(
+            nowNanos = { now },
+            awaitNextOrTimeout = { _, _ ->
+                awaitCalls++
+                now += 1_000_000_000L
+                queue.send(PersistSignal.Dirty)
+                Unit
+            },
+        )
+        queue.send(PersistSignal.Dirty)
+
+        assertEquals(PersistSignal.Dirty, queue.nextForWrite())
+        assertEquals(3, awaitCalls)
     }
 }

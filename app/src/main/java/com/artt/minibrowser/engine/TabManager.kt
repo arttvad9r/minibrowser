@@ -21,6 +21,7 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -67,6 +68,11 @@ internal class PersistSignalQueue(
         }
     },
 ) {
+    private companion object {
+        const val TRAILING_DEBOUNCE_NS = 1_000_000_000L
+        const val HARD_DEADLINE_NS = 3_000_000_000L
+    }
+
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
     private val pendingLock = Any()
     private var pending: PersistSignal? = null
@@ -81,13 +87,25 @@ internal class PersistSignalQueue(
     suspend fun nextForWrite(): PersistSignal {
         var effective = receivePending()
         if (effective == PersistSignal.Dirty) {
-            val deadline = nowNanos() + 350_000_000L
+            val hardDeadline = nowNanos() + HARD_DEADLINE_NS
+            var quietDeadline = nowNanos() + TRAILING_DEBOUNCE_NS
             while (effective == PersistSignal.Dirty) {
+                val deadline = minOf(quietDeadline, hardDeadline)
                 val remainingNs = deadline - nowNanos()
                 if (remainingNs <= 0L) break
-                val next = awaitNextOrTimeout(wakeups, (remainingNs + 999_999L) / 1_000_000L) ?: break
-                takePending()?.let { effective = mergePersistSignal(effective, it) }
-                if (effective == PersistSignal.Immediate) break
+                val next = awaitNextOrTimeout(wakeups, (remainingNs + 999_999L) / 1_000_000L)
+                val pending = takePending()
+                if (pending == PersistSignal.Immediate) {
+                    effective = PersistSignal.Immediate
+                    break
+                }
+                if (pending == PersistSignal.Dirty) {
+                    val now = nowNanos()
+                    if (now >= hardDeadline) break
+                    quietDeadline = minOf(now + TRAILING_DEBOUNCE_NS, hardDeadline)
+                    continue
+                }
+                if (next == null) break
             }
         }
         return takePending()?.let { mergePersistSignal(effective, it) } ?: effective
@@ -187,7 +205,6 @@ class TabManager(
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
     private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val persistRequests = PersistSignalQueue()
-    @Volatile private var latestPersistenceSnapshot = PersistenceSnapshot(null, emptyList())
     val tabs get() = _tabs
     val currentId = MutableStateFlow<Long?>(null)
     private var seq = 0L
@@ -196,7 +213,7 @@ class TabManager(
         persistScope.launch {
             while (true) {
                 persistRequests.nextForWrite()
-                val snapshot = latestPersistenceSnapshot
+                val snapshot = withContext(Dispatchers.Main.immediate) { capturePersistenceSnapshot() }
                 runCatching { TabStore.saveState(storeDir, serializePersistenceSnapshot(snapshot)) }
                     .onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
             }
@@ -316,7 +333,6 @@ class TabManager(
     }
 
     private fun requestPersist(immediate: Boolean) {
-        latestPersistenceSnapshot = capturePersistenceSnapshot()
         persistRequests.send(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
     }
 
