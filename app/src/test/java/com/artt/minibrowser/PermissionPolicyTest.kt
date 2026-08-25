@@ -14,6 +14,7 @@ class PermissionPolicyTest {
         val prompt = GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
         assertEquals(deny, resolveContentPermissionValue(PermissionAction.DENY, allow))
         assertEquals(deny, resolveContentPermissionValue(PermissionAction.DENY, prompt))
+        assertEquals(deny, resolveContentPermissionValue(PermissionAction.ALLOW, deny))
         assertEquals(allow, resolveContentPermissionValue(PermissionAction.PROMPT_GEOLOCATION, allow))
         assertEquals(deny, resolveContentPermissionValue(PermissionAction.PROMPT_GEOLOCATION, deny))
         assertEquals(prompt, resolveContentPermissionValue(PermissionAction.PROMPT_GEOLOCATION, prompt))

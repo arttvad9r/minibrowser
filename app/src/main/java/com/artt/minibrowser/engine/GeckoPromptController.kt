@@ -4,13 +4,13 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.Dialog
-import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
 import android.widget.LinearLayout
 import android.text.InputType
 import android.widget.EditText
 import android.widget.Toast
+import android.widget.TimePicker
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -356,27 +356,41 @@ class GeckoPromptController(
         } else {
             parseDateTimeLocalValue(prompt.defaultValue)?.toLocalTime() ?: LocalTime.now()
         }
-        val dialog = TimePickerDialog(activity, { _, hour, minute ->
-            val time = LocalTime.of(hour, minute)
-            val outOfRange = if (date == null) {
-                val min = parseTimeValue(prompt.minValue)
-                val max = parseTimeValue(prompt.maxValue)
-                (min != null && time < min) || (max != null && time > max)
-            } else {
-                val selected = date.atTime(time)
-                val min = parseDateTimeLocalValue(prompt.minValue)
-                val max = parseDateTimeLocalValue(prompt.maxValue)
-                (min != null && selected < min) || (max != null && selected > max)
-            }
-            if (outOfRange) {
-                Toast.makeText(activity, "Время вне допустимого диапазона", Toast.LENGTH_SHORT).show()
-                return@TimePickerDialog
-            }
-            val value = if (date == null) formatTimeValue(time) else formatDateTimeLocal(date, time)
-            guard.complete { prompt.confirm(value) }
-        }, defaultTime.hour, defaultTime.minute, true)
-        dialog.setOnCancelListener { guard.complete { prompt.dismiss() } }
+        val picker = TimePicker(activity).apply {
+            setIs24HourView(true)
+            hour = defaultTime.hour
+            minute = defaultTime.minute
+        }
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle(prompt.title.orEmpty())
+            .setView(picker)
+            .setNegativeButton("Отмена") { _, _ -> guard.complete { prompt.dismiss() } }
+            .setPositiveButton("ОК", null)
+            .setOnCancelListener { guard.complete { prompt.dismiss() } }
+            .create()
         bindPromptDialog(prompt, dialog)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val time = LocalTime.of(picker.hour, picker.minute)
+                val outOfRange = if (date == null) {
+                    val min = parseTimeValue(prompt.minValue)
+                    val max = parseTimeValue(prompt.maxValue)
+                    (min != null && time < min) || (max != null && time > max)
+                } else {
+                    val selected = date.atTime(time)
+                    val min = parseDateTimeLocalValue(prompt.minValue)
+                    val max = parseDateTimeLocalValue(prompt.maxValue)
+                    (min != null && selected < min) || (max != null && selected > max)
+                }
+                if (outOfRange) {
+                    Toast.makeText(activity, "Время вне допустимого диапазона", Toast.LENGTH_SHORT).show()
+                } else {
+                    val value = if (date == null) formatTimeValue(time) else formatDateTimeLocal(date, time)
+                    guard.complete { prompt.confirm(value) }
+                    dialog.dismiss()
+                }
+            }
+        }
         dialog.show()
     }
 

@@ -27,11 +27,13 @@ internal fun contentPermissionAction(permission: Int): PermissionAction = when (
 
 internal fun resolveContentPermissionValue(action: PermissionAction, existingValue: Int): Int = when (action) {
     PermissionAction.DENY -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
-    PermissionAction.ALLOW -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
     else -> when (existingValue) {
-        GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW,
-        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY -> existingValue
-        else -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+        GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+        else -> when (action) {
+            PermissionAction.ALLOW -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+            else -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+        }
     }
 }
 
