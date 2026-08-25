@@ -33,4 +33,15 @@ class NavigationPolicyTest {
         assertEquals("https://example.com", selectSafeExternalUri(null, "https://example.com"))
         assertEquals("https://example.com", selectSafeExternalUri("https://example.com", "https://other.example"))
     }
+
+    @Test fun malformedWebUrisAreRejected() {
+        assertEquals(null, selectSafeExternalUri("https:", null))
+        assertEquals(null, selectSafeExternalUri("https://", null))
+        assertEquals(null, selectSafeExternalUri("https:garbage", null))
+        assertEquals("https://example.com/path", selectSafeExternalUri("https://example.com/path", null))
+        assertEquals("mailto:test@example.com", selectSafeExternalUri("mailto:test@example.com", null))
+        assertEquals(null, selectSafeExternalUri("evil://payload", "https:"))
+        assertEquals(null, selectSafeExternalUri("evil://payload", "https://"))
+        assertEquals(null, selectSafeExternalUri("evil://payload", "mailto:test@example.com"))
+    }
 }

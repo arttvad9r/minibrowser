@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
@@ -55,6 +56,40 @@ internal enum class PersistSignal { Dirty, Immediate }
 
 internal fun mergePersistSignal(current: PersistSignal, next: PersistSignal): PersistSignal =
     if (current == PersistSignal.Immediate || next == PersistSignal.Immediate) PersistSignal.Immediate else PersistSignal.Dirty
+
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+internal class PersistSignalQueue(
+    private val awaitNextOrTimeout: suspend (ReceiveChannel<PersistSignal>, Long) -> PersistSignal? = { channel, timeoutMs ->
+        select<PersistSignal?> {
+            channel.onReceive { it }
+            onTimeout(timeoutMs) { null }
+        }
+    },
+) {
+    private val signals = Channel<PersistSignal>(Channel.UNLIMITED)
+
+    fun send(signal: PersistSignal) {
+        signals.trySend(signal)
+    }
+
+    suspend fun nextForWrite(): PersistSignal {
+        var effective = signals.receive()
+        if (effective == PersistSignal.Dirty) {
+            val deadline = System.nanoTime() + 350_000_000L
+            while (true) {
+                val remainingMs = ((deadline - System.nanoTime()) / 1_000_000L).coerceAtLeast(1L)
+                val next = awaitNextOrTimeout(signals, remainingMs) ?: break
+                effective = mergePersistSignal(effective, next)
+                if (effective == PersistSignal.Immediate) break
+            }
+        }
+        while (true) {
+            val next = signals.tryReceive().getOrNull() ?: break
+            effective = mergePersistSignal(effective, next)
+        }
+        return effective
+    }
+}
 
 internal data class PersistTabCandidate(
     val id: Long,
@@ -104,25 +139,15 @@ class TabManager(
     }
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
     private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val persistRequests = Channel<PersistSignal>(Channel.CONFLATED)
+    private val persistRequests = PersistSignalQueue()
     val tabs get() = _tabs
     val currentId = MutableStateFlow<Long?>(null)
     private var seq = 0L
 
     init {
         persistScope.launch {
-            for (first in persistRequests) {
-                var signal = first
-                if (signal == PersistSignal.Dirty) {
-                    while (true) {
-                        val next = select<PersistSignal?> {
-                            persistRequests.onReceive { it }
-                            onTimeout(350) { null }
-                        } ?: break
-                        signal = mergePersistSignal(signal, next)
-                        if (signal == PersistSignal.Immediate) break
-                    }
-                }
+            while (true) {
+                persistRequests.nextForWrite()
                 runCatching { TabStore.saveState(storeDir, snapshotForPersistence()) }
                     .onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
             }
@@ -239,12 +264,11 @@ class TabManager(
     }
 
     fun persist() {
-        _tabs.value.filter { it.session.isOpen && !it.isPrivate }.forEach { it.session.flushSessionState() }
         requestPersist(immediate = true)
     }
 
     private fun requestPersist(immediate: Boolean) {
-        persistRequests.trySend(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
+        persistRequests.send(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
     }
 
     private fun snapshotForPersistence(): PersistedBrowserState = snapshotPersistedState(

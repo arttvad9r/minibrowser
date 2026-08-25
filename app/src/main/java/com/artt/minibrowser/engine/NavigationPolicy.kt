@@ -16,9 +16,14 @@ private val EXTERNAL_SCHEMES = setOf("mailto", "tel", "sms", "geo", "intent", "m
 fun isExternalScheme(value: String): Boolean = value.substringBefore(':', "").lowercase() in EXTERNAL_SCHEMES
 
 internal fun selectSafeExternalUri(direct: String?, fallback: String?): String? {
-    val directSchemes = setOf("http", "https", "mailto", "tel", "sms", "geo", "market")
-    return direct?.takeIf { it.substringBefore(':', "").lowercase() in directSchemes }
-        ?: fallback?.takeIf { it.substringBefore(':', "").lowercase() in setOf("http", "https") }
+    val nonWebSchemes = setOf("mailto", "tel", "sms", "geo", "market")
+    val directScheme = direct?.substringBefore(':', "")?.lowercase()
+    val safeDirect = when {
+        direct != null && directScheme in setOf("http", "https") -> direct.takeIf(::isValidWebUri)
+        direct != null && directScheme in nonWebSchemes -> direct.takeIf { it.substringAfter(':', "").isNotBlank() }
+        else -> null
+    }
+    return safeDirect ?: fallback?.takeIf(::isValidWebUri)
 }
 
 fun createSafeExternalIntent(value: String): Intent? = runCatching {
@@ -34,10 +39,12 @@ fun createSafeExternalIntent(value: String): Intent? = runCatching {
     safeUri?.let { Intent(Intent.ACTION_VIEW, Uri.parse(it)) }
 }.getOrNull()
 
-fun isAllowedWebUri(value: String): Boolean = runCatching {
+internal fun isValidWebUri(value: String): Boolean = runCatching {
     val uri = URI(value)
     uri.scheme?.lowercase() in setOf("http", "https") && !uri.host.isNullOrBlank()
 }.getOrDefault(false)
+
+fun isAllowedWebUri(value: String): Boolean = isValidWebUri(value)
 
 fun resolveNavigation(input: String, engine: SearchEngine): NavigationTarget {
     val value = input.trim()
