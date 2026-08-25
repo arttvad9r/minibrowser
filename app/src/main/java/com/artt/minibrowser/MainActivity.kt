@@ -234,13 +234,15 @@ class MainActivity : ComponentActivity() {
         val iconsDir = File(filesDir, "icons")
         // Расширения ставятся один раз за процесс; тумблер применяется сразу после первого чтения настроек.
         lifecycleScope.launch {
-            ExtensionLoader.installAll(Engine.runtime, settingsRepo.prefs.first().adblockEnabled)
+            val prefs = settingsRepo.prefs.first()
+            ExtensionLoader.installAll(Engine.runtime, prefs.adblockEnabled, prefs.votEnabled)
         }
 
         setContent {
             val prefs by settingsRepo.prefs.collectAsStateWithLifecycle(Prefs())
             val extensionStates by ExtensionLoader.state.collectAsStateWithLifecycle()
             val adblockStatus = extensionStates[ExtensionLoader.UBLOCK_ID]?.status
+            val votStatus = extensionStates[ExtensionLoader.VOT_ID]?.status
             val scope = rememberCoroutineScope()
             val darkTheme = when (prefs.theme) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
             val browserUi by browserViewModel.state.collectAsStateWithLifecycle()
@@ -322,6 +324,15 @@ class MainActivity : ComponentActivity() {
             }
             val retryAdblock: () -> Unit = {
                 ExtensionLoader.retryAdblock(Engine.runtime, prefs.adblockEnabled)
+            }
+            val toggleVot: (Boolean) -> Unit = { enabled ->
+                scope.launch {
+                    settingsRepo.setVot(enabled)
+                    ExtensionLoader.setVot(Engine.runtime, enabled)
+                }
+            }
+            val retryVot: () -> Unit = {
+                ExtensionLoader.retryVot(Engine.runtime, prefs.votEnabled)
             }
             val onShare: () -> Unit = {
                 currentTab?.url?.let { u ->
@@ -445,8 +456,12 @@ class MainActivity : ComponentActivity() {
                                     onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
                                      onAdblock = toggleAdblock,
                                      onRetryAdblock = retryAdblock,
-                                    adblockStatus = adblockStatus,
-                                    onTranslateLang = { lang -> scope.launch { settingsRepo.setTranslateTarget(lang) } },
+                                     adblockStatus = adblockStatus,
+                                     votEnabled = prefs.votEnabled,
+                                     votStatus = votStatus,
+                                     onVot = toggleVot,
+                                     onRetryVot = retryVot,
+                                     onTranslateLang = { lang -> scope.launch { settingsRepo.setTranslateTarget(lang) } },
                                     onClearData = { withBookmarks ->
                                         scope.launch {
                                             historyRepo.clear()

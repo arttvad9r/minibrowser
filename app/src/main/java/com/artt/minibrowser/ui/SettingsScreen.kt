@@ -55,6 +55,10 @@ fun SettingsScreen(
     onAdblock: (Boolean) -> Unit,
     onRetryAdblock: () -> Unit,
     adblockStatus: ExtensionLoader.Status?,
+    votEnabled: Boolean,
+    votStatus: ExtensionLoader.Status?,
+    onVot: (Boolean) -> Unit,
+    onRetryVot: () -> Unit,
     onClearData: (withBookmarks: Boolean) -> Unit,
     onTranslateLang: (String) -> Unit,
 ) {
@@ -90,6 +94,12 @@ fun SettingsScreen(
                     .forEach { (label, lang) ->
                         ChoiceRow(label, lang == prefs.translateTarget) { onTranslateLang(lang) }
                     }
+                when (votStatus) {
+                    null, ExtensionLoader.Status.Installing -> SettingsRow("Перевод видео", subtitle = "Запуск…")
+                    ExtensionLoader.Status.Enabled -> ToggleRow(AppIcons.Globe, "Перевод видео", votEnabled, onVot, subtitle = "VOT · перевод видео с поддерживаемых сайтов")
+                    ExtensionLoader.Status.Disabled -> ToggleRow(AppIcons.Globe, "Перевод видео", false, onVot, subtitle = "VOT · перевод видео с поддерживаемых сайтов")
+                    ExtensionLoader.Status.Error -> SettingsRow("Перевод видео", subtitle = "Ошибка запуска · Нажмите, чтобы повторить", onClick = onRetryVot)
+                }
             }
 
             GroupLabel("Конфиденциальность")

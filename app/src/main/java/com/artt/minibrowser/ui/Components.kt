@@ -6,7 +6,7 @@ package com.artt.minibrowser.ui
 // строки настроек/меню, поля, empty states, действия закладки.
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.engine.FaviconFetcher
+import com.artt.minibrowser.engine.decodeSampledFavicon
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -67,14 +68,28 @@ import java.net.URI
 
 fun hostOf(url: String): String = runCatching { URI(url).host ?: "" }.getOrDefault("")
 
-/** Favicon с дисковым кэшем; плейсхолдер — цветная буква (цвет осмысленный: маркер сайта). */
+private object FaviconMemoryCache {
+    private val cache = object : LruCache<String, Bitmap>(4 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+
+    fun get(key: String): Bitmap? = synchronized(cache) { cache.get(key) }
+    fun put(key: String, bitmap: Bitmap) = synchronized(cache) { cache.put(key, bitmap) }
+}
+
+/** Favicon с дисковым кэшем и bounded sampled bitmap cache. */
 @Composable
 fun Favicon(host: String, iconsDir: File, size: Dp, modifier: Modifier = Modifier) {
-    var bmp by remember(host) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(host) {
-        if (host.isNotBlank()) withContext(Dispatchers.IO) {
-            val f = FaviconFetcher.fetch(host, iconsDir)
-            bmp = if (f.exists()) BitmapFactory.decodeFile(f.path) else null
+    val key = host.trim().lowercase()
+    var bmp by remember(key) { mutableStateOf(FaviconMemoryCache.get(key)) }
+    LaunchedEffect(key) {
+        if (key.isNotBlank() && bmp == null) {
+            val loaded = withContext(Dispatchers.IO) {
+                val f = FaviconFetcher.fetch(key, iconsDir)
+                if (f.exists()) decodeSampledFavicon(f) else null
+            }
+            if (loaded != null) FaviconMemoryCache.put(key, loaded)
+            bmp = loaded
         }
     }
     val b = bmp
@@ -84,22 +99,17 @@ fun Favicon(host: String, iconsDir: File, size: Dp, modifier: Modifier = Modifie
         } else if (host.isNotBlank()) {
             // ponytail: заглушка-кружок; настоящую иконку подгрузит fetch при следующем показе
             Box(
-                Modifier.size(size).background(placeholderColor(host), CircleShape),
+                Modifier.size(size).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     host.removePrefix("www.").take(1).uppercase(),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = (size.value * 0.45f).sp,
                 )
             }
         }
     }
-}
-
-private fun placeholderColor(seed: String): Color {
-    val hue = ((seed.hashCode() % 360) + 360) % 360
-    return Color(android.graphics.Color.HSVToColor(floatArrayOf(hue.toFloat(), 0.42f, 0.62f)))
 }
 
 /** Заголовок секции: слева название, справа необязательное действие («Все ›»). */

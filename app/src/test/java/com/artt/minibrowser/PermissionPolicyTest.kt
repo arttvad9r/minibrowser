@@ -1,0 +1,24 @@
+package com.artt.minibrowser
+
+import com.artt.minibrowser.engine.PermissionAction
+import com.artt.minibrowser.engine.contentPermissionAction
+import org.mozilla.geckoview.GeckoSession
+import kotlin.test.Test
+import kotlin.test.assertEquals
+
+class PermissionPolicyTest {
+    @Test fun mapsContentPermissionsToExplicitActions() {
+        assertEquals(PermissionAction.ALLOW, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE))
+        assertEquals(PermissionAction.DENY, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE))
+        assertEquals(PermissionAction.DENY, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION))
+        assertEquals(PermissionAction.DENY, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_TRACKING))
+        assertEquals(PermissionAction.DENY, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_LOCAL_DEVICE_ACCESS))
+        assertEquals(PermissionAction.DENY, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_LOCAL_NETWORK_ACCESS))
+        assertEquals(PermissionAction.DENY, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_XR))
+        assertEquals(PermissionAction.DENY, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_PERSISTENT_STORAGE))
+        assertEquals(PermissionAction.PROMPT_GEOLOCATION, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION))
+        assertEquals(PermissionAction.PROMPT_DRM, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS))
+        assertEquals(PermissionAction.PROMPT_STORAGE_ACCESS, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_STORAGE_ACCESS))
+        assertEquals(PermissionAction.DENY, contentPermissionAction(Int.MAX_VALUE))
+    }
+}

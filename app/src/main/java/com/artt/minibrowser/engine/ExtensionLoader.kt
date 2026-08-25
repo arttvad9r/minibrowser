@@ -16,47 +16,66 @@ object ExtensionLoader {
     private val _state = MutableStateFlow<Map<String, ExtensionState>>(emptyMap())
     val state: StateFlow<Map<String, ExtensionState>> = _state.asStateFlow()
 
-    fun installAll(runtime: GeckoRuntime, adblockEnabled: Boolean) {
-        val c = runtime.webExtensionController
-        installAdblock(runtime, adblockEnabled)
-        setState(VOT_ID, Status.Installing)
-        c.ensureBuiltIn("resource://android/assets/extensions/vot/", VOT_ID)
-            .accept(
-                { ext -> if (ext == null) setState(VOT_ID, Status.Error, "VOT installation returned no extension") else setState(VOT_ID, Status.Enabled) },
-                { error -> setState(VOT_ID, Status.Error, error?.message ?: "VOT installation failed") },
-            )
+    fun installAll(runtime: GeckoRuntime, adblockEnabled: Boolean, votEnabled: Boolean) {
+        installBuiltIn(runtime, UBLOCK_ID, "resource://android/assets/extensions/ublock/", adblockEnabled)
+        installBuiltIn(runtime, VOT_ID, "resource://android/assets/extensions/vot/", votEnabled)
     }
 
     fun setAdblock(runtime: GeckoRuntime, enabled: Boolean) {
-        runtime.webExtensionController.list().accept { list ->
-            list?.firstOrNull { it.id == UBLOCK_ID }?.let { setEnabled(runtime.webExtensionController, it, enabled) }
-                ?: setState(UBLOCK_ID, Status.Error, "uBlock is not installed")
-        }
+        setInstalled(runtime, UBLOCK_ID, enabled)
+    }
+
+    fun setVot(runtime: GeckoRuntime, enabled: Boolean) {
+        setInstalled(runtime, VOT_ID, enabled)
     }
 
     fun retryAdblock(runtime: GeckoRuntime, desiredEnabled: Boolean) {
-        installAdblock(runtime, desiredEnabled)
+        installBuiltIn(runtime, UBLOCK_ID, "resource://android/assets/extensions/ublock/", desiredEnabled)
     }
 
-    private fun installAdblock(runtime: GeckoRuntime, desiredEnabled: Boolean) {
+    fun retryVot(runtime: GeckoRuntime, desiredEnabled: Boolean) {
+        installBuiltIn(runtime, VOT_ID, "resource://android/assets/extensions/vot/", desiredEnabled)
+    }
+
+    internal fun privateAllowedInPrivate(id: String): Boolean = id == UBLOCK_ID
+
+    private fun installBuiltIn(runtime: GeckoRuntime, id: String, resource: String, enabled: Boolean) {
         val c = runtime.webExtensionController
-        setState(UBLOCK_ID, Status.Installing)
-        c.ensureBuiltIn("resource://android/assets/extensions/ublock/", UBLOCK_ID)
+        setState(id, Status.Installing)
+        c.ensureBuiltIn(resource, id)
             .accept(
                 { ext ->
-                    if (ext == null) setState(UBLOCK_ID, Status.Error, "uBlock installation returned no extension")
-                    else setEnabled(c, ext, desiredEnabled)
+                    if (ext == null) {
+                        setState(id, Status.Error, "$id installation returned no extension")
+                    } else {
+                        applyExtensionPolicy(c, ext, id, enabled)
+                    }
                 },
-                { error -> setState(UBLOCK_ID, Status.Error, error?.message ?: "uBlock installation failed") },
+                { error -> setState(id, Status.Error, error?.message ?: "$id installation failed") },
             )
     }
 
-    private fun setEnabled(c: WebExtensionController, ext: org.mozilla.geckoview.WebExtension, enabled: Boolean) {
+    private fun setInstalled(runtime: GeckoRuntime, id: String, enabled: Boolean) {
+        val c = runtime.webExtensionController
+        c.list().accept { list ->
+            list?.firstOrNull { it.id == id }?.let { applyExtensionPolicy(c, it, id, enabled) }
+                ?: setState(id, Status.Error, "$id is not installed")
+        }
+    }
+
+    private fun applyExtensionPolicy(c: WebExtensionController, ext: org.mozilla.geckoview.WebExtension, id: String, enabled: Boolean) {
+        c.setAllowedInPrivateBrowsing(ext, privateAllowedInPrivate(id)).accept(
+            { setEnabled(c, ext, id, enabled) },
+            { error -> setState(id, Status.Error, error?.message ?: "$id private browsing policy failed") },
+        )
+    }
+
+    private fun setEnabled(c: WebExtensionController, ext: org.mozilla.geckoview.WebExtension, id: String, enabled: Boolean) {
         val src = WebExtensionController.EnableSource.APP
         val result = if (enabled) c.enable(ext, src) else c.disable(ext, src)
         result.accept(
-            { setState(UBLOCK_ID, if (enabled) Status.Enabled else Status.Disabled) },
-            { error -> setState(UBLOCK_ID, Status.Error, error?.message ?: "uBlock state change failed") },
+            { setState(id, if (enabled) Status.Enabled else Status.Disabled) },
+            { error -> setState(id, Status.Error, error?.message ?: "$id state change failed") },
         )
     }
 

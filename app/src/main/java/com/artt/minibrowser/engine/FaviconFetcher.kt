@@ -69,7 +69,9 @@ object FaviconFetcher {
                         }
                     }
                 }
-                if (BitmapFactory.decodeFile(temp.path) == null) error("invalid favicon image")
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(temp.path, bounds)
+                if (!isValidFaviconDimensions(bounds.outWidth, bounds.outHeight)) error("invalid favicon dimensions")
                 runCatching {
                     Files.move(temp.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
                 }.getOrElse {
@@ -84,4 +86,27 @@ object FaviconFetcher {
         }
         dst
     }
+}
+
+internal const val FAVICON_MAX_DIMENSION = 4096
+internal const val FAVICON_MAX_PIXELS = 16_000_000L
+
+internal fun isValidFaviconDimensions(width: Int, height: Int): Boolean =
+    width > 0 && height > 0 && width <= FAVICON_MAX_DIMENSION &&
+        height <= FAVICON_MAX_DIMENSION && width.toLong() * height.toLong() <= FAVICON_MAX_PIXELS
+
+internal fun faviconSampleSize(width: Int, height: Int, maxDimension: Int): Int {
+    var sample = 1
+    while (width / sample > maxDimension || height / sample > maxDimension) sample *= 2
+    return sample
+}
+
+fun decodeSampledFavicon(file: File, maxDimensionPx: Int = 128): android.graphics.Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(file.path, bounds)
+    if (!isValidFaviconDimensions(bounds.outWidth, bounds.outHeight)) return null
+    val options = BitmapFactory.Options().apply {
+        inSampleSize = faviconSampleSize(bounds.outWidth, bounds.outHeight, maxDimensionPx)
+    }
+    return BitmapFactory.decodeFile(file.path, options)
 }
