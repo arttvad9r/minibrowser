@@ -2,6 +2,7 @@ package com.artt.minibrowser
 
 import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.collapseHistoryNoise
+import com.artt.minibrowser.data.distinctRecentSites
 import com.artt.minibrowser.data.isHistoryUrl
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,5 +40,17 @@ class HistoryPolicyTest {
             HistoryEntry("https://example.com/c", "Страница A", 100_000, 1),
         )
         assertEquals(rows, collapseHistoryNoise(rows))
+    }
+
+    @Test fun startPageRecentUsesDistinctHosts() {
+        val driveNewest = HistoryEntry("https://drive.google.com/drive/my-drive", "Google Диск", 500_000, 1)
+        val driveOlder = HistoryEntry("https://drive.google.com/drive/home", "Google", 490_000, 1)
+        val google = HistoryEntry("https://www.google.com/search?q=test", "Google", 480_000, 1)
+        val youtube = HistoryEntry("https://m.youtube.com/watch?v=1", "YouTube", 470_000, 1)
+
+        assertEquals(
+            listOf(driveNewest, google, youtube),
+            distinctRecentSites(listOf(driveNewest, driveOlder, google, youtube), 3),
+        )
     }
 }
