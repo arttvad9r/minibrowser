@@ -6,10 +6,15 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -46,6 +52,9 @@ import com.artt.minibrowser.data.formatDownloadSize
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.EmptyState
 import com.artt.minibrowser.ui.MinibrowserTheme
+import com.artt.minibrowser.ui.MotionTokens
+import com.artt.minibrowser.ui.Radius
+import com.artt.minibrowser.ui.softClickable
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -136,64 +145,99 @@ private fun DownloadsScreen(
             return@Column
         }
 
-        LazyColumn(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             items(downloads, key = { it.id }) { item ->
-                val canOpen = item.status == DownloadStatus.Completed && !item.location.isNullOrBlank()
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = canOpen) { onOpen(item) }
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        AppIcons.Download,
-                        null,
-                        Modifier.size(28.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            item.name,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        val status = when (item.status) {
-                            DownloadStatus.Downloading -> "Скачивается…"
-                            DownloadStatus.Completed -> {
-                                val whenDone = item.finishedAt ?: item.startedAt
-                                "${formatDownloadSize(item.bytes)} · ${dateFormat.format(Date(whenDone))}"
-                            }
-                            DownloadStatus.Failed -> "Ошибка · ${item.error ?: "Не удалось скачать"}"
-                        }
-                        Text(
-                            status,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (item.status == DownloadStatus.Failed) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                        val host = remember(item.sourceUrl) {
-                            runCatching { Uri.parse(item.sourceUrl).host.orEmpty() }.getOrDefault("")
-                        }
-                        if (host.isNotBlank()) {
-                            Text(
-                                host,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                DownloadCard(item, dateFormat, onOpen)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadCard(
+    item: BrowserDownload,
+    dateFormat: DateFormat,
+    onOpen: (BrowserDownload) -> Unit,
+) {
+    val canOpen = item.status == DownloadStatus.Completed && !item.location.isNullOrBlank()
+    val iconTint by animateColorAsState(
+        targetValue = when (item.status) {
+            DownloadStatus.Downloading -> MaterialTheme.colorScheme.primary
+            DownloadStatus.Completed -> MaterialTheme.colorScheme.onSurface
+            DownloadStatus.Failed -> MaterialTheme.colorScheme.error
+        },
+        animationSpec = tween(MotionTokens.Standard),
+        label = "downloadStatusColor",
+    )
+    var modifier = Modifier
+        .fillMaxWidth()
+        .clip(Radius.card)
+        .background(MaterialTheme.colorScheme.surface)
+        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card)
+    if (canOpen) {
+        modifier = modifier.softClickable(pressedScale = 0.985f) { onOpen(item) }
+    }
+
+    Row(
+        modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            AppIcons.Download,
+            null,
+            Modifier.size(28.dp),
+            tint = iconTint,
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                item.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Spacer(Modifier.height(3.dp))
+            Crossfade(
+                targetState = item.status,
+                animationSpec = tween(MotionTokens.Standard),
+                label = "downloadStatus",
+            ) { status ->
+                val text = when (status) {
+                    DownloadStatus.Downloading -> "Скачивается…"
+                    DownloadStatus.Completed -> {
+                        val whenDone = item.finishedAt ?: item.startedAt
+                        "${formatDownloadSize(item.bytes)} · ${dateFormat.format(Date(whenDone))}"
                     }
+                    DownloadStatus.Failed -> "Ошибка · ${item.error ?: "Не удалось скачать"}"
                 }
+                Text(
+                    text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (status == DownloadStatus.Failed) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            val host = remember(item.sourceUrl) {
+                runCatching { Uri.parse(item.sourceUrl).host.orEmpty() }.getOrDefault("")
+            }
+            if (host.isNotBlank()) {
+                Spacer(Modifier.height(1.dp))
+                Text(
+                    host,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
