@@ -7,6 +7,14 @@ package com.artt.minibrowser.ui
 
 import android.graphics.Bitmap
 import android.util.LruCache
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,7 +55,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
@@ -92,21 +99,25 @@ fun Favicon(host: String, iconsDir: File, size: Dp, modifier: Modifier = Modifie
             bmp = loaded
         }
     }
-    val b = bmp
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
-        if (b != null) {
-            Image(b.asImageBitmap(), null, Modifier.size(size))
-        } else if (host.isNotBlank()) {
-            // ponytail: заглушка-кружок; настоящую иконку подгрузит fetch при следующем показе
-            Box(
-                Modifier.size(size).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    host.removePrefix("www.").take(1).uppercase(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = (size.value * 0.45f).sp,
-                )
+        Crossfade(
+            targetState = bmp,
+            animationSpec = tween(MotionTokens.Standard),
+            label = "favicon",
+        ) { bitmap ->
+            if (bitmap != null) {
+                Image(bitmap.asImageBitmap(), null, Modifier.size(size))
+            } else if (host.isNotBlank()) {
+                Box(
+                    Modifier.size(size).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        host.removePrefix("www.").take(1).uppercase(),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = (size.value * 0.45f).sp,
+                    )
+                }
             }
         }
     }
@@ -127,7 +138,8 @@ fun SectionHeader(
             Row(
                 Modifier
                     .clip(Radius.small)
-                    .clickable(onClick = onAction)
+                    .softClickable(pressedScale = 0.96f, onClick = onAction)
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
                     .semantics { contentDescription = actionLabel },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -137,7 +149,8 @@ fun SectionHeader(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Icon(
-                    AppIcons.ChevronRight, null,
+                    AppIcons.ChevronRight,
+                    null,
                     Modifier.padding(start = 2.dp).size(16.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -188,8 +201,10 @@ fun BrowserTextField(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (value.isEmpty() && placeholder.isNotEmpty()) {
                     Text(
-                        placeholder, style = textStyle,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                        placeholder,
+                        style = textStyle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
                     )
                 }
                 inner()
@@ -213,8 +228,9 @@ fun SheetRow(
         modifier
             .fillMaxWidth()
             .height(52.dp)
+            .clip(Radius.small)
             .then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier)
-            .padding(horizontal = 4.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
@@ -242,8 +258,10 @@ fun ToggleRow(
     Row(
         modifier
             .fillMaxWidth()
+            .clip(Radius.small)
             .clickable { onChecked(!checked) }
-            .padding(horizontal = 4.dp, vertical = 10.dp),
+            .animateContentSize(animationSpec = tween(MotionTokens.Standard))
+            .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
@@ -272,8 +290,8 @@ fun QuickAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     Column(
         Modifier
             .clip(Radius.button)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp),
+            .softClickable(pressedScale = 0.95f, onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
@@ -282,7 +300,7 @@ fun QuickAction(icon: ImageVector, label: String, onClick: () -> Unit) {
         ) {
             Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(5.dp))
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
@@ -293,13 +311,14 @@ fun QuickAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     }
 }
 
-/** Карточка-группа настроек: белая поверхность, светлый бордер, радиус card. */
+/** Карточка-группа настроек: единая поверхность с bounded ripple по форме. */
 @Composable
 fun SettingsGroup(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
         modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface, Radius.card)
+            .clip(Radius.card)
+            .background(MaterialTheme.colorScheme.surface)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
     ) { content() }
 }
@@ -318,14 +337,16 @@ fun SettingsRow(
         modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .heightIn(min = 52.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .heightIn(min = 54.dp)
+            .animateContentSize(animationSpec = tween(MotionTokens.Standard))
+            .padding(horizontal = 16.dp, vertical = 9.dp)
             .semantics { contentDescription = title },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (subtitle != null) {
+                Spacer(Modifier.height(1.dp))
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -336,25 +357,29 @@ fun SettingsRow(
     }
 }
 
-/** Строка выбора: галка справа у выбранного варианта. */
+/** Строка выбора: галка появляется коротко и без движения layout. */
 @Composable
 fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .heightIn(min = 52.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .heightIn(min = 54.dp)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        if (selected) {
+        AnimatedVisibility(
+            visible = selected,
+            enter = fadeIn(tween(MotionTokens.Quick)) + scaleIn(tween(MotionTokens.Standard), initialScale = 0.82f),
+            exit = fadeOut(tween(MotionTokens.Quick)) + scaleOut(tween(MotionTokens.Quick), targetScale = 0.82f),
+        ) {
             Icon(Icons.Filled.Check, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
 
-/** Bottom sheet: белая поверхность, радиус 28, внутренний паддинг — единая обёртка. */
+/** Bottom sheet: единая поверхность и системная Material-анимация появления/закрытия. */
 @Composable
 fun BrowserBottomSheet(
     onDismissRequest: () -> Unit,
@@ -365,7 +390,6 @@ fun BrowserBottomSheet(
         containerColor = MaterialTheme.colorScheme.surface,
         shape = Radius.sheet,
     ) {
-        // imePadding: шит живёт в отдельном окне — клавиатура его не поднимает сама.
         Column(
             Modifier
                 .imePadding()
@@ -387,8 +411,8 @@ fun BookmarkActionsSheet(
     var renaming by remember { mutableStateOf(false) }
     var text by remember(bookmark.url) { mutableStateOf(bookmark.title) }
     BrowserBottomSheet(onDismissRequest = onDismiss) {
-        if (renaming) {
-            Column {
+        Column(Modifier.animateContentSize(animationSpec = tween(MotionTokens.Standard))) {
+            if (renaming) {
                 Text("Переименовать", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -403,11 +427,11 @@ fun BookmarkActionsSheet(
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = { onRename(text.trim().ifBlank { bookmark.title }) }) { Text("ОК") }
                 }
+            } else {
+                SheetRow(Icons.Filled.Search, "Открыть", onClick = { onOpen(); onDismiss() })
+                SheetRow(Icons.Filled.Edit, "Переименовать", onClick = { renaming = true })
+                SheetRow(Icons.Filled.Delete, "Удалить", onClick = { onDelete(); onDismiss() })
             }
-        } else {
-            SheetRow(Icons.Filled.Search, "Открыть", onClick = { onOpen(); onDismiss() })
-            SheetRow(Icons.Filled.Edit, "Переименовать", onClick = { renaming = true })
-            SheetRow(Icons.Filled.Delete, "Удалить", onClick = { onDelete(); onDismiss() })
         }
     }
 }
