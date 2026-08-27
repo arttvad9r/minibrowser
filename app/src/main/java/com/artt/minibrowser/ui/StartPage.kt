@@ -3,11 +3,18 @@ package com.artt.minibrowser.ui
 // Домашняя страница: логотип, большой поиск, быстрые закладки, недавние страницы.
 // Поиск не дублирует омнибокс: тап по строке фокусирует адресную строку (onSearchFocus).
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,8 +29,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
@@ -46,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -79,9 +85,7 @@ fun StartPage(
     Column(
         Modifier
             .fillMaxSize()
-            // Непрозрачный фон: под страницей находится GeckoView.
             .background(MaterialTheme.colorScheme.background)
-            // Тап по пустому месту закрывает подсказки омнибокса.
             .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus(force = true) } }
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
@@ -126,7 +130,8 @@ fun StartPage(
                 .height(56.dp)
                 .clip(Radius.search)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable(onClick = onSearchFocus)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.search)
+                .softClickable(pressedScale = 0.99f, onClick = onSearchFocus)
                 .semantics { contentDescription = "Поиск или адрес" }
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -140,13 +145,20 @@ fun StartPage(
         if (!isPrivate) {
             SectionHeader("Закладки", actionLabel = "Все", onAction = onAllBookmarks)
             Spacer(Modifier.height(8.dp))
-            BookmarkRow(bookmarks, iconsDir,
+            BookmarkRow(
+                bookmarks,
+                iconsDir,
                 onOpen = onOpen,
                 onAdd = { showAdd = true },
-                onLongPress = { selected = it })
+                onLongPress = { selected = it },
+            )
             Spacer(Modifier.height(16.dp))
 
-            if (recent.isNotEmpty()) {
+            AnimatedVisibility(
+                visible = recent.isNotEmpty(),
+                enter = fadeIn(tween(MotionTokens.Standard)) + expandVertically(tween(MotionTokens.Standard)),
+                exit = fadeOut(tween(MotionTokens.Quick)) + shrinkVertically(tween(MotionTokens.Standard)),
+            ) {
                 RecentCard(recent, iconsDir, onOpen = onOpen, onShowAll = onAllHistory, onRefresh = onRefreshRecent)
             }
             Spacer(Modifier.height(24.dp))
@@ -195,10 +207,11 @@ private fun BookmarkRow(
                 ) {
                     Favicon(bm.host, iconsDir, 30.dp)
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(5.dp))
                 Text(
                     bm.title.ifBlank { bm.host },
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -211,12 +224,13 @@ private fun BookmarkRow(
                     .size(60.dp)
                     .clip(Radius.button)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable(onClick = onAdd),
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.button)
+                    .softClickable(pressedScale = 0.94f, onClick = onAdd),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Filled.Add, "Добавить закладку", Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(5.dp))
             Text(
                 "Добавить",
                 maxLines = 1,
@@ -227,7 +241,7 @@ private fun BookmarkRow(
     }
 }
 
-/** «Недавние»: лёгкая белая карточка с несколькими последними страницами. */
+/** «Недавние»: лёгкая карточка с несколькими последними страницами. */
 @Composable
 private fun RecentCard(
     recent: List<HistoryEntry>,
@@ -244,7 +258,10 @@ private fun RecentCard(
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card)
             .padding(vertical = 8.dp),
     ) {
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text("Недавние", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp).semantics { contentDescription = "Обновить" }) {
                 Icon(Icons.Filled.Refresh, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -255,7 +272,7 @@ private fun RecentCard(
                 Modifier
                     .fillMaxWidth()
                     .clickable { onOpen(e.url) }
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Favicon(hostOf(e.url), iconsDir, 24.dp)
@@ -263,12 +280,14 @@ private fun RecentCard(
                 Column(Modifier.weight(1f)) {
                     Text(
                         e.title.ifBlank { e.url },
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
                         hostOf(e.url).ifBlank { e.url },
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -280,7 +299,7 @@ private fun RecentCard(
             Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onShowAll)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 9.dp),
         ) {
             Text("Показать всю историю", style = MaterialTheme.typography.bodyMedium)
         }
@@ -327,7 +346,7 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit, plac
         shape = Radius.button,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.outline,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
             focusedContainerColor = MaterialTheme.colorScheme.surface,
             unfocusedContainerColor = MaterialTheme.colorScheme.surface,
         ),
