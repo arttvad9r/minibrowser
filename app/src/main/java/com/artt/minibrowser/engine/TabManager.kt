@@ -206,6 +206,9 @@ class TabManager(
     private val downloadController = (context as? Activity)?.let {
         GeckoDownloadController(it, permissionRequester)
     }
+    private val contextMenuController = (context as? Activity)?.let { activity ->
+        GeckoContextMenuController(activity) { uri, private -> newTab(uri, private) }
+    }
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
     private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val persistRequests = PersistSignalQueue()
@@ -477,6 +480,15 @@ class TabManager(
 
             override fun onCloseRequest(session: GeckoSession) {
                 closeTab(tab.id)
+            }
+
+            override fun onContextMenu(
+                session: GeckoSession,
+                screenX: Int,
+                screenY: Int,
+                element: GeckoSession.ContentDelegate.ContextElement,
+            ) {
+                contextMenuController?.show(element, tab.isPrivate)
             }
 
             override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
