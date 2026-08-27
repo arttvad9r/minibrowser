@@ -1,7 +1,10 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.data.HistoryEntry
+import com.artt.minibrowser.data.collapseHistoryNoise
 import com.artt.minibrowser.data.isHistoryUrl
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -17,5 +20,24 @@ class HistoryPolicyTest {
         assertFalse(isHistoryUrl("file:///tmp/test"))
         assertFalse(isHistoryUrl("data:text/plain,test"))
         assertFalse(isHistoryUrl(""))
+    }
+
+    @Test fun collapsesFastSameSiteSameTitleNavigationNoise() {
+        val rows = listOf(
+            HistoryEntry("https://drive.google.com/drive/u/0/my-drive", "Google Диск", 120_000, 1),
+            HistoryEntry("https://drive.google.com/drive/u/0/home", "Google Диск", 90_000, 1),
+            HistoryEntry("https://www.youtube.com/watch?v=1", "Видео", 80_000, 1),
+        )
+        val result = collapseHistoryNoise(rows)
+        assertEquals(listOf(rows[0], rows[2]), result)
+    }
+
+    @Test fun keepsDifferentPagesAndLaterRevisits() {
+        val rows = listOf(
+            HistoryEntry("https://example.com/a", "Страница A", 500_000, 1),
+            HistoryEntry("https://example.com/b", "Страница B", 490_000, 1),
+            HistoryEntry("https://example.com/c", "Страница A", 100_000, 1),
+        )
+        assertEquals(rows, collapseHistoryNoise(rows))
     }
 }
