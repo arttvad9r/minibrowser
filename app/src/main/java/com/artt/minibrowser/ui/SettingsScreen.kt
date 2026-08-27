@@ -4,9 +4,10 @@ package com.artt.minibrowser.ui
 // Выбор — compact selection list; тема — визуальный selector из трёх карточек.
 
 import android.content.Intent
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -69,7 +70,10 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
             }
@@ -112,18 +116,24 @@ fun SettingsScreen(
                     "Загрузки",
                     subtitle = "История файлов, скачанных через Minibrowser",
                     onClick = { context.startActivity(Intent(context, DownloadsActivity::class.java)) },
+                    trailing = {
+                        Icon(
+                            AppIcons.ChevronRight,
+                            null,
+                            Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
                 )
             }
 
             GroupLabel("Конфиденциальность")
             SettingsGroup {
-                Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    when (adblockStatus) {
-                        null, ExtensionLoader.Status.Installing -> SettingsRow("Блокировка рекламы", subtitle = "Запуск…")
-                        ExtensionLoader.Status.Error -> SettingsRow("Блокировка рекламы", subtitle = "Ошибка запуска · Нажмите, чтобы повторить", onClick = onRetryAdblock)
-                        ExtensionLoader.Status.Enabled -> ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onAdblock, subtitle = "Блокирует рекламу и трекеры")
-                        ExtensionLoader.Status.Disabled -> ToggleRow(AppIcons.Shield, "Блокировка рекламы", false, onAdblock, subtitle = "Блокирует рекламу и трекеры")
-                    }
+                when (adblockStatus) {
+                    null, ExtensionLoader.Status.Installing -> SettingsRow("Блокировка рекламы", subtitle = "Запуск…")
+                    ExtensionLoader.Status.Error -> SettingsRow("Блокировка рекламы", subtitle = "Ошибка запуска · Нажмите, чтобы повторить", onClick = onRetryAdblock)
+                    ExtensionLoader.Status.Enabled -> ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onAdblock, subtitle = "Блокирует рекламу и трекеры")
+                    ExtensionLoader.Status.Disabled -> ToggleRow(AppIcons.Shield, "Блокировка рекламы", false, onAdblock, subtitle = "Блокирует рекламу и трекеры")
                 }
                 HorizontalDividerThin()
                 SettingsRow("Очистить данные", subtitle = "История, cookies, данные сайтов и кэш", onClick = { showClearDialog = true })
@@ -177,7 +187,7 @@ private fun HorizontalDividerThin() {
     )
 }
 
-/** Выбор темы: три визуальные карточки, выбранная — тонкая графитовая обводка. */
+/** Выбор темы: выбранная карточка меняет поверхность/обводку коротко, без spring. */
 @Composable
 private fun ThemeSelector(selected: Int, onSelect: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -196,23 +206,30 @@ private fun ThemeOption(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isSel = value == selected
+    val isSelected = value == selected
+    val background by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(MotionTokens.Standard),
+        label = "themeBackground",
+    )
+    val border by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+        animationSpec = tween(MotionTokens.Standard),
+        label = "themeBorder",
+    )
+
     Column(
         modifier
             .clip(Radius.button)
-            .background(if (isSel) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant)
-            .border(
-                width = 1.dp,
-                color = if (isSel) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
-                shape = Radius.button,
-            )
-            .clickable { onSelect(value) }
-            .padding(vertical = 10.dp)
+            .background(background)
+            .border(width = 1.dp, color = border, shape = Radius.button)
+            .softClickable(pressedScale = 0.96f) { onSelect(value) }
+            .padding(vertical = 11.dp)
             .semantics { contentDescription = label },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(5.dp))
         Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
     }
 }
