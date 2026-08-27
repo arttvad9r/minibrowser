@@ -223,6 +223,10 @@ fun SheetRow(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    // Действие, которое сейчас невозможно выполнить, не должно раздувать меню серой строкой.
+    // Информационные disabled-строки без click-handler (например, «Запуск…») остаются видимыми.
+    if (!enabled && onClick != null) return
+
     val alpha = if (enabled) 1f else 0.52f
     Row(
         modifier
