@@ -221,7 +221,7 @@ class GeckoPromptController(
                     guard.complete { prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.FAILURE) }
                 } else {
                     activity.startActivity(Intent.createChooser(share, "Поделиться"))
-                    guard.complete { prompt.dismiss() }
+                    guard.complete { prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS) }
                 }
             } catch (_: Exception) {
                 guard.complete { prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.FAILURE) }
@@ -464,5 +464,4 @@ class GeckoPromptController(
         }
         return result
     }
-
 }
