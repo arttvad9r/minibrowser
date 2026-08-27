@@ -3,6 +3,7 @@ package com.artt.minibrowser.ui
 // Настройки: карточки-группы вместо плоского списка radio buttons.
 // Выбор — compact selection list; тема — визуальный selector из трёх карточек.
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,15 +37,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.artt.minibrowser.DownloadsActivity
 import com.artt.minibrowser.data.Prefs
-import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.ExtensionLoader
+import com.artt.minibrowser.engine.SearchEngine
 
 @Composable
 fun SettingsScreen(
@@ -63,6 +66,7 @@ fun SettingsScreen(
     onTranslateLang: (String) -> Unit,
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -100,6 +104,15 @@ fun SettingsScreen(
                     ExtensionLoader.Status.Disabled -> ToggleRow(AppIcons.Globe, "Перевод видео", false, onVot, subtitle = "VOT · перевод видео с поддерживаемых сайтов")
                     ExtensionLoader.Status.Error -> SettingsRow("Перевод видео", subtitle = "Ошибка запуска · Нажмите, чтобы повторить", onClick = onRetryVot)
                 }
+            }
+
+            GroupLabel("Файлы")
+            SettingsGroup {
+                SettingsRow(
+                    "Загрузки",
+                    subtitle = "История файлов, скачанных через Minibrowser",
+                    onClick = { context.startActivity(Intent(context, DownloadsActivity::class.java)) },
+                )
             }
 
             GroupLabel("Конфиденциальность")
