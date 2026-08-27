@@ -7,7 +7,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -256,7 +255,6 @@ class MainActivity : ComponentActivity() {
             val currentTab = tabs.firstOrNull { it.id == currentId }
             val currentSession = currentTab?.session
             val focusManager = LocalFocusManager.current
-            val clearPageFocus = remember(focusManager) { { focusManager.clearFocus(force = true) } }
             val omniboxFocus = remember { FocusRequester() }
 
             // Уход с браузера закрывает подсказки омнибокса (попап рисуется поверх любых экранов).
@@ -402,7 +400,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             Box(Modifier.weight(1f)) {
-                                GeckoContent(currentSession, clearPageFocus, Modifier.fillMaxSize())
+                                GeckoContent(currentSession, Modifier.fillMaxSize())
                                 PageProgress(currentTab)
                                 if (showStart) {
                                     StartPage(
@@ -520,18 +518,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun GeckoContent(
     session: GeckoSession?,
-    onPageTouch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     AndroidView(
-        factory = { context ->
-            GeckoView(context).apply {
-                setOnTouchListener { _, event ->
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN) onPageTouch()
-                    false
-                }
-            }
-        },
+        factory = { context -> GeckoView(context) },
         update = { view ->
             if (view.session !== session) {
                 view.releaseSession()
@@ -651,6 +641,9 @@ private fun TopBar(
                             .fillMaxWidth()
                             .focusRequester(omniboxFocus)
                             .onFocusChanged {
+                                if (it.isFocused && !focused) {
+                                    text = if (newTab) "" else rawUrl
+                                }
                                 focused = it.isFocused
                                 if (!it.isFocused) text = ""
                             },
@@ -841,9 +834,9 @@ private fun MenuSheet(
 
 @Composable
 private fun MenuDivider() {
-        Spacer(Modifier.height(4.dp))
-        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(Modifier.height(4.dp))
+    Spacer(Modifier.height(4.dp))
+    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Spacer(Modifier.height(4.dp))
 }
 
 // ---------- Переключатель вкладок ----------
