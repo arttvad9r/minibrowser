@@ -3,7 +3,6 @@ package com.artt.minibrowser.engine
 import android.app.Activity
 import android.os.SystemClock
 import android.util.Log
-import android.widget.Toast
 import com.artt.minibrowser.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -180,6 +179,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var title by mutableStateOf("")
     var progress by mutableFloatStateOf(-1f)
     var canGoBack by mutableStateOf(false)
+    var canGoForward by mutableStateOf(false)
     var desktop by mutableStateOf(false)
     var fullscreen by mutableStateOf(false)
     var securityState by mutableStateOf(SecurityState.Unknown)
@@ -202,6 +202,9 @@ class TabManager(
     private val promptController = (context as? Activity)?.let { GeckoPromptController(it, filePicker) }
     private val permissionController = (context as? Activity)?.let {
         GeckoPermissionController(it, permissionRequester)
+    }
+    private val downloadController = (context as? Activity)?.let {
+        GeckoDownloadController(it, permissionRequester)
     }
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
     private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -379,14 +382,18 @@ class TabManager(
                 tab.progressGate.accept(progress = 5)
                 tab.loadError = null
                 tab.securityState = SecurityState.Unknown
-                tab.progress = 0.05f; tab.url = url
+                tab.progress = 0.05f
+                tab.url = url
             }
+
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 tab.progress = -1f
             }
+
             override fun onProgressChange(session: GeckoSession, progress: Int) {
                 if (tab.progressGate.accept(progress = progress)) tab.progress = progress / 100f
             }
+
             override fun onSecurityChange(session: GeckoSession, securityInfo: GeckoSession.ProgressDelegate.SecurityInformation) {
                 tab.securityState = when {
                     securityInfo.isException -> SecurityState.Exception
@@ -394,33 +401,42 @@ class TabManager(
                     else -> SecurityState.Insecure
                 }
             }
+
             override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
                 tab.latestSessionState = state
-                if (!tab.isPrivate) {
-                    requestPersist(immediate = false)
-                }
+                if (!tab.isPrivate) requestPersist(immediate = false)
             }
         }
+
         tab.session.navigationDelegate = object : GeckoSession.NavigationDelegate {
-            override fun onLocationChange(session: GeckoSession, url: String?,
-                permissions: List<GeckoSession.PermissionDelegate.ContentPermission>, triggeredByUser: Boolean) {
+            override fun onLocationChange(
+                session: GeckoSession,
+                url: String?,
+                permissions: List<GeckoSession.PermissionDelegate.ContentPermission>,
+                triggeredByUser: Boolean,
+            ) {
                 tab.url = url.orEmpty()
             }
+
             override fun onLoadRequest(
                 session: GeckoSession,
                 request: GeckoSession.NavigationDelegate.LoadRequest,
             ): GeckoResult<AllowOrDeny> {
                 if (BuildConfig.DEBUG) {
-                    Log.d("MinibrowserNavigation", "load uri=${request.uri} target=${request.target} trigger=${request.triggerUri} userGesture=${request.hasUserGesture} redirect=${request.isRedirect}")
+                    Log.d(
+                        "MinibrowserNavigation",
+                        "load uri=${request.uri} target=${request.target} trigger=${request.triggerUri} userGesture=${request.hasUserGesture} redirect=${request.isRedirect}",
+                    )
                 }
                 if (isAllowedWebUri(request.uri) || request.uri == "about:blank") {
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
                 if (request.hasUserGesture && isExternalScheme(request.uri)) {
-                    launchExternalUri(request.uri)
+                    launchExternalUri(tab, request.uri)
                 }
                 return GeckoResult.fromValue(AllowOrDeny.DENY)
             }
+
             override fun onLoadError(
                 session: GeckoSession,
                 uri: String?,
@@ -433,36 +449,45 @@ class TabManager(
                 }
                 return GeckoResult.fromValue(null)
             }
-            override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) { tab.canGoBack = canGoBack }
-            // target="_blank"/window.open (так открывают результаты поисковиков) — новая вкладка с автопереключением.
-            // Возвращённую сессию открываем сами, uri в неё грузит сам GeckoView.
+
+            override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+                tab.canGoBack = canGoBack
+            }
+
+            override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
+                tab.canGoForward = canGoForward
+            }
+
+            // target="_blank"/window.open — GeckoView loads the URI into the returned session.
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
                 if (BuildConfig.DEBUG) Log.d("MinibrowserNavigation", "new session uri=$uri")
-                val newSession = newWindowSession(tab.isPrivate)
-                // GeckoView opens and owns this session after the result is returned.
-                return GeckoResult.fromValue(newSession)
+                return GeckoResult.fromValue(newWindowSession(tab.isPrivate))
             }
         }
+
         tab.session.contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
                 tab.title = title.orEmpty()
                 if (!tab.isPrivate) HistorySink.updateTitle(tab.url, title)
             }
-            // Движок сам разворачивает видео; приложение по этому колбэку прячет бары и тулбар.
+
             override fun onFullScreen(session: GeckoSession, fullscreen: Boolean) {
                 tab.fullscreen = fullscreen
             }
-            // Файлы по прямым ссылкам (attachment) — в системный DownloadManager.
-            override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
-                val fallback = response.uri.substringAfterLast('/').substringBefore('?').ifBlank { "file" }
-                runCatching { enqueueDownload(context, response.uri, fallback, response.headers) }
-                    .onFailure {
-                        Log.e("MinibrowserDownload", "Failed to enqueue download", it)
-                        (context as? Activity)?.runOnUiThread {
-                            Toast.makeText(context, "Не удалось начать загрузку", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+
+            override fun onCloseRequest(session: GeckoSession) {
+                closeTab(tab.id)
             }
+
+            override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
+                val controller = downloadController
+                if (controller != null) {
+                    controller.handle(response)
+                } else {
+                    runCatching { response.body?.close() }
+                }
+            }
+
             override fun onCrash(session: GeckoSession) {
                 recoverDeadSession(tab)
             }
@@ -471,9 +496,14 @@ class TabManager(
                 recoverDeadSession(tab)
             }
         }
+
         tab.session.historyDelegate = object : GeckoSession.HistoryDelegate {
-            // История пишется в задаче 6; приватные вкладки фильтруем явно.
-            override fun onVisited(session: GeckoSession, url: String, lastVisitedURL: String?, flags: Int): GeckoResult<Boolean>? {
+            override fun onVisited(
+                session: GeckoSession,
+                url: String,
+                lastVisitedURL: String?,
+                flags: Int,
+            ): GeckoResult<Boolean>? {
                 if (!tab.isPrivate && flags and GeckoSession.HistoryDelegate.VISIT_TOP_LEVEL != 0) {
                     HistorySink.record(url, tab.title)
                 }
@@ -484,10 +514,14 @@ class TabManager(
         permissionController?.let(tab.session::setPermissionDelegate)
     }
 
-    private fun launchExternalUri(uri: String) {
-        val intent = createSafeExternalIntent(uri)?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) ?: return
-        runCatching {
-            if (intent.resolveActivity(context.packageManager) != null) context.startActivity(intent)
+    private fun launchExternalUri(tab: Tab, uri: String) {
+        val intent = createSafeExternalIntent(uri)?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        val launched = intent != null && intent.resolveActivity(context.packageManager) != null && runCatching {
+            context.startActivity(intent)
+            true
+        }.getOrDefault(false)
+        if (!launched) {
+            safeExternalFallbackUrl(uri)?.let(tab.session::loadUri)
         }
     }
 
@@ -521,6 +555,8 @@ class TabManager(
         val wasActive = tab.id == currentId.value
         runtime.webExtensionController.setTabActive(tab.session, false)
         closeIfOpen(tab.session)
+        tab.canGoBack = false
+        tab.canGoForward = false
         val fresh = GeckoSession(sessionSettings(tab.isPrivate))
         tab.session = fresh
         attachDelegates(tab)
