@@ -6,11 +6,12 @@ package com.artt.minibrowser.ui
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -19,13 +20,13 @@ import androidx.compose.ui.unit.sp
 
 // --- Цвета (светлая) ---
 private val SurfaceLight = Color(0xFFFFFFFF)
-private val FieldLight = Color(0xFFF1F2F4)      // поля ввода, счётчик вкладок, подложки
+private val FieldLight = Color(0xFFF1F2F4)
 private val PressedLight = Color(0xFFECEEF0)
 private val TextPrimaryLight = Color(0xFF161719)
 private val TextSecondaryLight = Color(0xFF60646B)
 private val BorderLight = Color(0xFFE5E7EA)
 private val DividerLight = Color(0xFFE8EAED)
-private val Graphite = Color(0xFF25272A)        // «primary»: заполненные кнопки, активный switch
+private val Graphite = Color(0xFF25272A)
 
 // --- Цвета (тёмная) ---
 private val BgDark = Color(0xFF111315)
@@ -96,30 +97,38 @@ private val AppTypography = Typography(
     bodyLarge = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 22.sp),
     bodyMedium = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp),
     bodySmall = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 17.sp),
-    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-    labelMedium = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-    labelSmall = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal),
+    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, lineHeight = 18.sp),
+    labelMedium = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp),
+    labelSmall = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Normal, lineHeight = 16.sp),
 )
 
 // --- Радиусы ---
 object Radius {
-    val small = RoundedCornerShape(12.dp)   // мелкие элементы
-    val button = RoundedCornerShape(14.dp)  // кнопки, плитки
-    val card = RoundedCornerShape(20.dp)    // карточки
-    val field = RoundedCornerShape(24.dp)   // адресная строка
-    val search = RoundedCornerShape(28.dp)  // домашний поиск
+    val small = RoundedCornerShape(12.dp)
+    val button = RoundedCornerShape(14.dp)
+    val card = RoundedCornerShape(20.dp)
+    val field = RoundedCornerShape(24.dp)
+    val search = RoundedCornerShape(28.dp)
     val sheet = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 }
+
+/** Material-компоненты используют те же пропорции, что и собственные примитивы приложения. */
+private val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(10.dp),
+    small = Radius.small,
+    medium = Radius.button,
+    large = Radius.card,
+    extraLarge = RoundedCornerShape(28.dp),
+)
 
 @Composable
 fun MinibrowserTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     val scheme = if (darkTheme) neutralDarkScheme() else neutralLightScheme()
-    // M3 MaterialTheme не задаёт LocalContentColor (его давал Surface) —
-    // фиксируем цвет текста по умолчанию на onBackground для обеих тем.
     CompositionLocalProvider(LocalContentColor provides scheme.onBackground) {
         MaterialTheme(
             colorScheme = scheme,
             typography = AppTypography,
+            shapes = AppShapes,
             content = content,
         )
     }
