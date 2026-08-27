@@ -17,6 +17,7 @@ class NavigationPolicyTest {
         controller.setHandler { received = it }
         assertEquals("https://example.com", received)
     }
+
     @Test fun acceptsOnlyWebAndWhitelistedInternalUris() {
         assertEquals(NavigationTarget.Web("https://example.com"), resolveNavigation("https://example.com", SearchEngine.GOOGLE))
         assertEquals(NavigationTarget.Internal("about:blank"), resolveNavigation("about:blank", SearchEngine.GOOGLE))
@@ -26,6 +27,10 @@ class NavigationPolicyTest {
     @Test fun schemesAreNotPassedToGeckoAsArbitraryUris() {
         assertEquals(NavigationTarget.External("intent://example.com"), resolveNavigation("intent://example.com", SearchEngine.GOOGLE))
         assertEquals(NavigationTarget.Search("chrome://crash"), resolveNavigation("chrome://crash", SearchEngine.GOOGLE))
+    }
+
+    @Test fun localhostWithoutSchemeUsesHttp() {
+        assertEquals(NavigationTarget.Web("http://localhost:8080/test"), resolveNavigation("localhost:8080/test", SearchEngine.GOOGLE))
     }
 
     @Test fun unsafeDirectUriUsesSafeFallback() {
@@ -46,16 +51,17 @@ class NavigationPolicyTest {
         assertEquals(null, selectSafeExternalUri("evil://payload", "mailto:test@example.com"))
     }
 
-    @Test fun popupPolicyAllowsOnlyValidWebTargets() {
+    @Test fun popupPolicyAllowsWebAndBlankBootstrapTargetsOnly() {
         assertEquals(true, isAllowedPopupTarget("https://drive.google.com/"))
         assertEquals(true, isAllowedPopupTarget("https://www.youtube.com/"))
+        assertEquals(true, isAllowedPopupTarget("about:blank"))
+        assertEquals(true, isAllowedPopupTarget(""))
+        assertEquals(true, isAllowedPopupTarget(null))
         assertEquals(false, isAllowedPopupTarget("javascript:alert(1)"))
         assertEquals(false, isAllowedPopupTarget("data:text/html,hello"))
         assertEquals(false, isAllowedPopupTarget("file:///tmp/page"))
         assertEquals(false, isAllowedPopupTarget("chrome://settings"))
         assertEquals(false, isAllowedPopupTarget("https://"))
         assertEquals(false, isAllowedPopupTarget("not a uri"))
-        assertEquals(false, isAllowedPopupTarget("  "))
-        assertEquals(false, isAllowedPopupTarget(null))
     }
 }
