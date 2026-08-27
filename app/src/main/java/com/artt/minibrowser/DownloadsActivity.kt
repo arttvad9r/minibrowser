@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -149,7 +150,16 @@ private fun DownloadsScreen(
         }
 
         if (downloads.isEmpty()) {
-            EmptyState(AppIcons.Download, "Загрузок пока нет", "Скачанные через Minibrowser файлы появятся здесь.")
+            Box(
+                Modifier.fillMaxWidth().weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                EmptyState(
+                    AppIcons.Download,
+                    "Загрузок пока нет",
+                    "Скачанные через Minibrowser файлы появятся здесь.",
+                )
+            }
             return@Column
         }
 
