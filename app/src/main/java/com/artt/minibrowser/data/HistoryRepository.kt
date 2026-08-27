@@ -8,16 +8,18 @@ internal fun isHistoryUrl(url: String): Boolean {
         value.startsWith("http://", ignoreCase = true)
 }
 
-private fun historyDisplayKey(entry: HistoryEntry): String {
-    val host = runCatching { URI(entry.url).host.orEmpty() }
+private fun historyHost(url: String): String =
+    runCatching { URI(url).host.orEmpty() }
         .getOrDefault("")
         .removePrefix("www.")
         .lowercase()
+
+private fun historyDisplayKey(entry: HistoryEntry): String {
     val title = entry.title
         .trim()
         .lowercase()
         .replace(Regex("\\s+"), " ")
-    return "$host|$title"
+    return "${historyHost(entry.url)}|$title"
 }
 
 /**
@@ -44,6 +46,22 @@ internal fun collapseHistoryNoise(
     return result
 }
 
+/**
+ * The Start page is a launcher, not a timeline. For its small recent list prefer distinct sites
+ * so a redirect-heavy site such as Drive cannot occupy every visible slot.
+ */
+internal fun distinctRecentSites(entries: List<HistoryEntry>, limit: Int): List<HistoryEntry> {
+    if (limit <= 0) return emptyList()
+    val seen = HashSet<String>()
+    return entries.asSequence()
+        .filter { entry ->
+            val key = historyHost(entry.url).ifBlank { entry.url.lowercase() }
+            seen.add(key)
+        }
+        .take(limit)
+        .toList()
+}
+
 class HistoryRepository(private val dao: AppDao) {
     suspend fun record(url: String, title: String?) {
         if (!isHistoryUrl(url)) return
@@ -57,25 +75,28 @@ class HistoryRepository(private val dao: AppDao) {
     }
 
     suspend fun suggest(q: String): List<Suggestion> {
-        val rows = (if (q.isBlank()) dao.recentHistory(40) else dao.searchHistory(q.trim()))
+        val query = q.trim()
+        // Пустой omnibox на новой вкладке должен оставаться чистым; история уже видна на Start page.
+        if (query.isEmpty()) return emptyList()
+        val rows = dao.searchHistory(query)
             .filter { isHistoryUrl(it.url) }
             .let(::collapseHistoryNoise)
-        val marks: List<String> = (if (q.isBlank()) dao.bookmarks() else dao.bookmarksMatching(q.trim()))
-            .map { it.url }
-        return rankSuggestions(rows.map { Scored(it.url, it.title, it.visitedAt) }, marks, q)
+        val marks: List<String> = dao.bookmarksMatching(query).map { it.url }
+        return rankSuggestions(rows.map { Scored(it.url, it.title, it.visitedAt) }, marks, query)
     }
 
     // Читаем с запасом: после удаления internal URL и схлопывания быстрых SPA/redirect-переходов
     // экран всё равно получает запрошенное число содержательных записей, если они есть в БД.
+    // Маленький лимит используется домашней страницей — там показываем разные сайты.
     suspend fun recent(limit: Int): List<HistoryEntry> {
         if (limit <= 0) return emptyList()
-        val fetchLimit = (limit * 3 + 32).coerceAtMost(1000)
-        return dao.recentHistory(fetchLimit)
+        val fetchLimit = (limit * 4 + 40).coerceAtMost(1000)
+        val cleaned = dao.recentHistory(fetchLimit)
             .asSequence()
             .filter { isHistoryUrl(it.url) }
             .toList()
             .let(::collapseHistoryNoise)
-            .take(limit)
+        return if (limit <= 8) distinctRecentSites(cleaned, limit) else cleaned.take(limit)
     }
 
     suspend fun clear() = dao.clearHistory()
