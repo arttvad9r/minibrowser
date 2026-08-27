@@ -224,9 +224,9 @@ class TabManager(
 
     fun newTab(url: String?, private: Boolean = false): Tab {
         val tab = createTab(private)
+        deactivateOthers(tab.id)
         currentId.value = tab.id
         openTab(tab)
-        deactivateOthers(tab.id)
         url?.let(tab.session::loadUri)
         return tab
     }
@@ -234,8 +234,9 @@ class TabManager(
     /** Creates the session GeckoView will own for target="_blank"/window.open(). */
     fun newWindowSession(private: Boolean): GeckoSession {
         val tab = createTab(private)
-        currentId.value = tab.id
         deactivateOthers(tab.id)
+        currentId.value = tab.id
+        runtime.webExtensionController.setTabActive(tab.session, true)
         return tab.session
     }
 
@@ -261,8 +262,10 @@ class TabManager(
 
     private fun openTab(tab: Tab) {
         tab.session.open(runtime)
-        tab.session.setActive(true)
-        tab.session.setFocused(true)
+        val selected = tab.id == currentId.value
+        tab.session.setActive(selected)
+        tab.session.setFocused(selected)
+        runtime.webExtensionController.setTabActive(tab.session, selected)
         applyDesktop(tab)
         tab.persistedSessionState?.let { encoded ->
             runCatching {
@@ -280,15 +283,17 @@ class TabManager(
     }
 
     fun select(id: Long) {
+        val selectedTab = _tabs.value.firstOrNull { it.id == id } ?: return
         _tabs.value.forEach { tab ->
+            val selected = tab.id == id
+            runtime.webExtensionController.setTabActive(tab.session, selected)
             if (tab.session.isOpen) {
-                val selected = tab.id == id
                 tab.session.setActive(selected)
                 tab.session.setFocused(selected)
             }
         }
         currentId.value = id
-        _tabs.value.firstOrNull { it.id == id }?.let {
+        selectedTab.let {
             it.lastAccess = System.currentTimeMillis()
             if (!it.session.isOpen) openTab(it)
             applyDesktop(it)
@@ -299,6 +304,7 @@ class TabManager(
         val idx = _tabs.value.indexOfFirst { it.id == id }
         if (idx < 0) return
         val dying = _tabs.value[idx]
+        runtime.webExtensionController.setTabActive(dying.session, false)
         closeIfOpen(dying.session)
         _tabs.value = _tabs.value - dying
         if (currentId.value == id) {
@@ -320,6 +326,7 @@ class TabManager(
 
     fun clearWebData(): GeckoResult<Void> {
         _tabs.value.forEach { tab ->
+            runtime.webExtensionController.setTabActive(tab.session, false)
             closeIfOpen(tab.session)
         }
         _tabs.value = emptyList()
@@ -485,9 +492,12 @@ class TabManager(
     }
 
     private fun deactivateOthers(selectedId: Long) {
-        _tabs.value.filter { it.id != selectedId && it.session.isOpen }.forEach {
-            it.session.setFocused(false)
-            it.session.setActive(false)
+        _tabs.value.filter { it.id != selectedId }.forEach {
+            runtime.webExtensionController.setTabActive(it.session, false)
+            if (it.session.isOpen) {
+                it.session.setFocused(false)
+                it.session.setActive(false)
+            }
         }
     }
 
@@ -509,6 +519,7 @@ class TabManager(
 
     private fun recoverDeadSession(tab: Tab) {
         val wasActive = tab.id == currentId.value
+        runtime.webExtensionController.setTabActive(tab.session, false)
         closeIfOpen(tab.session)
         val fresh = GeckoSession(sessionSettings(tab.isPrivate))
         tab.session = fresh
@@ -517,6 +528,7 @@ class TabManager(
         applyDesktop(tab)
         fresh.setActive(wasActive)
         fresh.setFocused(wasActive)
+        runtime.webExtensionController.setTabActive(fresh, wasActive)
         val restored = tab.persistedSessionState?.let { encoded ->
             runCatching {
                 GeckoSession.SessionState.fromString(encoded)?.let {
