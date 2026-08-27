@@ -1,7 +1,7 @@
 package com.artt.minibrowser.ui
 
-// Домашняя страница: логотип, большой поиск, быстрые закладки, недавние страницы.
-// Поиск не дублирует омнибокс: тап по строке фокусирует адресную строку (onSearchFocus).
+// Домашняя страница: один настоящий omnibox остаётся в chrome браузера;
+// здесь только лёгкий branding, быстрые закладки и недавние страницы.
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -32,7 +32,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -52,8 +51,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +60,7 @@ import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.HistoryEntry
 import java.io.File
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun StartPage(
     bookmarks: List<Bookmark>,
@@ -90,20 +88,20 @@ fun StartPage(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
     ) {
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(24.dp))
         if (isPrivate) {
             Icon(
                 AppIcons.Incognito,
                 null,
-                Modifier.align(Alignment.CenterHorizontally).size(36.dp),
+                Modifier.align(Alignment.CenterHorizontally).size(32.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f),
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 "Приватная вкладка",
                 Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 26.sp, fontWeight = FontWeight.Medium),
             )
             Spacer(Modifier.height(4.dp))
             Text(
@@ -113,34 +111,16 @@ fun StartPage(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(24.dp))
         } else {
             Text(
                 "Minibrowser",
                 Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Medium),
+                style = MaterialTheme.typography.titleLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Medium),
             )
+            Spacer(Modifier.height(24.dp))
         }
-        Spacer(Modifier.height(if (isPrivate) 20.dp else 16.dp))
-
-        // Большая строка поиска — активирует существующий омнибокс.
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(Radius.search)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.search)
-                .softClickable(pressedScale = 0.99f, onClick = onSearchFocus)
-                .semantics { contentDescription = "Поиск или адрес" }
-                .padding(horizontal = 20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Search, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.width(12.dp))
-            Text("Поиск или адрес", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.height(20.dp))
 
         if (!isPrivate) {
             SectionHeader("Закладки", actionLabel = "Все", onAction = onAllBookmarks)
@@ -152,14 +132,20 @@ fun StartPage(
                 onAdd = { showAdd = true },
                 onLongPress = { selected = it },
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
 
             AnimatedVisibility(
                 visible = recent.isNotEmpty(),
                 enter = fadeIn(tween(MotionTokens.Standard)) + expandVertically(tween(MotionTokens.Standard)),
                 exit = fadeOut(tween(MotionTokens.Quick)) + shrinkVertically(tween(MotionTokens.Standard)),
             ) {
-                RecentCard(recent, iconsDir, onOpen = onOpen, onShowAll = onAllHistory, onRefresh = onRefreshRecent)
+                RecentCard(
+                    recent,
+                    iconsDir,
+                    onOpen = onOpen,
+                    onShowAll = onAllHistory,
+                    onRefresh = onRefreshRecent,
+                )
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -176,7 +162,10 @@ fun StartPage(
         )
     }
     if (showAdd) {
-        AddBookmarkSheet(onDismiss = { showAdd = false }, onAdd = { url, title -> showAdd = false; onAdd(url, title) })
+        AddBookmarkSheet(
+            onDismiss = { showAdd = false },
+            onAdd = { url, title -> showAdd = false; onAdd(url, title) },
+        )
     }
 }
 
@@ -202,7 +191,10 @@ private fun BookmarkRow(
                         .clip(Radius.button)
                         .background(MaterialTheme.colorScheme.surface)
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.button)
-                        .combinedClickable(onClick = { onOpen(bm.url) }, onLongClick = { onLongPress(bm) }),
+                        .combinedClickable(
+                            onClick = { onOpen(bm.url) },
+                            onLongClick = { onLongPress(bm) },
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Favicon(bm.host, iconsDir, 30.dp)
@@ -228,7 +220,12 @@ private fun BookmarkRow(
                     .softClickable(pressedScale = 0.94f, onClick = onAdd),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Add, "Добавить закладку", Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    Icons.Filled.Add,
+                    "Добавить закладку",
+                    Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Spacer(Modifier.height(5.dp))
             Text(
@@ -241,7 +238,7 @@ private fun BookmarkRow(
     }
 }
 
-/** «Недавние»: лёгкая карточка с несколькими последними страницами. */
+/** «Недавние»: лёгкая карточка с несколькими содержательными последними страницами. */
 @Composable
 private fun RecentCard(
     recent: List<HistoryEntry>,
@@ -262,30 +259,40 @@ private fun RecentCard(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Недавние", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp).semantics { contentDescription = "Обновить" }) {
-                Icon(Icons.Filled.Refresh, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Недавние",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    Icons.Filled.Refresh,
+                    "Обновить недавние",
+                    Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
-        recent.take(3).forEach { e ->
+        recent.take(3).forEach { entry ->
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable { onOpen(e.url) }
+                    .clickable { onOpen(entry.url) }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Favicon(hostOf(e.url), iconsDir, 24.dp)
+                Favicon(hostOf(entry.url), iconsDir, 24.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        e.title.ifBlank { e.url },
+                        entry.title.ifBlank { entry.url },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        hostOf(e.url).ifBlank { e.url },
+                        hostOf(entry.url).ifBlank { entry.url },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
@@ -294,7 +301,10 @@ private fun RecentCard(
                 }
             }
         }
-        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider(
+            Modifier.padding(vertical = 4.dp),
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
         Row(
             Modifier
                 .fillMaxWidth()
@@ -335,7 +345,11 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
 
 @Composable
 private fun Field(label: String, value: String, onChange: (String) -> Unit, placeholder: String) {
-    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Spacer(Modifier.height(6.dp))
     OutlinedTextField(
         value = value,
