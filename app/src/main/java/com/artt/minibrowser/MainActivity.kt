@@ -42,12 +42,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -100,6 +102,7 @@ import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.ActivityRequestCoordinator
 import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.BrowserViewModel
+import com.artt.minibrowser.browser.areRequestedPermissionsSatisfied
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryEntry
@@ -118,6 +121,7 @@ import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
 import com.artt.minibrowser.engine.createSafeExternalIntent
 import com.artt.minibrowser.engine.formatFindCounter
+import com.artt.minibrowser.engine.safeExternalFallbackUrl
 import com.artt.minibrowser.ui.AddBookmarkSheet
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BookmarkActionsSheet
@@ -154,11 +158,14 @@ class MainActivity : ComponentActivity() {
     private val permissionRequests = ActivityRequestCoordinator<Boolean>()
     private val fileRequests = ActivityRequestCoordinator<Array<Uri>>()
     private var permissionCompletion: ((Boolean) -> Unit)? = null
+    private var pendingPermissionRequest: Set<String> = emptySet()
     private var fileCompletion: ((Array<Uri>) -> Unit)? = null
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
-        permissionCompletion?.invoke(grants.isNotEmpty() && grants.values.all { it })
+        val requested = pendingPermissionRequest
+        pendingPermissionRequest = emptySet()
+        permissionCompletion?.invoke(areRequestedPermissionsSatisfied(requested, grants))
         permissionCompletion = null
     }
     private val filePickerLauncher = registerForActivityResult(
@@ -181,9 +188,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openExternalUri(value: String) {
-        val intent = createSafeExternalIntent(value) ?: return
-        if (intent.resolveActivity(packageManager) != null) {
-            startActivity(Intent.createChooser(intent, "Открыть с помощью"))
+        val external = createSafeExternalIntent(value)
+        if (external != null && external.resolveActivity(packageManager) != null) {
+            startActivity(Intent.createChooser(external, "Открыть с помощью"))
+            return
+        }
+        safeExternalFallbackUrl(value)?.let { fallback ->
+            if (::tabManager.isInitialized) {
+                (tabManager.current() ?: tabManager.newTab(null)).session.loadUri(fallback)
+            }
         }
     }
 
@@ -202,6 +215,7 @@ class MainActivity : ComponentActivity() {
             permissionRequester = { permissions, callback ->
                 permissionRequests.enqueue(
                     start = { complete ->
+                        pendingPermissionRequest = permissions.toSet()
                         permissionCompletion = { granted -> callback(granted); complete(granted) }
                         permissionLauncher.launch(permissions)
                     },
@@ -363,15 +377,18 @@ class MainActivity : ComponentActivity() {
                                 bookmarked = bookmarked,
                                 iconsDir = iconsDir,
                                 omniboxFocus = omniboxFocus,
-                                 onNavigate = { uri ->
-                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
-                                 },
-                                 onExternal = ::openExternalUri,
-                                 onSiteInfo = { browserViewModel.showSiteInfo(true) },
-                                 onSwitcher = { browserViewModel.showSwitcher(true) },
+                                onNavigate = { uri ->
+                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                },
+                                onExternal = ::openExternalUri,
+                                onBack = { currentSession?.goBack() },
+                                onForward = { currentSession?.goForward() },
+                                onReload = { currentSession?.reload() },
+                                onSiteInfo = { browserViewModel.showSiteInfo(true) },
+                                onSwitcher = { browserViewModel.showSwitcher(true) },
                                 onNewTab = { tabManager.newTab(null) },
                                 onNewPrivateTab = { tabManager.newTab(null, private = true) },
-                                 onFind = { browserViewModel.showFind(true) },
+                                onFind = { browserViewModel.showFind(true) },
                                 onToggleBookmark = {
                                     val t = currentTab ?: return@TopBar
                                     scope.launch {
@@ -381,15 +398,15 @@ class MainActivity : ComponentActivity() {
                                         bmReload++
                                     }
                                 },
-                                 onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
-                                 onHistory = { browserViewModel.screen(BrowserScreen.History) },
+                                onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
+                                onHistory = { browserViewModel.screen(BrowserScreen.History) },
                                 onShare = onShare,
-                                 onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
+                                onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
                                 onSuggest = { q -> historyRepo.suggest(q) },
-                                 onToggleAdblock = toggleAdblock,
-                                 onRetryAdblock = retryAdblock,
-                                 adblockEnabled = prefs.adblockEnabled,
-                                 adblockStatus = adblockStatus,
+                                onToggleAdblock = toggleAdblock,
+                                onRetryAdblock = retryAdblock,
+                                adblockEnabled = prefs.adblockEnabled,
+                                adblockStatus = adblockStatus,
                                 onTranslate = {
                                     val u = currentTab?.url ?: return@TopBar
                                     buildTranslateUri(u, prefs.translateTarget)?.let(currentTab.session::loadUri)
@@ -407,8 +424,8 @@ class MainActivity : ComponentActivity() {
                                         bookmarks, iconsDir, recent, currentTab?.isPrivate == true,
                                         onSearchFocus = { omniboxFocus.requestFocus() },
                                         onOpen = { uri -> currentTab?.session?.loadUri(uri) },
-                                         onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
-                                         onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
+                                        onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
+                                        onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
                                         onRefreshRecent = { recentReload++ },
                                         onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
                                         onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } },
@@ -428,17 +445,17 @@ class MainActivity : ComponentActivity() {
                             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                                 SettingsScreen(
                                     prefs,
-                                     onBack = { browserViewModel.screen(BrowserScreen.Browser) },
+                                    onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                     onEngine = { e -> scope.launch { settingsRepo.setSearchEngine(e) } },
                                     onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
-                                     onAdblock = toggleAdblock,
-                                     onRetryAdblock = retryAdblock,
-                                     adblockStatus = adblockStatus,
-                                     votEnabled = prefs.votEnabled,
-                                     votStatus = votStatus,
-                                     onVot = toggleVot,
-                                     onRetryVot = retryVot,
-                                     onTranslateLang = { lang -> scope.launch { settingsRepo.setTranslateTarget(lang) } },
+                                    onAdblock = toggleAdblock,
+                                    onRetryAdblock = retryAdblock,
+                                    adblockStatus = adblockStatus,
+                                    votEnabled = prefs.votEnabled,
+                                    votStatus = votStatus,
+                                    onVot = toggleVot,
+                                    onRetryVot = retryVot,
+                                    onTranslateLang = { lang -> scope.launch { settingsRepo.setTranslateTarget(lang) } },
                                     onClearData = { withBookmarks ->
                                         scope.launch {
                                             historyRepo.clear()
@@ -456,18 +473,18 @@ class MainActivity : ComponentActivity() {
                             HistoryScreen(
                                 historyRepo,
                                 iconsDir,
-                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
+                                onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                 onOpen = { uri ->
-                                     browserViewModel.screen(BrowserScreen.Browser)
+                                    browserViewModel.screen(BrowserScreen.Browser)
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 })
                         }
                         if (screen == BrowserScreen.Bookmarks) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                             BookmarksScreen(
                                 bookmarks, iconsDir,
-                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
+                                onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                 onOpen = { uri ->
-                                     browserViewModel.screen(BrowserScreen.Browser)
+                                    browserViewModel.screen(BrowserScreen.Browser)
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
                                 onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
@@ -477,13 +494,13 @@ class MainActivity : ComponentActivity() {
                         if (showSwitcher) {
                             TabSwitcher(
                                 tabs, currentId, iconsDir,
-                                 onSelect = { tabManager.select(it); browserViewModel.showSwitcher(false) },
+                                onSelect = { tabManager.select(it); browserViewModel.showSwitcher(false) },
                                 onClose = { tabManager.closeTab(it) },
-                                 onNew = { browserViewModel.showSwitcher(false); tabManager.newTab(null) },
-                                 onDismiss = { browserViewModel.showSwitcher(false) })
+                                onNew = { browserViewModel.showSwitcher(false); tabManager.newTab(null) },
+                                onDismiss = { browserViewModel.showSwitcher(false) })
                         }
                         if (showSiteInfo && currentTab != null) {
-                            SiteInfoSheet(currentTab) { browserViewModel.showSiteInfo(false) }
+                            SiteInfoSheet(currentTab, prefs.adblockEnabled) { browserViewModel.showSiteInfo(false) }
                         }
                     }
                 }
@@ -509,6 +526,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         permissionRequests.cancelAll()
         fileRequests.cancelAll()
+        pendingPermissionRequest = emptySet()
         permissionCompletion = null
         fileCompletion = null
         super.onDestroy()
@@ -559,6 +577,9 @@ private fun TopBar(
     onRetryAdblock: () -> Unit,
     onNavigate: (String) -> Unit,
     onExternal: (String) -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onReload: () -> Unit,
     onSiteInfo: () -> Unit,
     onSwitcher: () -> Unit,
     onNewTab: () -> Unit,
@@ -594,7 +615,7 @@ private fun TopBar(
         focusManager.clearFocus(force = true)
     }
     Row(
-         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -612,18 +633,18 @@ private fun TopBar(
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                 IconButton(onClick = onSiteInfo, modifier = Modifier.size(32.dp)) {
-                     Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                         if (tab?.isPrivate == true) {
-                             Icon(AppIcons.Incognito, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                         } else if (tab?.securityState != SecurityState.Secure) {
-                             Icon(Icons.Filled.Search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                         }
-                         if (tab?.securityState == SecurityState.Secure) {
-                             Icon(Icons.Filled.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                         }
-                     }
-                 }
+                IconButton(onClick = onSiteInfo, modifier = Modifier.size(32.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                        if (tab?.isPrivate == true) {
+                            Icon(AppIcons.Incognito, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } else if (tab?.securityState != SecurityState.Secure) {
+                            Icon(Icons.Filled.Search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (tab?.securityState == SecurityState.Secure) {
+                            Icon(Icons.Filled.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
                 Spacer(Modifier.width(10.dp))
                 Box(Modifier.weight(1f)) {
                     if (shown.isEmpty()) {
@@ -720,6 +741,9 @@ private fun TopBar(
             onDismiss = { menuOpen = false },
             onNewTab = onNewTab,
             onNewPrivateTab = onNewPrivateTab,
+            onBack = onBack,
+            onForward = onForward,
+            onReload = onReload,
             onToggleBookmark = onToggleBookmark,
             onBookmarks = onBookmarks,
             onHistory = onHistory,
@@ -779,6 +803,9 @@ private fun MenuSheet(
     onDismiss: () -> Unit,
     onNewTab: () -> Unit,
     onNewPrivateTab: () -> Unit,
+    onBack: () -> Unit,
+    onForward: () -> Unit,
+    onReload: () -> Unit,
     onToggleBookmark: () -> Unit,
     onBookmarks: () -> Unit,
     onHistory: () -> Unit,
@@ -798,6 +825,13 @@ private fun MenuSheet(
             QuickAction(AppIcons.Star, "Закладки", { onDismiss(); onBookmarks() })
             QuickAction(AppIcons.History, "История", { onDismiss(); onHistory() })
         }
+        MenuDivider()
+        SheetRow(Icons.AutoMirrored.Filled.ArrowBack, "Назад",
+            enabled = tab?.canGoBack == true, onClick = { onDismiss(); onBack() })
+        SheetRow(Icons.AutoMirrored.Filled.ArrowForward, "Вперёд",
+            enabled = tab?.canGoForward == true, onClick = { onDismiss(); onForward() })
+        SheetRow(Icons.Filled.Refresh, "Обновить",
+            enabled = tab != null && tab.url.isNotBlank(), onClick = { onDismiss(); onReload() })
         MenuDivider()
         SheetRow(if (bookmarked) Icons.Filled.Star else AppIcons.Star,
             if (bookmarked) "Убрать из закладок" else "В закладки",
@@ -852,7 +886,7 @@ private fun TabSwitcher(
     onDismiss: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onDismiss, modifier = Modifier.semantics { contentDescription = "Закрыть" }) {
                 Icon(AppIcons.ChevronDown, null)
@@ -869,9 +903,9 @@ private fun TabSwitcher(
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-             modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-             horizontalArrangement = Arrangement.spacedBy(14.dp),
-             verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             items(tabs, key = { it.id }) { tab ->
                 TabCard(
@@ -902,10 +936,10 @@ private fun TabCard(
     Column(
         Modifier
             .clip(Radius.card)
-             .background(
-                 if (tab.isPrivate) MaterialTheme.colorScheme.surfaceContainerLow
-                 else MaterialTheme.colorScheme.surface,
-             )
+            .background(
+                if (tab.isPrivate) MaterialTheme.colorScheme.surfaceContainerLow
+                else MaterialTheme.colorScheme.surface,
+            )
             .border(
                 1.dp,
                 if (isCurrent) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
@@ -927,26 +961,26 @@ private fun TabCard(
                 },
                 Modifier.weight(1f),
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
-                 style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge,
             )
             Box(
                 Modifier
-                     .size(40.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onClose)
                     .semantics { contentDescription = "Закрыть вкладку" },
                 contentAlignment = Alignment.Center,
             ) {
-                 Icon(Icons.Filled.Close, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Filled.Close, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         // Мини-адресная строка, как на референсе.
         Row(
-             Modifier
-                 .padding(horizontal = 10.dp)
-                 .fillMaxWidth()
-                 .height(32.dp)
-                 .clip(RoundedCornerShape(8.dp))
+            Modifier
+                .padding(horizontal = 10.dp)
+                .fillMaxWidth()
+                .height(32.dp)
+                .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -954,7 +988,7 @@ private fun TabCard(
             Text(
                 host.ifBlank { "Поиск" },
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
-                 style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -962,12 +996,12 @@ private fun TabCard(
         Box(
             Modifier
                 .fillMaxWidth()
-                 .aspectRatio(1f)
+                .aspectRatio(1f)
                 .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center,
         ) {
             if (tab.isPrivate) {
-                 Icon(AppIcons.Incognito, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                Icon(AppIcons.Incognito, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
             } else if (host.isNotBlank()) {
                 Favicon(host, iconsDir, 40.dp)
             } else {
@@ -1031,7 +1065,7 @@ private fun IconBtn(icon: ImageVector, desc: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SiteInfoSheet(tab: Tab, onDismiss: () -> Unit) {
+private fun SiteInfoSheet(tab: Tab, adblockEnabled: Boolean, onDismiss: () -> Unit) {
     val host = hostOf(tab.url).ifBlank { tab.url.ifBlank { "Новая вкладка" } }
     val message = when (tab.securityState) {
         SecurityState.Secure -> "Соединение защищено"
@@ -1044,7 +1078,11 @@ private fun SiteInfoSheet(tab: Tab, onDismiss: () -> Unit) {
         Spacer(Modifier.height(4.dp))
         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
-        SheetRow(AppIcons.Shield, "Блокировка рекламы", trailing = { Text("Вкл", color = MaterialTheme.colorScheme.onSurfaceVariant) })
+        SheetRow(
+            AppIcons.Shield,
+            "Блокировка рекламы",
+            trailing = { Text(if (adblockEnabled) "Вкл" else "Выкл", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        )
     }
 }
 
