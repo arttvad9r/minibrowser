@@ -819,6 +819,40 @@ private fun MenuSheet(
 ) {
     val httpPage = tab?.url?.startsWith("http") == true
     BrowserBottomSheet(onDismissRequest = onDismiss) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(Radius.button)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            MenuNavigationAction(
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                description = "Назад",
+                enabled = tab?.canGoBack == true,
+                modifier = Modifier.weight(1f),
+            ) { onDismiss(); onBack() }
+            MenuNavigationAction(
+                icon = Icons.AutoMirrored.Filled.ArrowForward,
+                description = "Вперёд",
+                enabled = tab?.canGoForward == true,
+                modifier = Modifier.weight(1f),
+            ) { onDismiss(); onForward() }
+            MenuNavigationAction(
+                icon = Icons.Filled.Refresh,
+                description = "Обновить",
+                enabled = tab != null && tab.url.isNotBlank(),
+                modifier = Modifier.weight(1f),
+            ) { onDismiss(); onReload() }
+            MenuNavigationAction(
+                icon = if (bookmarked) Icons.Filled.Star else AppIcons.Star,
+                description = if (bookmarked) "Убрать из закладок" else "В закладки",
+                enabled = httpPage,
+                modifier = Modifier.weight(1f),
+            ) { onDismiss(); onToggleBookmark() }
+        }
+        Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             QuickAction(Icons.Filled.Add, "Новая\nвкладка", { onDismiss(); onNewTab() })
             QuickAction(AppIcons.Incognito, "Приватная\nвкладка", { onDismiss(); onNewPrivateTab() })
@@ -826,16 +860,6 @@ private fun MenuSheet(
             QuickAction(AppIcons.History, "История", { onDismiss(); onHistory() })
         }
         MenuDivider()
-        SheetRow(Icons.AutoMirrored.Filled.ArrowBack, "Назад",
-            enabled = tab?.canGoBack == true, onClick = { onDismiss(); onBack() })
-        SheetRow(Icons.AutoMirrored.Filled.ArrowForward, "Вперёд",
-            enabled = tab?.canGoForward == true, onClick = { onDismiss(); onForward() })
-        SheetRow(Icons.Filled.Refresh, "Обновить",
-            enabled = tab != null && tab.url.isNotBlank(), onClick = { onDismiss(); onReload() })
-        MenuDivider()
-        SheetRow(if (bookmarked) Icons.Filled.Star else AppIcons.Star,
-            if (bookmarked) "Убрать из закладок" else "В закладки",
-            enabled = httpPage, onClick = { onDismiss(); onToggleBookmark() })
         SheetRow(Icons.Filled.Search, "Найти на странице", enabled = true, onClick = { onDismiss(); onFind() })
         SheetRow(AppIcons.Desktop, "Версия для ПК", enabled = tab != null,
             trailing = {
@@ -863,6 +887,32 @@ private fun MenuSheet(
                 ToggleRow(AppIcons.Shield, "Блокировка рекламы", false, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
         }
         SheetRow(Icons.Filled.Settings, "Настройки", onClick = { onDismiss(); onSettings() })
+    }
+}
+
+@Composable
+private fun MenuNavigationAction(
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val alpha = if (enabled) 1f else 0.38f
+    Box(
+        modifier
+            .height(48.dp)
+            .clip(Radius.small)
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            null,
+            Modifier.size(23.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+        )
     }
 }
 
