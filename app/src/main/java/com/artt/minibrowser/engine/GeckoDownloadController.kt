@@ -12,6 +12,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import com.artt.minibrowser.data.DownloadHistory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +28,8 @@ class GeckoDownloadController(
     private val activity: Activity,
     private val requestPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)? = null,
 ) {
+    private data class SavedDownload(val location: String, val bytes: Long)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun handle(response: WebResponse) {
@@ -48,7 +51,7 @@ class GeckoDownloadController(
             ?.takeIf { it.isNotBlank() }
             ?: "application/octet-stream"
 
-        val begin = { ensureStorageAccessAndSave(body, name, mime) }
+        val begin = { ensureStorageAccessAndSave(body, name, mime, response.uri) }
         if (response.skipConfirmation) {
             begin()
             return
@@ -65,11 +68,16 @@ class GeckoDownloadController(
         }
     }
 
-    private fun ensureStorageAccessAndSave(body: InputStream, name: String, mime: String) {
+    private fun ensureStorageAccessAndSave(
+        body: InputStream,
+        name: String,
+        mime: String,
+        sourceUrl: String,
+    ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         ) {
-            saveAsync(body, name, mime)
+            saveAsync(body, name, mime, sourceUrl)
             return
         }
 
@@ -80,7 +88,7 @@ class GeckoDownloadController(
             return
         }
         requester(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)) { granted ->
-            if (granted) saveAsync(body, name, mime)
+            if (granted) saveAsync(body, name, mime, sourceUrl)
             else {
                 body.closeQuietly()
                 toast("Загрузка отменена: нет доступа к хранилищу")
@@ -88,8 +96,9 @@ class GeckoDownloadController(
         }
     }
 
-    private fun saveAsync(body: InputStream, name: String, mime: String) {
+    private fun saveAsync(body: InputStream, name: String, mime: String, sourceUrl: String) {
         scope.launch {
+            val historyId = DownloadHistory.start(name, sourceUrl, mime)
             val result = runCatching {
                 body.use { input ->
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -99,17 +108,21 @@ class GeckoDownloadController(
                     }
                 }
             }
-            withContext(Dispatchers.Main) {
-                result.fold(
-                    onSuccess = { toast("Скачано: $name") },
-                    onFailure = { toast("Не удалось скачать файл") },
-                )
-            }
+            result.fold(
+                onSuccess = { saved ->
+                    DownloadHistory.complete(historyId, saved.location, saved.bytes)
+                    withContext(Dispatchers.Main) { toast("Скачано: $name") }
+                },
+                onFailure = { error ->
+                    DownloadHistory.fail(historyId, error.localizedMessage ?: "Не удалось сохранить файл")
+                    withContext(Dispatchers.Main) { toast("Не удалось скачать файл") }
+                },
+            )
         }
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
-    private fun saveToMediaStore(input: InputStream, name: String, mime: String) {
+    private fun saveToMediaStore(input: InputStream, name: String, mime: String): SavedDownload {
         val resolver = activity.contentResolver
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, name)
@@ -120,7 +133,7 @@ class GeckoDownloadController(
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             ?: error("Unable to create download")
         try {
-            resolver.openOutputStream(uri, "w")?.use { output -> input.copyTo(output) }
+            val bytes = resolver.openOutputStream(uri, "w")?.use { output -> input.copyTo(output) }
                 ?: error("Unable to open download output")
             resolver.update(
                 uri,
@@ -128,6 +141,7 @@ class GeckoDownloadController(
                 null,
                 null,
             )
+            return SavedDownload(uri.toString(), bytes)
         } catch (t: Throwable) {
             resolver.delete(uri, null, null)
             throw t
@@ -135,12 +149,13 @@ class GeckoDownloadController(
     }
 
     @Suppress("DEPRECATION")
-    private fun saveToLegacyDownloads(input: InputStream, name: String, mime: String) {
+    private fun saveToLegacyDownloads(input: InputStream, name: String, mime: String): SavedDownload {
         val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         if (!dir.exists() && !dir.mkdirs()) error("Unable to create Downloads directory")
         val file = uniqueFile(dir, name)
-        FileOutputStream(file).use { output -> input.copyTo(output) }
+        val bytes = FileOutputStream(file).use { output -> input.copyTo(output) }
         MediaScannerConnection.scanFile(activity, arrayOf(file.absolutePath), arrayOf(mime), null)
+        return SavedDownload(Uri.fromFile(file).toString(), bytes)
     }
 
     private fun uniqueFile(dir: File, name: String): File {
