@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -110,26 +109,42 @@ fun BrowserTabSwitcher(
             }
         }
 
-        if (tabs.isEmpty()) {
-            EmptyState(AppIcons.Globe, "Нет открытых вкладок")
-            return@Column
-        }
-
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 164.dp),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(tabs, key = { it.id }) { tab ->
-                BrowserTabCard(
-                    tab = tab,
-                    isCurrent = tab.id == currentId,
-                    iconsDir = iconsDir,
-                    onSelect = { onSelect(tab.id) },
-                    onClose = { onClose(tab.id) },
-                )
+        when (tabs.size) {
+            0 -> EmptyState(AppIcons.Globe, "Нет открытых вкладок")
+            1 -> {
+                val tab = tabs.first()
+                Box(
+                    Modifier.fillMaxSize().padding(top = 8.dp),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    BrowserTabCard(
+                        tab = tab,
+                        isCurrent = tab.id == currentId,
+                        iconsDir = iconsDir,
+                        modifier = Modifier.width(216.dp),
+                        onSelect = { onSelect(tab.id) },
+                        onClose = { onClose(tab.id) },
+                    )
+                }
+            }
+            else -> {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 164.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(tabs, key = { it.id }) { tab ->
+                        BrowserTabCard(
+                            tab = tab,
+                            isCurrent = tab.id == currentId,
+                            iconsDir = iconsDir,
+                            onSelect = { onSelect(tab.id) },
+                            onClose = { onClose(tab.id) },
+                        )
+                    }
+                }
             }
         }
     }
@@ -146,6 +161,7 @@ private fun BrowserTabCard(
     tab: Tab,
     isCurrent: Boolean,
     iconsDir: File,
+    modifier: Modifier = Modifier,
     onSelect: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -175,7 +191,7 @@ private fun BrowserTabCard(
     )
 
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .graphicsLayer {
                 alpha = 1f - closeProgress
@@ -249,20 +265,6 @@ private fun BrowserTabCard(
                 } else {
                     TabPreviewFallback(tab, host, iconsDir)
                 }
-            }
-
-            if (isCurrent) {
-                Text(
-                    "Текущая",
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(8.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
             }
         }
 
