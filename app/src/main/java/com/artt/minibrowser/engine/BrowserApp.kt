@@ -5,6 +5,7 @@ import android.app.Application
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.artt.minibrowser.BuildConfig
@@ -14,6 +15,7 @@ import com.artt.minibrowser.data.DownloadHistory
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
+import org.mozilla.geckoview.GeckoView
 
 object Engine { lateinit var runtime: GeckoRuntime }
 
@@ -24,7 +26,7 @@ class BrowserApp : Application() {
         if (Build.VERSION.SDK_INT >= 28 && Application.getProcessName().contains(":")) return
         DbHolder.init(this)
         DownloadHistory.init(this)
-        installMainActivityImeInsets()
+        installMainActivityImeClipping()
         val contentBlocking = ContentBlocking.Settings.Builder()
             .safeBrowsing(ContentBlocking.SafeBrowsing.DEFAULT)
             .cookieBehavior(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
@@ -45,43 +47,56 @@ class BrowserApp : Application() {
     }
 
     /**
-     * Android 15+ edge-to-edge can leave the Compose host at full height even though MainActivity
-     * requests adjustResize. GeckoView then receives a viewport that still extends under the IME,
-     * so fixed web inputs (ChatGPT's composer is a common example) can end up behind the keyboard.
-     *
-     * Apply only the IME delta to the Activity content root. MainActivity already consumes system
-     * bars inside Compose, so subtract the navigation-bar inset to avoid double bottom spacing.
+     * GeckoView already observes root WindowInsets for interactive-widget/visual viewport updates.
+     * Android 15+ edge-to-edge means the IME can still visibly cover the bottom of the GeckoView,
+     * though. Feed that obscured height into GeckoView's dedicated vertical-clipping API instead of
+     * padding/resizing the Activity root; Gecko then keeps bottom-fixed web UI above the keyboard.
      */
-    private fun installMainActivityImeInsets() {
+    private fun installMainActivityImeClipping() {
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 if (activity !is MainActivity) return
                 val content = activity.findViewById<View>(android.R.id.content) ?: return
-                val baseLeft = content.paddingLeft
-                val baseTop = content.paddingTop
-                val baseRight = content.paddingRight
-                val baseBottom = content.paddingBottom
-                ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
-                    val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-                    val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-                    val keyboardBottom = (imeBottom - navBottom).coerceAtLeast(0)
-                    view.setPadding(
-                        baseLeft,
-                        baseTop,
-                        baseRight,
-                        baseBottom + keyboardBottom,
-                    )
-                    insets
-                }
-                content.post { ViewCompat.requestApplyInsets(content) }
+                content.post { attachImeClipping(content) }
+            }
+
+            override fun onActivityResumed(activity: Activity) {
+                if (activity !is MainActivity) return
+                val content = activity.findViewById<View>(android.R.id.content) ?: return
+                // Covers OEMs where the AndroidView/GeckoView is attached after onActivityCreated.
+                content.post { attachImeClipping(content) }
             }
 
             override fun onActivityStarted(activity: Activity) = Unit
-            override fun onActivityResumed(activity: Activity) = Unit
             override fun onActivityPaused(activity: Activity) = Unit
             override fun onActivityStopped(activity: Activity) = Unit
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
             override fun onActivityDestroyed(activity: Activity) = Unit
         })
+    }
+
+    private fun attachImeClipping(root: View) {
+        val geckoView = findGeckoView(root) ?: return
+        geckoView.addWindowInsetsListener(IME_CLIPPING_LISTENER_KEY) { _, insets ->
+            val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val keyboardOverlap = (imeBottom - navBottom).coerceAtLeast(0)
+            geckoView.setVerticalClipping(keyboardOverlap)
+            insets
+        }
+        ViewCompat.requestApplyInsets(root.rootView)
+    }
+
+    private fun findGeckoView(view: View): GeckoView? {
+        if (view is GeckoView) return view
+        if (view !is ViewGroup) return null
+        for (index in 0 until view.childCount) {
+            findGeckoView(view.getChildAt(index))?.let { return it }
+        }
+        return null
+    }
+
+    private companion object {
+        const val IME_CLIPPING_LISTENER_KEY = "MINIBROWSER_IME_CLIPPING"
     }
 }
