@@ -224,46 +224,71 @@ private fun BrowserTabCard(
             .border(1.dp, borderColor, Radius.card)
             .softClickable(enabled = !closing, pressedScale = 0.985f, onClick = onSelect),
     ) {
-        Row(
-            Modifier.fillMaxWidth().height(40.dp).padding(start = 10.dp, end = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (tab.isPrivate) {
+        if (tab.isPrivate) {
+            Box(Modifier.fillMaxWidth().height(40.dp)) {
                 Icon(
                     AppIcons.Incognito,
                     "Приватная вкладка",
-                    Modifier.size(17.dp),
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 10.dp)
+                        .size(17.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
-            } else {
-                Favicon(host, iconsDir, 17.dp)
+                Text(
+                    "Приватная вкладка",
+                    Modifier.align(Alignment.Center),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                IconButton(
+                    onClick = { if (!closing) closing = true },
+                    enabled = !closing,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(36.dp)
+                        .semantics { contentDescription = "Закрыть вкладку" },
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        null,
+                        Modifier.size(17.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Spacer(Modifier.width(7.dp))
-            Text(
-                if (tab.isPrivate) {
-                    "Приватная вкладка"
-                } else {
+        } else {
+            Row(
+                Modifier.fillMaxWidth().height(40.dp).padding(start = 10.dp, end = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Favicon(host, iconsDir, 17.dp)
+                Spacer(Modifier.width(7.dp))
+                Text(
                     tab.title.ifBlank {
                         if (tab.url.isBlank() || tab.url == "about:blank") "Новая вкладка" else host.ifBlank { tab.url }
-                    }
-                },
-                Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isCurrent || tab.isPrivate) FontWeight.SemiBold else FontWeight.Medium,
-            )
-            IconButton(
-                onClick = { if (!closing) closing = true },
-                enabled = !closing,
-                modifier = Modifier.size(36.dp).semantics { contentDescription = "Закрыть вкладку" },
-            ) {
-                Icon(
-                    Icons.Filled.Close,
-                    null,
-                    Modifier.size(17.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    },
+                    Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
                 )
+                IconButton(
+                    onClick = { if (!closing) closing = true },
+                    enabled = !closing,
+                    modifier = Modifier.size(36.dp).semantics { contentDescription = "Закрыть вкладку" },
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        null,
+                        Modifier.size(17.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
