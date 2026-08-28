@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.Dialog
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
@@ -12,6 +13,8 @@ import android.text.InputType
 import android.widget.EditText
 import android.widget.Toast
 import android.widget.TimePicker
+import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import com.artt.minibrowser.BuildConfig
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -20,6 +23,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.util.Locale
 
 /** Small native prompt bridge; it deliberately denies unattended popup/auth actions. */
 class GeckoPromptController(
@@ -41,6 +45,14 @@ class GeckoPromptController(
                 completed = true
             }
         }
+    }
+
+    private var pendingFilePrompt: GeckoSession.PromptDelegate.FilePrompt? = null
+    private var pendingFileResult: GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = null
+    private val directFileLauncher = (activity as? ComponentActivity)?.registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        handleFilePickerResult(result.resultCode, result.data)
     }
 
     private fun bindPromptDialog(
@@ -433,12 +445,142 @@ class GeckoPromptController(
         prompt: GeckoSession.PromptDelegate.FilePrompt,
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
         val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        if (BuildConfig.DEBUG) {
+            Log.d(
+                "MinibrowserFiles",
+                "file prompt type=${prompt.type} capture=${prompt.capture} mime=${prompt.mimeTypes?.joinToString()}",
+            )
+        }
+
+        if (launchDirectFilePicker(prompt, result)) return result
+
         val guard = PromptGuard(prompt, result)
         pickFiles?.invoke(prompt.type, prompt.mimeTypes ?: emptyArray()) { uris ->
-            if (uris.isEmpty()) guard.complete { prompt.dismiss() }
-            else guard.complete { prompt.confirm(activity, uris) }
+            activity.runOnUiThread {
+                if (uris.isEmpty()) guard.complete { prompt.dismiss() }
+                else guard.complete { prompt.confirm(activity.applicationContext, uris) }
+            }
         } ?: guard.complete { prompt.dismiss() }
         return result
+    }
+
+    private fun launchDirectFilePicker(
+        prompt: GeckoSession.PromptDelegate.FilePrompt,
+        result: GeckoResult<GeckoSession.PromptDelegate.PromptResponse>,
+    ): Boolean {
+        val launcher = directFileLauncher ?: return false
+        clearPendingFilePrompt(dismiss = true)
+
+        val target = buildFilePickerIntent(prompt)
+        pendingFilePrompt = prompt
+        pendingFileResult = result
+        prompt.setDelegate(object : GeckoSession.PromptDelegate.PromptInstanceDelegate {
+            override fun onPromptDismiss(prompt: GeckoSession.PromptDelegate.BasePrompt) {
+                if (pendingFilePrompt === prompt) {
+                    pendingFilePrompt = null
+                    pendingFileResult = null
+                }
+            }
+        })
+
+        return try {
+            launcher.launch(target)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.w("MinibrowserFiles", "No activity can handle file picker", e)
+            pendingFilePrompt = null
+            pendingFileResult = null
+            false
+        } catch (e: RuntimeException) {
+            Log.w("MinibrowserFiles", "Failed to launch file picker", e)
+            pendingFilePrompt = null
+            pendingFileResult = null
+            false
+        }
+    }
+
+    private fun buildFilePickerIntent(prompt: GeckoSession.PromptDelegate.FilePrompt): Intent {
+        if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER) {
+            return Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addCategory(Intent.CATEGORY_DEFAULT)
+        }
+
+        val accepted = normalizeMimeTypes(prompt.mimeTypes)
+        return Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mergedMimeType(accepted)
+            if (accepted.isNotEmpty()) putExtra(Intent.EXTRA_MIME_TYPES, accepted)
+            if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
+        }
+    }
+
+    private fun normalizeMimeTypes(values: Array<String>?): Array<String> = values.orEmpty()
+        .map { it.trim().lowercase(Locale.ROOT) }
+        .filter { value ->
+            val slash = value.indexOf('/')
+            slash > 0 && slash < value.lastIndex
+        }
+        .distinct()
+        .toTypedArray()
+
+    private fun mergedMimeType(types: Array<String>): String {
+        if (types.isEmpty()) return "*/*"
+        val parsed = types.map { it.substringBefore('/') to it.substringAfter('/') }
+        val major = parsed.map { it.first }.distinct().singleOrNull() ?: "*"
+        val minor = if (major == "*") "*" else parsed.map { it.second }.distinct().singleOrNull() ?: "*"
+        return "$major/$minor"
+    }
+
+    private fun handleFilePickerResult(resultCode: Int, data: Intent?) {
+        val prompt = pendingFilePrompt ?: return
+        val result = pendingFileResult ?: return
+        pendingFilePrompt = null
+        pendingFileResult = null
+
+        activity.runOnUiThread {
+            try {
+                if (resultCode != Activity.RESULT_OK || data == null || prompt.isComplete) {
+                    if (!prompt.isComplete) result.complete(prompt.dismiss())
+                    return@runOnUiThread
+                }
+
+                val uris = when (prompt.type) {
+                    GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
+                        listOfNotNull(data.data)
+                    else -> buildList {
+                        data.data?.let(::add)
+                        data.clipData?.let { clip ->
+                            for (index in 0 until clip.itemCount) add(clip.getItemAt(index).uri)
+                        }
+                    }.distinct()
+                }
+
+                if (uris.isEmpty()) {
+                    result.complete(prompt.dismiss())
+                    return@runOnUiThread
+                }
+
+                val response = if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE) {
+                    prompt.confirm(activity.applicationContext, uris.first())
+                } else {
+                    prompt.confirm(activity.applicationContext, uris.toTypedArray())
+                }
+                result.complete(response)
+            } catch (e: RuntimeException) {
+                Log.w("MinibrowserFiles", "Failed to complete file prompt", e)
+            }
+        }
+    }
+
+    private fun clearPendingFilePrompt(dismiss: Boolean) {
+        val prompt = pendingFilePrompt
+        val result = pendingFileResult
+        pendingFilePrompt = null
+        pendingFileResult = null
+        if (dismiss && prompt != null && result != null && !prompt.isComplete) {
+            runCatching { result.complete(prompt.dismiss()) }
+        }
     }
 
     private fun dialog(
