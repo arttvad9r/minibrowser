@@ -1,6 +1,7 @@
 package com.artt.minibrowser.ui
 
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.LocalIndication
@@ -33,15 +34,19 @@ object MotionTokens {
         dampingRatio = 0.82f,
         stiffness = 560f,
     )
-    val StandardSpatial = spring<Float>(
-        dampingRatio = 0.86f,
-        stiffness = 430f,
-    )
-    val ExpressiveSpatial = spring<Float>(
-        dampingRatio = 0.78f,
-        stiffness = 360f,
-    )
+    val StandardSpatial = standardSpatialSpring<Float>()
+    val ExpressiveSpatial = expressiveSpatialSpring<Float>()
 }
+
+fun <T> standardSpatialSpring(): SpringSpec<T> = spring(
+    dampingRatio = 0.86f,
+    stiffness = 430f,
+)
+
+fun <T> expressiveSpatialSpring(): SpringSpec<T> = spring(
+    dampingRatio = 0.78f,
+    stiffness = 360f,
+)
 
 /**
  * Small physical press feedback for app chrome. The transform stays in the graphics layer, so it
