@@ -3,7 +3,9 @@ package com.artt.minibrowser.ui
 // Настройки: компактные группы; большие списки выбора вынесены в bottom sheet.
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,8 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +54,7 @@ import com.artt.minibrowser.DownloadsActivity
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
+import kotlinx.coroutines.delay
 
 private val translationLanguages = listOf(
     "Русский" to "ru",
@@ -79,14 +85,46 @@ fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
+    var entered by remember { mutableStateOf(false) }
+    var leaving by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val travelPx = with(density) { 18.dp.toPx() }
+    val screenProgress by animateFloatAsState(
+        targetValue = if (entered && !leaving) 1f else 0f,
+        animationSpec = MotionTokens.StandardSpatial,
+        label = "settingsScreenProgress",
+    )
 
-    Column(Modifier.fillMaxSize()) {
+    LaunchedEffect(Unit) { entered = true }
+    LaunchedEffect(leaving) {
+        if (leaving) {
+            delay(MotionTokens.Standard.toLong())
+            onBack()
+        }
+    }
+    val requestBack: () -> Unit = {
+        if (!leaving) leaving = true
+    }
+    BackHandler(enabled = !leaving) { requestBack() }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val progress = screenProgress.coerceIn(0f, 1f)
+                alpha = progress
+                translationX = (1f - progress) * travelPx
+                val scale = 0.995f + 0.005f * progress
+                scaleX = scale
+                scaleY = scale
+            },
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+            IconButton(onClick = requestBack, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
             }
             Text("Настройки", style = MaterialTheme.typography.titleLarge)
