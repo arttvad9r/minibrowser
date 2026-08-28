@@ -9,10 +9,9 @@ import kotlin.math.roundToInt
 /**
  * In-process cache of real GeckoView renders for the tab switcher.
  *
- * We deliberately keep previews in memory only: normal browser session persistence still owns
- * the actual tab state, while private-tab pixels are never written to disk. A tab receives a
- * fresh preview after a completed navigation, before its session is detached, and whenever the
- * switcher is opened.
+ * Normal-tab previews stay memory-only. Private tabs are deliberately excluded even from this
+ * transient cache: otherwise opening the overview from a normal tab could expose private-page
+ * pixels to a screenshot despite FLAG_SECURE being enabled while the private tab itself is active.
  */
 object TabPreviewStore {
     private const val MAX_PREVIEW_WIDTH = 420
@@ -21,20 +20,30 @@ object TabPreviewStore {
     private val lastCapturedUrl = mutableMapOf<Long, String>()
     private val inFlight = mutableSetOf<Long>()
     private val removedTabs = mutableSetOf<Long>()
+    private val privateTabs = mutableSetOf<Long>()
 
     private var currentView = WeakReference<GeckoView>(null)
     private var currentTabId: Long? = null
     private var currentUrl: String = ""
 
-    operator fun get(tabId: Long): Bitmap? = previews[tabId]
+    operator fun get(tabId: Long): Bitmap? =
+        if (tabId in privateTabs) null else previews[tabId]
 
     fun attach(view: GeckoView, tabId: Long?, url: String, isPrivate: Boolean) {
         currentView = WeakReference(view)
         currentTabId = tabId
         currentUrl = url
-        // Private previews intentionally use exactly the same in-memory path and are never persisted.
-        if (isPrivate && tabId != null) removedTabs.remove(tabId)
-        if (!isPrivate && tabId != null) removedTabs.remove(tabId)
+        if (tabId == null) return
+
+        removedTabs.remove(tabId)
+        if (isPrivate) {
+            privateTabs += tabId
+            previews.remove(tabId)
+            lastCapturedUrl.remove(tabId)
+            inFlight.remove(tabId)
+        } else {
+            privateTabs.remove(tabId)
+        }
     }
 
     /** Capture once after a URL has settled; opening/switching tabs can force a fresher frame. */
@@ -47,14 +56,14 @@ object TabPreviewStore {
     ) {
         attach(view, tabId, url, isPrivate)
         val id = tabId ?: return
-        if (!pageSettled || !isPreviewableUrl(url) || lastCapturedUrl[id] == url) return
+        if (isPrivate || !pageSettled || !isPreviewableUrl(url) || lastCapturedUrl[id] == url) return
         capture(view, id, url)
     }
 
     fun captureCurrent() {
         val view = currentView.get() ?: return
         val id = currentTabId ?: return
-        if (!isPreviewableUrl(currentUrl)) return
+        if (id in privateTabs || !isPreviewableUrl(currentUrl)) return
         capture(view, id, currentUrl)
     }
 
@@ -65,6 +74,7 @@ object TabPreviewStore {
 
     fun remove(tabId: Long) {
         removedTabs += tabId
+        privateTabs.remove(tabId)
         previews.remove(tabId)
         lastCapturedUrl.remove(tabId)
         inFlight.remove(tabId)
@@ -75,13 +85,13 @@ object TabPreviewStore {
     }
 
     private fun capture(view: GeckoView, tabId: Long, url: String) {
-        if (tabId in removedTabs || !inFlight.add(tabId)) return
+        if (tabId in privateTabs || tabId in removedTabs || !inFlight.add(tabId)) return
         runCatching {
             view.capturePixels().accept(
                 { source ->
                     inFlight.remove(tabId)
                     if (source != null && source.width > 0 && source.height > 0) {
-                        if (tabId in removedTabs) {
+                        if (tabId in privateTabs || tabId in removedTabs) {
                             if (!source.isRecycled) source.recycle()
                         } else {
                             // Do not recycle a replaced preview here: Crossfade may still draw it
