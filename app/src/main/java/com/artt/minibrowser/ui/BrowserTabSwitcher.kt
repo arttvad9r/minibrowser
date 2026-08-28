@@ -57,6 +57,7 @@ import java.io.File
  * Browser-style tab overview with honest page thumbnails captured from GeckoView.
  * Phone layout intentionally uses two compact columns: adaptive minimum widths could collapse to
  * one giant column on narrower devices, which makes a browser with many tabs impractical.
+ * Private tabs are intentionally rendered without page pixels.
  */
 @Composable
 fun BrowserTabSwitcher(
@@ -176,7 +177,7 @@ private fun BrowserTabCard(
     onClose: () -> Unit,
 ) {
     val host = hostOf(tab.url)
-    val preview = TabPreviewStore[tab.id]
+    val preview = if (tab.isPrivate) null else TabPreviewStore[tab.id]
     var closing by remember(tab.id) { mutableStateOf(false) }
     LaunchedEffect(closing) {
         if (closing) {
@@ -190,12 +191,21 @@ private fun BrowserTabCard(
         label = "tabClose",
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isCurrent) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+        targetValue = when {
+            tab.isPrivate && isCurrent -> MaterialTheme.colorScheme.primary
+            tab.isPrivate -> MaterialTheme.colorScheme.outline
+            isCurrent -> MaterialTheme.colorScheme.outline
+            else -> MaterialTheme.colorScheme.outlineVariant
+        },
         animationSpec = tween(MotionTokens.Standard),
         label = "tabBorder",
     )
     val cardColor by animateColorAsState(
-        targetValue = if (isCurrent) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
+        targetValue = when {
+            tab.isPrivate -> MaterialTheme.colorScheme.surfaceContainerHighest
+            isCurrent -> MaterialTheme.colorScheme.surface
+            else -> MaterialTheme.colorScheme.surfaceContainerLow
+        },
         animationSpec = tween(MotionTokens.Standard),
         label = "tabSurface",
     )
@@ -223,21 +233,25 @@ private fun BrowserTabCard(
                     AppIcons.Incognito,
                     "Приватная вкладка",
                     Modifier.size(17.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
             } else {
                 Favicon(host, iconsDir, 17.dp)
             }
             Spacer(Modifier.width(7.dp))
             Text(
-                tab.title.ifBlank {
-                    if (tab.url.isBlank() || tab.url == "about:blank") "Новая вкладка" else host.ifBlank { tab.url }
+                if (tab.isPrivate) {
+                    "Приватная вкладка"
+                } else {
+                    tab.title.ifBlank {
+                        if (tab.url.isBlank() || tab.url == "about:blank") "Новая вкладка" else host.ifBlank { tab.url }
+                    }
                 },
                 Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
+                fontWeight = if (isCurrent || tab.isPrivate) FontWeight.SemiBold else FontWeight.Medium,
             )
             IconButton(
                 onClick = { if (!closing) closing = true },
@@ -257,7 +271,10 @@ private fun BrowserTabCard(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.88f)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(
+                    if (tab.isPrivate) MaterialTheme.colorScheme.surfaceContainerHigh
+                    else MaterialTheme.colorScheme.surfaceVariant,
+                ),
         ) {
             Crossfade(
                 targetState = preview,
@@ -276,6 +293,31 @@ private fun BrowserTabCard(
                     TabPreviewFallback(tab, host, iconsDir)
                 }
             }
+            if (tab.isPrivate) {
+                Row(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .clip(Radius.button)
+                        .background(MaterialTheme.colorScheme.inverseSurface)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        AppIcons.Incognito,
+                        null,
+                        Modifier.size(13.dp),
+                        tint = MaterialTheme.colorScheme.inverseOnSurface,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Приватная",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
         }
     }
 }
@@ -291,8 +333,8 @@ private fun TabPreviewFallback(tab: Tab, host: String, iconsDir: File) {
             Icon(
                 AppIcons.Incognito,
                 null,
-                Modifier.size(34.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                Modifier.size(38.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.72f),
             )
         } else if (host.isNotBlank()) {
             Favicon(host, iconsDir, 40.dp)
@@ -306,7 +348,11 @@ private fun TabPreviewFallback(tab: Tab, host: String, iconsDir: File) {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            if (host.isBlank()) "Новая вкладка" else host.removePrefix("www."),
+            when {
+                tab.isPrivate -> "Приватный режим"
+                host.isBlank() -> "Новая вкладка"
+                else -> host.removePrefix("www.")
+            },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.labelSmall,
