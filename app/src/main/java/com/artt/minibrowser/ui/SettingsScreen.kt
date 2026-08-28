@@ -3,9 +3,7 @@ package com.artt.minibrowser.ui
 // Настройки: компактные группы; большие списки выбора вынесены в bottom sheet.
 
 import android.content.Intent
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,7 +30,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,10 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +49,6 @@ import com.artt.minibrowser.DownloadsActivity
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
-import kotlinx.coroutines.delay
 
 private val translationLanguages = listOf(
     "Русский" to "ru",
@@ -85,153 +79,123 @@ fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
-    var entered by remember { mutableStateOf(false) }
-    var leaving by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val density = LocalDensity.current
-    val travelPx = with(density) { 18.dp.toPx() }
-    val screenProgress by animateFloatAsState(
-        targetValue = if (entered && !leaving) 1f else 0f,
-        animationSpec = MotionTokens.StandardSpatial,
-        label = "settingsScreenProgress",
-    )
 
-    LaunchedEffect(Unit) { entered = true }
-    LaunchedEffect(leaving) {
-        if (leaving) {
-            delay(MotionTokens.Standard.toLong())
-            onBack()
-        }
-    }
-    val requestBack: () -> Unit = {
-        if (!leaving) leaving = true
-    }
-    BackHandler(enabled = !leaving) { requestBack() }
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                val progress = screenProgress.coerceIn(0f, 1f)
-                alpha = progress
-                translationX = (1f - progress) * travelPx
-                val scale = 0.995f + 0.005f * progress
-                scaleX = scale
-                scaleY = scale
-            },
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = requestBack, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
-            }
-            Text("Настройки", style = MaterialTheme.typography.titleLarge)
-        }
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .imePadding(),
-        ) {
-            GroupLabel("Поиск")
-            SettingsGroup {
-                SettingsRow(
-                    title = "Поисковая система",
-                    value = prefs.searchEngine.label,
-                    onClick = { showEnginePicker = true },
-                    trailing = { PickerChevron() },
-                )
-            }
-
-            GroupLabel("Внешний вид")
-            ThemeSelector(prefs.theme, onTheme)
-
-            GroupLabel("Перевод")
-            SettingsGroup {
-                SettingsRow(
-                    title = "Язык перевода",
-                    value = translationLanguageLabel(prefs.translateTarget),
-                    onClick = { showLanguagePicker = true },
-                    trailing = { PickerChevron() },
-                )
-                HorizontalDividerThin()
-                when (votStatus) {
-                    null, ExtensionLoader.Status.Installing ->
-                        SettingsRow("Перевод видео", subtitle = "Запуск…")
-                    ExtensionLoader.Status.Enabled ->
-                        ToggleRow(
-                            AppIcons.Globe,
-                            "Перевод видео",
-                            votEnabled,
-                            onVot,
-                            subtitle = "VOT · перевод видео с поддерживаемых сайтов",
-                        )
-                    ExtensionLoader.Status.Disabled ->
-                        ToggleRow(
-                            AppIcons.Globe,
-                            "Перевод видео",
-                            false,
-                            onVot,
-                            subtitle = "VOT · перевод видео с поддерживаемых сайтов",
-                        )
-                    ExtensionLoader.Status.Error ->
-                        SettingsRow(
-                            "Перевод видео",
-                            subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
-                            onClick = onRetryVot,
-                        )
+    BrowserMotionScreen(onBack = onBack) { requestExit ->
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { requestExit(onBack) }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
                 }
+                Text("Настройки", style = MaterialTheme.typography.titleLarge)
             }
-
-            GroupLabel("Файлы")
-            SettingsGroup {
-                SettingsRow(
-                    "Загрузки",
-                    subtitle = "История файлов, скачанных через Minibrowser",
-                    onClick = { context.startActivity(Intent(context, DownloadsActivity::class.java)) },
-                    trailing = { PickerChevron() },
-                )
-            }
-
-            GroupLabel("Конфиденциальность")
-            SettingsGroup {
-                when (adblockStatus) {
-                    null, ExtensionLoader.Status.Installing ->
-                        SettingsRow("Блокировка рекламы", subtitle = "Запуск…")
-                    ExtensionLoader.Status.Error ->
-                        SettingsRow(
-                            "Блокировка рекламы",
-                            subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
-                            onClick = onRetryAdblock,
-                        )
-                    ExtensionLoader.Status.Enabled ->
-                        ToggleRow(
-                            AppIcons.Shield,
-                            "Блокировка рекламы",
-                            true,
-                            onAdblock,
-                            subtitle = "Блокирует рекламу и трекеры",
-                        )
-                    ExtensionLoader.Status.Disabled ->
-                        ToggleRow(
-                            AppIcons.Shield,
-                            "Блокировка рекламы",
-                            false,
-                            onAdblock,
-                            subtitle = "Блокирует рекламу и трекеры",
-                        )
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .imePadding(),
+            ) {
+                GroupLabel("Поиск")
+                SettingsGroup {
+                    SettingsRow(
+                        title = "Поисковая система",
+                        value = prefs.searchEngine.label,
+                        onClick = { showEnginePicker = true },
+                        trailing = { PickerChevron() },
+                    )
                 }
-                HorizontalDividerThin()
-                SettingsRow(
-                    "Очистить данные",
-                    subtitle = "История, cookies, данные сайтов и кэш",
-                    onClick = { showClearDialog = true },
-                )
+
+                GroupLabel("Внешний вид")
+                ThemeSelector(prefs.theme, onTheme)
+
+                GroupLabel("Перевод")
+                SettingsGroup {
+                    SettingsRow(
+                        title = "Язык перевода",
+                        value = translationLanguageLabel(prefs.translateTarget),
+                        onClick = { showLanguagePicker = true },
+                        trailing = { PickerChevron() },
+                    )
+                    HorizontalDividerThin()
+                    when (votStatus) {
+                        null, ExtensionLoader.Status.Installing ->
+                            SettingsRow("Перевод видео", subtitle = "Запуск…")
+                        ExtensionLoader.Status.Enabled ->
+                            ToggleRow(
+                                AppIcons.Globe,
+                                "Перевод видео",
+                                votEnabled,
+                                onVot,
+                                subtitle = "VOT · перевод видео с поддерживаемых сайтов",
+                            )
+                        ExtensionLoader.Status.Disabled ->
+                            ToggleRow(
+                                AppIcons.Globe,
+                                "Перевод видео",
+                                false,
+                                onVot,
+                                subtitle = "VOT · перевод видео с поддерживаемых сайтов",
+                            )
+                        ExtensionLoader.Status.Error ->
+                            SettingsRow(
+                                "Перевод видео",
+                                subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
+                                onClick = onRetryVot,
+                            )
+                    }
+                }
+
+                GroupLabel("Файлы")
+                SettingsGroup {
+                    SettingsRow(
+                        "Загрузки",
+                        subtitle = "История файлов, скачанных через Minibrowser",
+                        onClick = { context.startActivity(Intent(context, DownloadsActivity::class.java)) },
+                        trailing = { PickerChevron() },
+                    )
+                }
+
+                GroupLabel("Конфиденциальность")
+                SettingsGroup {
+                    when (adblockStatus) {
+                        null, ExtensionLoader.Status.Installing ->
+                            SettingsRow("Блокировка рекламы", subtitle = "Запуск…")
+                        ExtensionLoader.Status.Error ->
+                            SettingsRow(
+                                "Блокировка рекламы",
+                                subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
+                                onClick = onRetryAdblock,
+                            )
+                        ExtensionLoader.Status.Enabled ->
+                            ToggleRow(
+                                AppIcons.Shield,
+                                "Блокировка рекламы",
+                                true,
+                                onAdblock,
+                                subtitle = "Блокирует рекламу и трекеры",
+                            )
+                        ExtensionLoader.Status.Disabled ->
+                            ToggleRow(
+                                AppIcons.Shield,
+                                "Блокировка рекламы",
+                                false,
+                                onAdblock,
+                                subtitle = "Блокирует рекламу и трекеры",
+                            )
+                    }
+                    HorizontalDividerThin()
+                    SettingsRow(
+                        "Очистить данные",
+                        subtitle = "История, cookies, данные сайтов и кэш",
+                        onClick = { showClearDialog = true },
+                    )
+                }
+                Spacer(Modifier.height(32.dp))
             }
-            Spacer(Modifier.height(32.dp))
         }
     }
 
