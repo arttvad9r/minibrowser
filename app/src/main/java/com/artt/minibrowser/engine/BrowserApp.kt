@@ -73,7 +73,7 @@ class BrowserApp : Application() {
                     )
                     insets
                 }
-                ViewCompat.requestApplyInsets(content)
+                content.post { ViewCompat.requestApplyInsets(content) }
             }
 
             override fun onActivityStarted(activity: Activity) = Unit
