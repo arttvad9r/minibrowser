@@ -225,25 +225,39 @@ class MainActivity : ComponentActivity() {
                 )
             },
             filePicker = { type, mimeTypes, callback ->
-                fileRequests.enqueue(
-                    start = { complete ->
-                        fileCompletion = { uris ->
-                            callback(uris)
-                            complete(uris)
-                        }
-                        when (type) {
-                            GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
-                                filePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
-                            GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
-                                folderPickerLauncher.launch(null)
-                            GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE ->
-                                singleFilePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
-                            else ->
-                                singleFilePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
-                        }
-                    },
-                    cancel = { callback(emptyArray()) },
-                )
+                runOnUiThread {
+                    fileRequests.enqueue(
+                        start = { complete ->
+                            val accepted = mimeTypes
+                                .filter { it.isNotBlank() && it.contains('/') }
+                                .distinct()
+                                .toTypedArray()
+                                .let { if (it.isEmpty()) arrayOf("*/*") else it }
+                            fileCompletion = { uris ->
+                                callback(uris)
+                                complete(uris)
+                            }
+                            runCatching {
+                                when (type) {
+                                    GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
+                                        filePickerLauncher.launch(accepted)
+                                    GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
+                                        folderPickerLauncher.launch(null)
+                                    GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE ->
+                                        singleFilePickerLauncher.launch(accepted)
+                                    else ->
+                                        singleFilePickerLauncher.launch(accepted)
+                                }
+                            }.onFailure {
+                                fileCompletion = null
+                                val none = emptyArray<Uri>()
+                                callback(none)
+                                complete(none)
+                            }
+                        },
+                        cancel = { callback(emptyArray()) },
+                    )
+                }
             },
         )
         val iconsDir = File(filesDir, "icons")
@@ -626,8 +640,9 @@ private fun TopBar(
     val newTab = rawUrl.isBlank() || rawUrl == "about:blank"
     val shown = if (focused) text else (if (newTab) "" else rawUrl)
     val focusManager = LocalFocusManager.current
-    LaunchedEffect(focused, text) {
-        suggestions = if (focused) onSuggest(text) else emptyList()
+    LaunchedEffect(focused, text, rawUrl, newTab) {
+        val userHasEdited = newTab || text != rawUrl
+        suggestions = if (focused && text.isNotBlank() && userHasEdited) onSuggest(text) else emptyList()
     }
     val navigate: (String) -> Unit = { q ->
         when (val target = com.artt.minibrowser.engine.resolveNavigation(q, engine)) {
@@ -761,6 +776,7 @@ private fun TopBar(
                 val suggestionsWidth = with(density) {
                     (fieldSize.width + 48.dp.roundToPx() + 46.dp.roundToPx() + 48.dp.roundToPx() + 8.dp.roundToPx()).toDp()
                 }
+                val suggestionsHeight = (suggestions.size * 56 + 8).coerceAtMost(176).dp
                 Popup(
                     alignment = Alignment.TopStart,
                     offset = IntOffset(0, fieldSize.height + offsetY),
@@ -769,8 +785,7 @@ private fun TopBar(
                     Column(
                         Modifier
                             .width(suggestionsWidth)
-                            // Видно ~3 строки, остальное — прокрутка (список из 8 закрывал пол-экрана).
-                            .height(176.dp)
+                            .height(suggestionsHeight)
                             .clip(Radius.card)
                             .background(MaterialTheme.colorScheme.surface)
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
