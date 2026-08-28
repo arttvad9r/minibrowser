@@ -323,7 +323,6 @@ class MainActivity : ComponentActivity() {
                 if (showStart) recent = historyRepo.recent(3)
             }
 
-            BackHandler(enabled = screen != BrowserScreen.Browser) { browserViewModel.screen(BrowserScreen.Browser) }
             // Системный back на странице браузера — назад по истории вкладки.
             BackHandler(enabled = screen == BrowserScreen.Browser && currentTab?.canGoBack == true) {
                 currentTab?.session?.goBack()
@@ -331,7 +330,6 @@ class MainActivity : ComponentActivity() {
             // Во время fullscreen-видео back выходит из полноэкранного режима.
             val inFullscreen = currentTab?.fullscreen == true
             BackHandler(enabled = inFullscreen) { currentSession?.exitFullScreen() }
-            BackHandler(enabled = showSwitcher) { browserViewModel.showSwitcher(false) }
             BackHandler(enabled = showFind) {
                 currentSession?.finder?.clear()
                 browserViewModel.showFind(false)
@@ -437,7 +435,7 @@ class MainActivity : ComponentActivity() {
                             }
                             Box(Modifier.weight(1f)) {
                                 GeckoContent(currentTab, Modifier.fillMaxSize())
-                                PageProgress(currentTab)
+                                SmoothPageProgress(currentTab)
                                 if (showStart) {
                                     StartPage(
                                         bookmarks, iconsDir, recent, currentTab?.isPrivate == true,
@@ -489,7 +487,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         if (screen == BrowserScreen.History) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                            HistoryScreen(
+                            MotionHistoryScreen(
                                 historyRepo,
                                 iconsDir,
                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
@@ -499,7 +497,7 @@ class MainActivity : ComponentActivity() {
                                 })
                         }
                         if (screen == BrowserScreen.Bookmarks) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                            BookmarksScreen(
+                            MotionBookmarksScreen(
                                 bookmarks, iconsDir,
                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                 onOpen = { uri ->
