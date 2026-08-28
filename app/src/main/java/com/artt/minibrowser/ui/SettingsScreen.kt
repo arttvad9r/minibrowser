@@ -198,11 +198,11 @@ fun SettingsScreen(
     }
 
     if (showEnginePicker) {
-        BrowserBottomSheet(onDismissRequest = { showEnginePicker = false }) {
+        CompactChoiceSheet(onDismissRequest = { showEnginePicker = false }) {
             Text("Поисковая система", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             SearchEngine.entries.forEach { engine ->
-                ChoiceRow(engine.label, engine == prefs.searchEngine) {
+                CompactChoiceRow(engine.label, engine == prefs.searchEngine) {
                     onEngine(engine)
                     showEnginePicker = false
                 }
@@ -211,11 +211,11 @@ fun SettingsScreen(
     }
 
     if (showLanguagePicker) {
-        BrowserBottomSheet(onDismissRequest = { showLanguagePicker = false }) {
+        CompactChoiceSheet(onDismissRequest = { showLanguagePicker = false }) {
             Text("Язык перевода", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             translationLanguages.forEach { (label, code) ->
-                ChoiceRow(label, code == prefs.translateTarget) {
+                CompactChoiceRow(label, code == prefs.translateTarget) {
                     onTranslateLang(code)
                     showLanguagePicker = false
                 }
