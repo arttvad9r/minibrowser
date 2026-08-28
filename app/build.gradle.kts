@@ -48,7 +48,7 @@ kotlin {
 }
 dependencies {
     implementation("org.mozilla.geckoview:geckoview:154.0.20260814215756")
-    implementation(platform("androidx.compose:compose-bom:2024.09.03"))
+    implementation(platform("androidx.compose:compose-bom:2026.08.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.animation:animation")
