@@ -12,16 +12,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 /**
  * Shared motion container for full-screen browser destinations such as Settings/History/Bookmarks.
@@ -35,9 +34,9 @@ fun BrowserMotionScreen(
 ) {
     var entered by remember { mutableStateOf(false) }
     var leaving by remember { mutableStateOf(false) }
+    var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
     var predictiveActive by remember { mutableStateOf(false) }
     var predictiveProgress by remember { mutableFloatStateOf(0f) }
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val travelPx = with(density) { 22.dp.toPx() }
 
@@ -49,13 +48,17 @@ fun BrowserMotionScreen(
         label = "browserScreenMotion",
     )
 
+    LaunchedEffect(pendingExit) {
+        val action = pendingExit ?: return@LaunchedEffect
+        snapshotFlow { settledProgress }.first { it <= 0.015f }
+        pendingExit = null
+        action()
+    }
+
     fun requestExit(action: () -> Unit) {
-        if (leaving) return
+        if (leaving || pendingExit != null) return
         leaving = true
-        scope.launch {
-            delay(MotionTokens.Standard.toLong())
-            action()
-        }
+        pendingExit = action
     }
 
     PredictiveBackHandler(enabled = !leaving) { events ->
@@ -71,9 +74,7 @@ fun BrowserMotionScreen(
                 onBack()
             } else {
                 predictiveActive = false
-                leaving = true
-                delay(MotionTokens.Standard.toLong())
-                onBack()
+                requestExit(onBack)
             }
         } catch (_: CancellationException) {
             predictiveActive = false
