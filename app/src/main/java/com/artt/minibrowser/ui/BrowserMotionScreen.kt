@@ -2,8 +2,10 @@ package com.artt.minibrowser.ui
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -94,7 +96,8 @@ fun BrowserMotionScreen(
                 val scale = 0.985f + 0.015f * progress
                 scaleX = scale
                 scaleY = scale
-            },
+            }
+            .background(MaterialTheme.colorScheme.background),
     ) {
         content(::requestExit)
     }
