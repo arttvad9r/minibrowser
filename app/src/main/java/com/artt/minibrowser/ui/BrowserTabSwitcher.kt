@@ -132,7 +132,10 @@ fun BrowserTabSwitcher(
                 val gridState = rememberLazyGridState()
                 LaunchedEffect(currentId, tabs.size) {
                     val currentIndex = tabs.indexOfFirst { it.id == currentId }
-                    if (currentIndex >= 0) gridState.scrollToItem(currentIndex)
+                    if (currentIndex >= 0) {
+                        val rowStart = currentIndex - currentIndex % 2
+                        gridState.scrollToItem(rowStart)
+                    }
                 }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
