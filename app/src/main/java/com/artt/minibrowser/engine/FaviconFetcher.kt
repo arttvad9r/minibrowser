@@ -67,13 +67,13 @@ object FaviconFetcher {
         var best: File? = null
         var bestDimension = 0
 
-        candidates.forEachIndexed { index, url ->
+        for ((index, url) in candidates.withIndex()) {
             val temp = File("${dst.path}.$index.tmp")
             temp.delete()
             val dimensions = downloadCandidate(url, temp)
             if (dimensions == null) {
                 temp.delete()
-                return@forEachIndexed
+                continue
             }
 
             val dimension = minOf(dimensions.first, dimensions.second)
@@ -85,7 +85,7 @@ object FaviconFetcher {
                 temp.delete()
             }
 
-            if (bestDimension >= GOOD_ICON_DIMENSION) return@forEachIndexed
+            if (bestDimension >= GOOD_ICON_DIMENSION) break
         }
 
         val selected = best
