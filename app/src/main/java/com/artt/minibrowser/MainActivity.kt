@@ -225,29 +225,42 @@ class MainActivity : ComponentActivity() {
                 )
             },
             filePicker = { type, mimeTypes, callback ->
-                fileRequests.enqueue(
-                    start = { complete ->
-                        fileCompletion = { uris ->
-                            callback(uris)
-                            complete(uris)
-                        }
-                        when (type) {
-                            GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
-                                filePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
-                            GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
-                                folderPickerLauncher.launch(null)
-                            GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE ->
-                                singleFilePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
-                            else ->
-                                singleFilePickerLauncher.launch(mimeTypes.ifEmpty { arrayOf("*/*") })
-                        }
-                    },
-                    cancel = { callback(emptyArray()) },
-                )
+                runOnUiThread {
+                    fileRequests.enqueue(
+                        start = { complete ->
+                            val accepted = mimeTypes
+                                .filter { it.isNotBlank() && it.contains('/') }
+                                .distinct()
+                                .toTypedArray()
+                                .let { if (it.isEmpty()) arrayOf("*/*") else it }
+                            fileCompletion = { uris ->
+                                callback(uris)
+                                complete(uris)
+                            }
+                            runCatching {
+                                when (type) {
+                                    GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
+                                        filePickerLauncher.launch(accepted)
+                                    GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
+                                        folderPickerLauncher.launch(null)
+                                    GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE ->
+                                        singleFilePickerLauncher.launch(accepted)
+                                    else ->
+                                        singleFilePickerLauncher.launch(accepted)
+                                }
+                            }.onFailure {
+                                fileCompletion = null
+                                val none = emptyArray<Uri>()
+                                callback(none)
+                                complete(none)
+                            }
+                        },
+                        cancel = { callback(emptyArray()) },
+                    )
+                }
             },
         )
         val iconsDir = File(filesDir, "icons")
-        // Расширения ставятся один раз за процесс; тумблер применяется сразу после первого чтения настроек.
         lifecycleScope.launch {
             val prefs = settingsRepo.prefs.first()
             ExtensionLoader.installAll(Engine.runtime, prefs.adblockEnabled, prefs.votEnabled)
@@ -273,11 +286,9 @@ class MainActivity : ComponentActivity() {
             val focusManager = LocalFocusManager.current
             val omniboxFocus = remember { FocusRequester() }
 
-            // Уход с браузера закрывает подсказки омнибокса (попап рисуется поверх любых экранов).
             LaunchedEffect(screen, showSwitcher) {
                 if (screen != BrowserScreen.Browser || showSwitcher) focusManager.clearFocus(force = true)
             }
-            // Светлая тема — тёмные иконки системных баров, тёмная — светлые.
             LaunchedEffect(darkTheme) {
                 val c = WindowCompat.getInsetsController(window, window.decorView)
                 c.isAppearanceLightStatusBars = !darkTheme
@@ -300,7 +311,6 @@ class MainActivity : ComponentActivity() {
                 val u = currentTab?.url
                 bookmarked = !u.isNullOrBlank() && u.startsWith("http") && bookmarksRepo.isBookmarked(u)
             }
-            // Недавние страницы для домашнего экрана.
             var recent by remember { mutableStateOf(emptyList<HistoryEntry>()) }
             var recentReload by remember { mutableIntStateOf(0) }
             val showStart = screen == BrowserScreen.Browser &&
@@ -310,11 +320,9 @@ class MainActivity : ComponentActivity() {
             }
 
             BackHandler(enabled = screen != BrowserScreen.Browser) { browserViewModel.screen(BrowserScreen.Browser) }
-            // Системный back на странице браузера — назад по истории вкладки.
             BackHandler(enabled = screen == BrowserScreen.Browser && currentTab?.canGoBack == true) {
                 currentTab?.session?.goBack()
             }
-            // Во время fullscreen-видео back выходит из полноэкранного режима.
             val inFullscreen = currentTab?.fullscreen == true
             BackHandler(enabled = inFullscreen) { currentSession?.exitFullScreen() }
             BackHandler(enabled = showSwitcher) { browserViewModel.showSwitcher(false) }
@@ -366,8 +374,6 @@ class MainActivity : ComponentActivity() {
                     Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
-                        // Принимает на себя restoreDefaultFocus при получении окном фокуса,
-                        // иначе фокус уходит в первое поле (омнибокс) и выезжает клавиатура.
                         .focusable(),
                 ) {
                     Box(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -495,7 +501,6 @@ class MainActivity : ComponentActivity() {
                                 onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
                                 onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } })
                         }
-                        // Переключатель вкладок — полноэкранный слой поверх браузера.
                         if (showSwitcher) {
                             BrowserTabSwitcher(
                                 tabs, currentId, iconsDir,
@@ -514,7 +519,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        // Холодный старт с VIEW-интентом: хук ещё не готов — uri уйдёт в pendingUri.
         externalNavigation.accept(intent?.data?.toString())
     }
 
@@ -554,8 +558,29 @@ private fun GeckoContent(
         (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true))
 
     AndroidView(
-        factory = { context -> GeckoView(context) },
-        update = { view ->
+        factory = { context ->
+            androidx.swiperefreshlayout.widget.SwipeRefreshLayout(context).apply {
+                addView(
+                    GeckoView(context),
+                    android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            }
+        },
+        update = { refresh ->
+            val view = refresh.getChildAt(0) as GeckoView
+            val refreshable = session != null &&
+                (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true))
+            refresh.isEnabled = refreshable
+            refresh.setOnChildScrollUpCallback { _, _ -> (tab?.scrollY ?: 0) > 0 }
+            refresh.setOnRefreshListener {
+                if (refreshable) session?.reload() else refresh.isRefreshing = false
+            }
+            if (refresh.isRefreshing && (tab?.progress ?: -1f) < 0f) {
+                refresh.isRefreshing = false
+            }
             if (view.session !== session) {
                 TabPreviewStore.captureBeforeSessionSwap(view)
                 view.releaseSession()
@@ -583,8 +608,6 @@ private fun PageProgress(tab: Tab?) {
         )
     }
 }
-
-// ---------- Верхняя панель: омнибокс + подсказки + действия ----------
 
 @Composable
 private fun TopBar(
@@ -616,7 +639,6 @@ private fun TopBar(
     onSuggest: suspend (String) -> List<Suggestion>,
     onTranslate: () -> Unit,
 ) {
-    // Пока поле в фокусе — текст пользователя, иначе живой URL текущей вкладки.
     var text by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf(emptyList<Suggestion>()) }
@@ -626,8 +648,9 @@ private fun TopBar(
     val newTab = rawUrl.isBlank() || rawUrl == "about:blank"
     val shown = if (focused) text else (if (newTab) "" else rawUrl)
     val focusManager = LocalFocusManager.current
-    LaunchedEffect(focused, text) {
-        suggestions = if (focused) onSuggest(text) else emptyList()
+    LaunchedEffect(focused, text, rawUrl, newTab) {
+        val userHasEdited = newTab || text != rawUrl
+        suggestions = if (focused && text.isNotBlank() && userHasEdited) onSuggest(text) else emptyList()
     }
     val navigate: (String) -> Unit = { q ->
         when (val target = com.artt.minibrowser.engine.resolveNavigation(q, engine)) {
@@ -752,15 +775,13 @@ private fun TopBar(
                     )
                 }
             }
-            // Подсказки: лёгкая панель под адресной строкой вместо desktop-dropdown.
             if (focused && suggestions.isNotEmpty()) {
                 val density = LocalDensity.current
                 val offsetY = with(density) { 8.dp.roundToPx() }
-                // Расширяем surface до полезной ширины top bar, а не оставляем узкой
-                // карточкой только по ширине поля ввода.
                 val suggestionsWidth = with(density) {
                     (fieldSize.width + 48.dp.roundToPx() + 46.dp.roundToPx() + 48.dp.roundToPx() + 8.dp.roundToPx()).toDp()
                 }
+                val suggestionsHeight = (suggestions.size * 56 + 8).coerceAtMost(176).dp
                 Popup(
                     alignment = Alignment.TopStart,
                     offset = IntOffset(0, fieldSize.height + offsetY),
@@ -769,8 +790,7 @@ private fun TopBar(
                     Column(
                         Modifier
                             .width(suggestionsWidth)
-                            // Видно ~3 строки, остальное — прокрутка (список из 8 закрывал пол-экрана).
-                            .height(176.dp)
+                            .height(suggestionsHeight)
                             .clip(Radius.card)
                             .background(MaterialTheme.colorScheme.surface)
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
@@ -845,8 +865,6 @@ private fun TopBar(
     }
 }
 
-// bookmarked передаётся из MainActivity (состояние «текущий url в закладках»).
-
 @Composable
 private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
     Row(
@@ -868,8 +886,6 @@ private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
         }
     }
 }
-
-// ---------- Главное меню: bottom sheet ----------
 
 @Composable
 private fun MenuSheet(
@@ -1000,8 +1016,6 @@ private fun MenuDivider() {
     Spacer(Modifier.height(4.dp))
 }
 
-// ---------- Переключатель вкладок ----------
-
 @Composable
 private fun TabSwitcher(
     tabs: List<Tab>,
@@ -1050,7 +1064,6 @@ private fun tabsPlural(n: Int) = when {
     else -> "вкладок"
 }
 
-/** Карточка вкладки: заголовок с favicon, мини-адресная строка, зона превью. */
 @Composable
 private fun TabCard(
     tab: Tab,
@@ -1101,7 +1114,6 @@ private fun TabCard(
                 Icon(Icons.Filled.Close, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        // Мини-адресная строка, как на референсе.
         Row(
             Modifier
                 .padding(horizontal = 10.dp)
@@ -1119,7 +1131,6 @@ private fun TabCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        // Зона превью: снапшотов нет — честный плейсхолдер с favicon (без фейковых скриншотов).
         Box(
             Modifier
                 .fillMaxWidth()
@@ -1137,8 +1148,6 @@ private fun TabCard(
         }
     }
 }
-
-// ---------- Поиск по странице ----------
 
 @Composable
 private fun FindBar(session: GeckoSession, onClose: () -> Unit) {
@@ -1232,8 +1241,6 @@ private fun ErrorOverlay(message: String, onRetry: () -> Unit) {
     }
 }
 
-// ---------- История ----------
-
 @Composable
 private fun HistoryScreen(
     repo: HistoryRepository,
@@ -1296,7 +1303,6 @@ private fun HistoryScreen(
     }
 }
 
-/** Группировка по «Сегодня / Вчера / Ранее» на основе visitedAt. */
 private fun groupByDay(entries: List<HistoryEntry>): List<Pair<String, List<HistoryEntry>>> {
     val cal = Calendar.getInstance()
     val today = cal.clone() as Calendar
@@ -1314,8 +1320,6 @@ private fun groupByDay(entries: List<HistoryEntry>): List<Pair<String, List<Hist
     }
     return groups.filter { it.value.isNotEmpty() }.map { it.key to it.value.toList() }
 }
-
-// ---------- Закладки ----------
 
 @Composable
 private fun BookmarksScreen(
