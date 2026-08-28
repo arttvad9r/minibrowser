@@ -46,31 +46,28 @@ class BrowserApp : Application() {
     }
 
     /**
-     * Firefox/Focus keeps Gecko's own root IME-inset handling intact and separately resizes the
-     * browser UI root after the keyboard animation. On Android 15+ this avoids both failure modes
-     * we saw with manual clipping: a full-height page behind the keyboard and bottom-fixed web UI
-     * being moved without the actual GeckoView/Compose viewport shrinking.
+     * Mirrors Firefox/Focus IME handling: keep GeckoView's own root-window inset listener intact,
+     * and resize a normal Android browser-root View after the IME animation. This is deliberately
+     * separate from Gecko's visual-viewport handling.
      */
     private fun installFirefoxStyleImeResize() {
-        // Android 13/14 still use the normal adjustResize path in Minibrowser. Android 15+ enforces
-        // edge-to-edge for targetSdk 35, which is where Firefox's explicit IME synchronization is
-        // needed in our current layout.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return
+        // Mozilla's ImeInsetsSynchronizer is enabled from Android 13 onward. Do not restrict this to
+        // Android 15: Firefox applies the same browser-root synchronization on Android 13/14 too.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
 
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 if (activity !is MainActivity) return
-                val content = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
-                content.post {
-                    // ComponentActivity.setContent() installs one ComposeView in android.R.id.content.
-                    // Resize that child, while taking insets from the non-Compose parent as Mozilla
-                    // recommends (ComposeView is not a reliable source for raw IME insets).
-                    val browserRoot = content.getChildAt(0) ?: return@post
+                val browserRoot = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
+                browserRoot.post {
+                    // Firefox applies IME margins to a normal Android browser root, not to the
+                    // ComposeView that renders the browser UI. android.R.id.content is our closest
+                    // equivalent and also provides reliable raw WindowInsets.
                     if (browserRoot.layoutParams !is ViewGroup.MarginLayoutParams) return@post
 
                     ImeInsetsSynchronizer.setup(
                         targetView = browserRoot,
-                        insetsSource = content,
+                        insetsSource = browserRoot,
                         synchronizeViewWithIME = false,
                         onIMEAnimationStarted = { isKeyboardShowingUp, _ ->
                             if (!isKeyboardShowingUp) {
@@ -83,7 +80,7 @@ class BrowserApp : Application() {
                             }
                         },
                     )
-                    ViewCompat.requestApplyInsets(content)
+                    ViewCompat.requestApplyInsets(browserRoot)
                 }
             }
 
