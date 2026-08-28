@@ -656,15 +656,61 @@ private fun TopBar(
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onSiteInfo, modifier = Modifier.size(32.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                val leadingIsSearch = newTab
+                IconButton(
+                    onClick = {
+                        if (leadingIsSearch) omniboxFocus.requestFocus() else onSiteInfo()
+                    },
+                    modifier = Modifier
+                        .size(32.dp)
+                        .semantics {
+                            contentDescription = if (leadingIsSearch) "Поиск" else "Информация о сайте"
+                        },
+                ) {
+                    if (leadingIsSearch) {
                         if (tab?.isPrivate == true) {
-                            Icon(AppIcons.Incognito, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        } else if (tab?.securityState != SecurityState.Secure) {
-                            Icon(Icons.Filled.Search, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(
+                                AppIcons.Incognito,
+                                null,
+                                Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Icon(
+                                Icons.Filled.Search,
+                                null,
+                                Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                        if (tab?.securityState == SecurityState.Secure) {
-                            Icon(Icons.Filled.Lock, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (tab?.isPrivate == true) {
+                                Icon(
+                                    AppIcons.Incognito,
+                                    null,
+                                    Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (tab?.securityState == SecurityState.Secure) {
+                                Icon(
+                                    Icons.Filled.Lock,
+                                    null,
+                                    Modifier.size(15.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                Icon(
+                                    AppIcons.Globe,
+                                    null,
+                                    Modifier.size(17.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
