@@ -1,35 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Щит-глобус: privacy и browser в одном знаке. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group
-        android:scaleX="0.8"
-        android:scaleY="0.8"
-        android:translateX="10.8"
-        android:translateY="10.8">
-        <path
-            android:pathData="M54,20 L82,30 L82,54 C82,72 70,84 54,90 C38,84 26,72 26,54 L26,30 Z"
-            android:fillColor="#34423C"
-            android:strokeColor="#34423C"
-            android:strokeWidth="2"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M54,36 C62.84,36 70,43.16 70,52 C70,60.84 62.84,68 54,68 C45.16,68 38,60.84 38,52 C38,43.16 45.16,36 54,36 Z"
-            android:strokeColor="#F7F2E8"
-            android:strokeWidth="4"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M38,52 L70,52"
-            android:strokeColor="#F7F2E8"
-            android:strokeWidth="4"
-            android:strokeLineCap="round" />
-        <path
-            android:pathData="M54,36 C58.42,36 62,43.16 62,52 C62,60.84 58.42,68 54,68 C49.58,68 46,60.84 46,52 C46,43.16 49.58,36 54,36 Z"
-            android:strokeColor="#F7F2E8"
-            android:strokeWidth="4"
-            android:strokeLineJoin="round" />
-    </group>
+
+    <!-- Bold globe mark kept inside the adaptive-icon safe zone. -->
+    <path
+        android:pathData="M54,24 C70.57,24 84,37.43 84,54 C84,70.57 70.57,84 54,84 C37.43,84 24,70.57 24,54 C24,37.43 37.43,24 54,24 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6.5"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:pathData="M54,24 C61.18,24 67,37.43 67,54 C67,70.57 61.18,84 54,84 C46.82,84 41,70.57 41,54 C41,37.43 46.82,24 54,24 Z"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:pathData="M29,42 L79,42"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+
+    <path
+        android:pathData="M24,54 L84,54"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+
+    <path
+        android:pathData="M29,66 L79,66"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
 </vector>
