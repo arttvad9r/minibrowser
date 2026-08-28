@@ -361,24 +361,24 @@ fun SettingsRow(
     }
 }
 
-/** Строка выбора: галка появляется коротко и без движения layout. */
+/** Строка выбора: компактная 48dp hit-area, галка появляется без движения layout. */
 @Composable
 fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .heightIn(min = 54.dp)
-            .padding(horizontal = 16.dp, vertical = 9.dp),
+            .height(48.dp)
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         AnimatedVisibility(
             visible = selected,
             enter = fadeIn(tween(MotionTokens.Quick)) + scaleIn(tween(MotionTokens.Standard), initialScale = 0.82f),
             exit = fadeOut(tween(MotionTokens.Quick)) + scaleOut(tween(MotionTokens.Quick), targetScale = 0.82f),
         ) {
-            Icon(Icons.Filled.Check, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurface)
+            Icon(Icons.Filled.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
