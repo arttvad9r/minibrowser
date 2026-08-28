@@ -6,6 +6,7 @@ import android.util.Log
 import com.artt.minibrowser.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.artt.minibrowser.data.HistorySink
@@ -178,6 +179,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var url by mutableStateOf("")
     var title by mutableStateOf("")
     var progress by mutableFloatStateOf(-1f)
+    var scrollY by mutableIntStateOf(0)
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
     var desktop by mutableStateOf(false)
@@ -385,6 +387,7 @@ class TabManager(
                 tab.progressGate.accept(progress = 5)
                 tab.loadError = null
                 tab.securityState = SecurityState.Unknown
+                tab.scrollY = 0
                 tab.progress = 0.05f
                 tab.url = url
             }
@@ -465,6 +468,12 @@ class TabManager(
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
                 if (BuildConfig.DEBUG) Log.d("MinibrowserNavigation", "new session uri=$uri")
                 return GeckoResult.fromValue(newWindowSession(tab.isPrivate))
+            }
+        }
+
+        tab.session.scrollDelegate = object : GeckoSession.ScrollDelegate {
+            override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
+                tab.scrollY = scrollY.coerceAtLeast(0)
             }
         }
 
@@ -569,6 +578,7 @@ class TabManager(
         closeIfOpen(tab.session)
         tab.canGoBack = false
         tab.canGoForward = false
+        tab.scrollY = 0
         val fresh = GeckoSession(sessionSettings(tab.isPrivate))
         tab.session = fresh
         attachDelegates(tab)
