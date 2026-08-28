@@ -226,15 +226,6 @@ private fun BrowserTabCard(
     ) {
         if (tab.isPrivate) {
             Box(Modifier.fillMaxWidth().height(40.dp)) {
-                Icon(
-                    AppIcons.Incognito,
-                    "Приватная вкладка",
-                    Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 10.dp)
-                        .size(17.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
                 Text(
                     "Приватная вкладка",
                     Modifier.align(Alignment.Center),
@@ -242,7 +233,7 @@ private fun BrowserTabCard(
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
                 )
                 IconButton(
                     onClick = { if (!closing) closing = true },
@@ -316,31 +307,6 @@ private fun BrowserTabCard(
                     )
                 } else {
                     TabPreviewFallback(tab, host, iconsDir)
-                }
-            }
-            if (tab.isPrivate) {
-                Row(
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .clip(Radius.button)
-                        .background(MaterialTheme.colorScheme.inverseSurface)
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        AppIcons.Incognito,
-                        null,
-                        Modifier.size(13.dp),
-                        tint = MaterialTheme.colorScheme.inverseOnSurface,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        "Приватная",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.inverseOnSurface,
-                        fontWeight = FontWeight.SemiBold,
-                    )
                 }
             }
         }
