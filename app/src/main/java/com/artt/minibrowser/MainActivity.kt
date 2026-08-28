@@ -126,6 +126,7 @@ import com.artt.minibrowser.ui.AddBookmarkSheet
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BookmarkActionsSheet
 import com.artt.minibrowser.ui.BrowserBottomSheet
+import com.artt.minibrowser.ui.BrowserTabSwitcher
 import com.artt.minibrowser.ui.BrowserTextField
 import com.artt.minibrowser.ui.EmptyState
 import com.artt.minibrowser.ui.Favicon
@@ -135,6 +136,7 @@ import com.artt.minibrowser.ui.Radius
 import com.artt.minibrowser.ui.SettingsScreen
 import com.artt.minibrowser.ui.SheetRow
 import com.artt.minibrowser.ui.StartPage
+import com.artt.minibrowser.ui.TabPreviewStore
 import com.artt.minibrowser.ui.ToggleRow
 import com.artt.minibrowser.ui.hostOf
 import kotlinx.coroutines.flow.first
@@ -385,7 +387,10 @@ class MainActivity : ComponentActivity() {
                                 onForward = { currentSession?.goForward() },
                                 onReload = { currentSession?.reload() },
                                 onSiteInfo = { browserViewModel.showSiteInfo(true) },
-                                onSwitcher = { browserViewModel.showSwitcher(true) },
+                                onSwitcher = {
+                                    TabPreviewStore.captureCurrent()
+                                    browserViewModel.showSwitcher(true)
+                                },
                                 onNewTab = { tabManager.newTab(null) },
                                 onNewPrivateTab = { tabManager.newTab(null, private = true) },
                                 onFind = { browserViewModel.showFind(true) },
@@ -417,7 +422,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                             Box(Modifier.weight(1f)) {
-                                GeckoContent(currentSession, Modifier.fillMaxSize())
+                                GeckoContent(currentTab, Modifier.fillMaxSize())
                                 PageProgress(currentTab)
                                 if (showStart) {
                                     StartPage(
@@ -492,10 +497,13 @@ class MainActivity : ComponentActivity() {
                         }
                         // Переключатель вкладок — полноэкранный слой поверх браузера.
                         if (showSwitcher) {
-                            TabSwitcher(
+                            BrowserTabSwitcher(
                                 tabs, currentId, iconsDir,
                                 onSelect = { tabManager.select(it); browserViewModel.showSwitcher(false) },
-                                onClose = { tabManager.closeTab(it) },
+                                onClose = {
+                                    TabPreviewStore.remove(it)
+                                    tabManager.closeTab(it)
+                                },
                                 onNew = { browserViewModel.showSwitcher(false); tabManager.newTab(null) },
                                 onDismiss = { browserViewModel.showSwitcher(false) })
                         }
@@ -535,16 +543,31 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun GeckoContent(
-    session: GeckoSession?,
+    tab: Tab?,
     modifier: Modifier = Modifier,
 ) {
+    val session = tab?.session
+    val tabId = tab?.id
+    val url = tab?.url.orEmpty()
+    val isPrivate = tab?.isPrivate == true
+    val pageSettled = tab != null && tab.progress < 0f &&
+        (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true))
+
     AndroidView(
         factory = { context -> GeckoView(context) },
         update = { view ->
             if (view.session !== session) {
+                TabPreviewStore.captureBeforeSessionSwap(view)
                 view.releaseSession()
                 session?.let(view::setSession)
             }
+            TabPreviewStore.maybeCapture(
+                view = view,
+                tabId = tabId,
+                url = url,
+                isPrivate = isPrivate,
+                pageSettled = pageSettled,
+            )
         },
         modifier = modifier,
     )
