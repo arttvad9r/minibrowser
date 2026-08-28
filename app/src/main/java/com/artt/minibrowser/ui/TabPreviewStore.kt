@@ -20,11 +20,11 @@ object TabPreviewStore {
     private val previews = mutableStateMapOf<Long, Bitmap>()
     private val lastCapturedUrl = mutableMapOf<Long, String>()
     private val inFlight = mutableSetOf<Long>()
+    private val removedTabs = mutableSetOf<Long>()
 
     private var currentView = WeakReference<GeckoView>(null)
     private var currentTabId: Long? = null
     private var currentUrl: String = ""
-    private var currentPrivate: Boolean = false
 
     operator fun get(tabId: Long): Bitmap? = previews[tabId]
 
@@ -32,7 +32,9 @@ object TabPreviewStore {
         currentView = WeakReference(view)
         currentTabId = tabId
         currentUrl = url
-        currentPrivate = isPrivate
+        // Private previews intentionally use exactly the same in-memory path and are never persisted.
+        if (isPrivate && tabId != null) removedTabs.remove(tabId)
+        if (!isPrivate && tabId != null) removedTabs.remove(tabId)
     }
 
     /** Capture once after a URL has settled; opening/switching tabs can force a fresher frame. */
@@ -62,29 +64,32 @@ object TabPreviewStore {
     }
 
     fun remove(tabId: Long) {
-        previews.remove(tabId)?.let { bitmap ->
-            if (!bitmap.isRecycled) bitmap.recycle()
-        }
+        removedTabs += tabId
+        previews.remove(tabId)
         lastCapturedUrl.remove(tabId)
         inFlight.remove(tabId)
         if (currentTabId == tabId) {
             currentTabId = null
             currentUrl = ""
-            currentPrivate = false
         }
     }
 
     private fun capture(view: GeckoView, tabId: Long, url: String) {
-        if (!inFlight.add(tabId)) return
+        if (tabId in removedTabs || !inFlight.add(tabId)) return
         runCatching {
             view.capturePixels().accept(
                 { source ->
                     inFlight.remove(tabId)
-                    if (source == null || source.width <= 0 || source.height <= 0) return@accept
-                    val preview = downscale(source)
-                    val previous = previews.put(tabId, preview)
-                    if (previous != null && previous !== preview && !previous.isRecycled) previous.recycle()
-                    lastCapturedUrl[tabId] = url
+                    if (source != null && source.width > 0 && source.height > 0) {
+                        if (tabId in removedTabs) {
+                            if (!source.isRecycled) source.recycle()
+                        } else {
+                            // Do not recycle a replaced preview here: Crossfade may still draw it
+                            // for a few frames after the state map changes.
+                            previews[tabId] = downscale(source)
+                            lastCapturedUrl[tabId] = url
+                        }
+                    }
                 },
                 {
                     // A compositor that is not ready is a normal transient state; fallback UI stays.
