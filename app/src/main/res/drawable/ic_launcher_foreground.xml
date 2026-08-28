@@ -5,36 +5,46 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Bold globe mark kept inside the adaptive-icon safe zone. -->
-    <path
-        android:pathData="M54,24 C70.57,24 84,37.43 84,54 C84,70.57 70.57,84 54,84 C37.43,84 24,70.57 24,54 C24,37.43 37.43,24 54,24 Z"
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6.5"
-        android:strokeLineJoin="round" />
+    <!--
+         Keep the mark deliberately smaller than the nominal adaptive-icon safe zone.
+         Some OEM launchers visually enlarge the foreground layer, so the previous 60dp globe
+         looked oversized. Scaling around the true centre preserves the circle while adding air.
+    -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.78"
+        android:scaleY="0.78">
+        <path
+            android:pathData="M54,24 C70.57,24 84,37.43 84,54 C84,70.57 70.57,84 54,84 C37.43,84 24,70.57 24,54 C24,37.43 37.43,24 54,24 Z"
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="6.5"
+            android:strokeLineJoin="round" />
 
-    <path
-        android:pathData="M54,24 C61.18,24 67,37.43 67,54 C67,70.57 61.18,84 54,84 C46.82,84 41,70.57 41,54 C41,37.43 46.82,24 54,24 Z"
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineJoin="round" />
+        <path
+            android:pathData="M54,24 C61.18,24 67,37.43 67,54 C67,70.57 61.18,84 54,84 C46.82,84 41,70.57 41,54 C41,37.43 46.82,24 54,24 Z"
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="6"
+            android:strokeLineJoin="round" />
 
-    <path
-        android:pathData="M29,42 L79,42"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round" />
+        <path
+            android:pathData="M29,42 L79,42"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round" />
 
-    <path
-        android:pathData="M24,54 L84,54"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round" />
+        <path
+            android:pathData="M24,54 L84,54"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round" />
 
-    <path
-        android:pathData="M29,66 L79,66"
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round" />
+        <path
+            android:pathData="M29,66 L79,66"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="6"
+            android:strokeLineCap="round" />
+    </group>
 </vector>
