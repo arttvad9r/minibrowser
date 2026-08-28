@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +63,7 @@ import com.artt.minibrowser.engine.Tab
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import java.io.File
 
 /**
@@ -94,10 +96,16 @@ fun BrowserTabSwitcher(
         entered = true
     }
 
+    val settledProgress by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = MotionTokens.ExpressiveSpatial,
+        label = "tabSwitcherReveal",
+    )
+
     LaunchedEffect(exitAction) {
         val action = exitAction ?: return@LaunchedEffect
         entered = false
-        delay(MotionTokens.Emphasis.toLong())
+        snapshotFlow { settledProgress }.first { it <= 0.015f }
         action()
         exitAction = null
         exitHeroId = null
@@ -124,11 +132,7 @@ fun BrowserTabSwitcher(
                 onDismiss()
             } else {
                 predictiveActive = false
-                exitHeroId = currentId
-                heroEnabledForExit = true
-                entered = false
-                delay(MotionTokens.Emphasis.toLong())
-                onDismiss()
+                requestExit(currentId, action = onDismiss)
             }
         } catch (_: CancellationException) {
             predictiveActive = false
@@ -136,11 +140,6 @@ fun BrowserTabSwitcher(
         }
     }
 
-    val settledProgress by animateFloatAsState(
-        targetValue = if (entered) 1f else 0f,
-        animationSpec = MotionTokens.ExpressiveSpatial,
-        label = "tabSwitcherReveal",
-    )
     val transitionProgress = if (predictiveActive) {
         1f - predictiveProgress
     } else {
