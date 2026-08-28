@@ -2,7 +2,9 @@ package com.artt.minibrowser.ui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -73,7 +75,7 @@ fun BrowserTabSwitcher(
     LaunchedEffect(Unit) { entered = true }
     val reveal by animateFloatAsState(
         targetValue = if (entered) 1f else 0f,
-        animationSpec = tween(MotionTokens.Standard),
+        animationSpec = MotionTokens.ExpressiveSpatial,
         label = "tabSwitcherReveal",
     )
 
@@ -83,8 +85,9 @@ fun BrowserTabSwitcher(
             .background(MaterialTheme.colorScheme.background)
             .graphicsLayer {
                 alpha = reveal
-                scaleX = 0.992f + 0.008f * reveal
-                scaleY = 0.992f + 0.008f * reveal
+                val scale = 0.985f + 0.015f * reveal
+                scaleX = scale
+                scaleY = scale
             },
     ) {
         Row(
@@ -151,6 +154,14 @@ fun BrowserTabSwitcher(
                             tab = tab,
                             isCurrent = tab.id == currentId,
                             iconsDir = iconsDir,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(MotionTokens.Standard),
+                                placementSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                                fadeOutSpec = tween(MotionTokens.Quick),
+                            ),
                             onSelect = { onSelect(tab.id) },
                             onClose = { onClose(tab.id) },
                         )
