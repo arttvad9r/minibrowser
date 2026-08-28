@@ -659,12 +659,20 @@ private fun TopBar(
                 val leadingIsSearch = newTab
                 IconButton(
                     onClick = {
-                        if (leadingIsSearch) omniboxFocus.requestFocus() else onSiteInfo()
+                        if (leadingIsSearch) {
+                            if (text.isBlank()) omniboxFocus.requestFocus() else navigate(text)
+                        } else {
+                            onSiteInfo()
+                        }
                     },
                     modifier = Modifier
                         .size(32.dp)
                         .semantics {
-                            contentDescription = if (leadingIsSearch) "Поиск" else "Информация о сайте"
+                            contentDescription = when {
+                                !leadingIsSearch -> "Информация о сайте"
+                                text.isNotBlank() -> "Искать"
+                                else -> "Поиск"
+                            }
                         },
                 ) {
                     if (leadingIsSearch) {
