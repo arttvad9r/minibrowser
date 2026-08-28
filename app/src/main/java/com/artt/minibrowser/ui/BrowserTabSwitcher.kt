@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -54,8 +55,8 @@ import java.io.File
 
 /**
  * Browser-style tab overview with honest page thumbnails captured from GeckoView.
- * No fake browser chrome is drawn into previews: when a frame is unavailable we show a quiet
- * favicon fallback and replace it with the real render using a short crossfade.
+ * Phone layout intentionally uses two compact columns: adaptive minimum widths could collapse to
+ * one giant column on narrower devices, which makes a browser with many tabs impractical.
  */
 @Composable
 fun BrowserTabSwitcher(
@@ -121,19 +122,25 @@ fun BrowserTabSwitcher(
                         tab = tab,
                         isCurrent = tab.id == currentId,
                         iconsDir = iconsDir,
-                        modifier = Modifier.width(216.dp),
+                        modifier = Modifier.width(224.dp),
                         onSelect = { onSelect(tab.id) },
                         onClose = { onClose(tab.id) },
                     )
                 }
             }
             else -> {
+                val gridState = rememberLazyGridState()
+                LaunchedEffect(currentId, tabs.size) {
+                    val currentIndex = tabs.indexOfFirst { it.id == currentId }
+                    if (currentIndex >= 0) gridState.scrollToItem(currentIndex)
+                }
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 164.dp),
+                    columns = GridCells.Fixed(2),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(tabs, key = { it.id }) { tab ->
                         BrowserTabCard(
@@ -180,7 +187,7 @@ private fun BrowserTabCard(
         label = "tabClose",
     )
     val borderColor by animateColorAsState(
-        targetValue = if (isCurrent) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant,
+        targetValue = if (isCurrent) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
         animationSpec = tween(MotionTokens.Standard),
         label = "tabBorder",
     )
@@ -201,24 +208,24 @@ private fun BrowserTabCard(
             }
             .clip(Radius.card)
             .background(cardColor)
-            .border(if (isCurrent) 1.5.dp else 1.dp, borderColor, Radius.card)
+            .border(1.dp, borderColor, Radius.card)
             .softClickable(enabled = !closing, pressedScale = 0.985f, onClick = onSelect),
     ) {
         Row(
-            Modifier.fillMaxWidth().height(44.dp).padding(start = 12.dp, end = 2.dp),
+            Modifier.fillMaxWidth().height(40.dp).padding(start = 10.dp, end = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (tab.isPrivate) {
                 Icon(
                     AppIcons.Incognito,
                     "Приватная вкладка",
-                    Modifier.size(18.dp),
+                    Modifier.size(17.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                Favicon(host, iconsDir, 18.dp)
+                Favicon(host, iconsDir, 17.dp)
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(7.dp))
             Text(
                 tab.title.ifBlank {
                     if (tab.url.isBlank() || tab.url == "about:blank") "Новая вкладка" else host.ifBlank { tab.url }
@@ -226,18 +233,18 @@ private fun BrowserTabCard(
                 Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
             )
             IconButton(
                 onClick = { if (!closing) closing = true },
                 enabled = !closing,
-                modifier = Modifier.size(40.dp).semantics { contentDescription = "Закрыть вкладку" },
+                modifier = Modifier.size(36.dp).semantics { contentDescription = "Закрыть вкладку" },
             ) {
                 Icon(
                     Icons.Filled.Close,
                     null,
-                    Modifier.size(18.dp),
+                    Modifier.size(17.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -246,7 +253,7 @@ private fun BrowserTabCard(
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(0.78f)
+                .aspectRatio(0.88f)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             Crossfade(
@@ -267,19 +274,6 @@ private fun BrowserTabCard(
                 }
             }
         }
-
-        if (host.isNotBlank()) {
-            Text(
-                host.removePrefix("www."),
-                Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Spacer(Modifier.height(8.dp))
-        }
     }
 }
 
@@ -294,25 +288,25 @@ private fun TabPreviewFallback(tab: Tab, host: String, iconsDir: File) {
             Icon(
                 AppIcons.Incognito,
                 null,
-                Modifier.size(38.dp),
+                Modifier.size(34.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
             )
         } else if (host.isNotBlank()) {
-            Favicon(host, iconsDir, 44.dp)
+            Favicon(host, iconsDir, 40.dp)
         } else {
             Icon(
                 AppIcons.Globe,
                 null,
-                Modifier.size(38.dp),
+                Modifier.size(34.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             )
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             if (host.isBlank()) "Новая вкладка" else host.removePrefix("www."),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
