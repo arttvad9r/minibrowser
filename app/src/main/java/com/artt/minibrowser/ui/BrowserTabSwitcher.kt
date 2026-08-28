@@ -1,5 +1,6 @@
 package com.artt.minibrowser.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -72,7 +73,20 @@ fun BrowserTabSwitcher(
     onDismiss: () -> Unit,
 ) {
     var entered by remember { mutableStateOf(false) }
+    var exitAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     LaunchedEffect(Unit) { entered = true }
+    LaunchedEffect(exitAction) {
+        val action = exitAction ?: return@LaunchedEffect
+        entered = false
+        delay(MotionTokens.Emphasis.toLong())
+        action()
+        exitAction = null
+    }
+    val requestExit: (() -> Unit) -> Unit = { action ->
+        if (exitAction == null) exitAction = action
+    }
+    BackHandler(enabled = exitAction == null) { requestExit(onDismiss) }
+
     val reveal by animateFloatAsState(
         targetValue = if (entered) 1f else 0f,
         animationSpec = MotionTokens.ExpressiveSpatial,
@@ -84,8 +98,9 @@ fun BrowserTabSwitcher(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .graphicsLayer {
-                alpha = reveal
-                val scale = 0.985f + 0.015f * reveal
+                val progress = reveal.coerceIn(0f, 1f)
+                alpha = progress
+                val scale = 0.985f + 0.015f * progress
                 scaleX = scale
                 scaleY = scale
             },
@@ -95,7 +110,8 @@ fun BrowserTabSwitcher(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(
-                onClick = onDismiss,
+                onClick = { requestExit(onDismiss) },
+                enabled = exitAction == null,
                 modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
             ) {
                 Icon(AppIcons.ChevronDown, null)
@@ -107,7 +123,8 @@ fun BrowserTabSwitcher(
                 style = MaterialTheme.typography.titleMedium,
             )
             IconButton(
-                onClick = onNew,
+                onClick = { requestExit(onNew) },
+                enabled = exitAction == null,
                 modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
             ) {
                 Icon(Icons.Filled.Add, null)
@@ -127,7 +144,7 @@ fun BrowserTabSwitcher(
                         isCurrent = tab.id == currentId,
                         iconsDir = iconsDir,
                         modifier = Modifier.width(224.dp),
-                        onSelect = { onSelect(tab.id) },
+                        onSelect = { requestExit { onSelect(tab.id) } },
                         onClose = { onClose(tab.id) },
                     )
                 }
@@ -162,7 +179,7 @@ fun BrowserTabSwitcher(
                                 ),
                                 fadeOutSpec = tween(MotionTokens.Quick),
                             ),
-                            onSelect = { onSelect(tab.id) },
+                            onSelect = { requestExit { onSelect(tab.id) } },
                             onClose = { onClose(tab.id) },
                         )
                     }
