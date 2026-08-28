@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
@@ -48,6 +49,16 @@ fun <T> expressiveSpatialSpring(): SpringSpec<T> = spring(
     stiffness = 360f,
 )
 
+@Composable
+private fun pressScale(enabled: Boolean, pressed: Boolean, pressedScale: Float): Float {
+    val scale by animateFloatAsState(
+        targetValue = if (enabled && pressed) pressedScale else 1f,
+        animationSpec = if (pressed) MotionTokens.PressSpring else MotionTokens.ReleaseSpring,
+        label = "pressScale",
+    )
+    return scale
+}
+
 /**
  * Small physical press feedback for app chrome. The transform stays in the graphics layer, so it
  * does not trigger layout or disturb GeckoView/content scrolling.
@@ -60,11 +71,7 @@ fun Modifier.softClickable(
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (enabled && pressed) pressedScale else 1f,
-        animationSpec = if (pressed) MotionTokens.PressSpring else MotionTokens.ReleaseSpring,
-        label = "pressScale",
-    )
+    val scale = pressScale(enabled, pressed, pressedScale)
     return graphicsLayer {
         scaleX = scale
         scaleY = scale
@@ -72,6 +79,29 @@ fun Modifier.softClickable(
         interactionSource = interactionSource,
         indication = LocalIndication.current,
         enabled = enabled,
+        onClick = onClick,
+    )
+}
+
+/** Same restrained press feedback while preserving long-click semantics. */
+@Composable
+fun Modifier.softCombinedClickable(
+    enabled: Boolean = true,
+    pressedScale: Float = 0.97f,
+    onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit,
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale = pressScale(enabled, pressed, pressedScale)
+    return graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }.combinedClickable(
+        interactionSource = interactionSource,
+        indication = LocalIndication.current,
+        enabled = enabled,
+        onLongClick = onLongClick,
         onClick = onClick,
     )
 }
