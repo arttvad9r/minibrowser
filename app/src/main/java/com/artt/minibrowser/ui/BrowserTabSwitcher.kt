@@ -1,6 +1,6 @@
 package com.artt.minibrowser.ui
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -37,15 +37,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -53,14 +59,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.engine.Tab
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import java.io.File
 
 /**
- * Browser-style tab overview with honest page thumbnails captured from GeckoView.
- * Phone layout intentionally uses two compact columns: adaptive minimum widths could collapse to
- * one giant column on narrower devices, which makes a browser with many tabs impractical.
- * Private tabs are intentionally rendered without page pixels.
+ * Browser-style tab overview with real page previews. Normal tabs use the captured Gecko frame as
+ * a container-transform bridge; GeckoView itself is never transformed. Private tabs deliberately
+ * fall back to the restrained whole-screen transition because their pixels are never cached.
  */
 @Composable
 fun BrowserTabSwitcher(
@@ -74,120 +81,225 @@ fun BrowserTabSwitcher(
 ) {
     var entered by remember { mutableStateOf(false) }
     var exitAction by remember { mutableStateOf<(() -> Unit)?>(null) }
-    LaunchedEffect(Unit) { entered = true }
+    var exitHeroId by remember { mutableStateOf<Long?>(null) }
+    var heroEnabledForExit by remember { mutableStateOf(true) }
+    var predictiveActive by remember { mutableStateOf(false) }
+    var predictiveProgress by remember { mutableFloatStateOf(0f) }
+    var rootBounds by remember { mutableStateOf(Rect.Zero) }
+    val cardBounds = remember { mutableStateMapOf<Long, Rect>() }
+
+    // Give the grid one frame to position/scroll the current card before the hero starts shrinking.
+    LaunchedEffect(Unit) {
+        delay(24)
+        entered = true
+    }
+
     LaunchedEffect(exitAction) {
         val action = exitAction ?: return@LaunchedEffect
         entered = false
         delay(MotionTokens.Emphasis.toLong())
         action()
         exitAction = null
+        exitHeroId = null
+        heroEnabledForExit = true
     }
-    val requestExit: (() -> Unit) -> Unit = { action ->
-        if (exitAction == null) exitAction = action
-    }
-    BackHandler(enabled = exitAction == null) { requestExit(onDismiss) }
 
-    val reveal by animateFloatAsState(
+    fun requestExit(heroId: Long?, useHero: Boolean = true, action: () -> Unit) {
+        if (exitAction != null) return
+        exitHeroId = heroId
+        heroEnabledForExit = useHero
+        exitAction = action
+    }
+
+    PredictiveBackHandler(enabled = exitAction == null) { events ->
+        var receivedProgress = false
+        try {
+            predictiveActive = true
+            events.collect { event ->
+                receivedProgress = true
+                predictiveProgress = event.progress.coerceIn(0f, 1f)
+            }
+            if (receivedProgress) {
+                predictiveProgress = 1f
+                onDismiss()
+            } else {
+                predictiveActive = false
+                exitHeroId = currentId
+                heroEnabledForExit = true
+                entered = false
+                delay(MotionTokens.Emphasis.toLong())
+                onDismiss()
+            }
+        } catch (_: CancellationException) {
+            predictiveActive = false
+            predictiveProgress = 0f
+        }
+    }
+
+    val settledProgress by animateFloatAsState(
         targetValue = if (entered) 1f else 0f,
         animationSpec = MotionTokens.ExpressiveSpatial,
         label = "tabSwitcherReveal",
     )
+    val transitionProgress = if (predictiveActive) {
+        1f - predictiveProgress
+    } else {
+        settledProgress
+    }.coerceIn(0f, 1f)
 
-    Column(
+    val heroId = when {
+        predictiveActive -> currentId
+        exitAction != null && heroEnabledForExit -> exitHeroId
+        exitAction != null -> null
+        else -> currentId
+    }
+    val heroPreview = heroId?.let(TabPreviewStore::get)?.takeUnless { it.isRecycled }
+    val heroTarget = heroId?.let(cardBounds::get)
+    val hasHero = heroPreview != null && heroTarget != null && rootBounds.width > 1f && rootBounds.height > 1f
+    val chromeProgress = if (hasHero) {
+        ((transitionProgress - 0.18f) / 0.82f).coerceIn(0f, 1f)
+    } else {
+        transitionProgress
+    }
+
+    Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .graphicsLayer {
-                val progress = reveal.coerceIn(0f, 1f)
-                alpha = progress
-                val scale = 0.985f + 0.015f * progress
-                scaleX = scale
-                scaleY = scale
-            },
+            .onGloballyPositioned { rootBounds = it.boundsInWindow() },
     ) {
-        Row(
-            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(
-                onClick = { requestExit(onDismiss) },
-                enabled = exitAction == null,
-                modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
-            ) {
-                Icon(AppIcons.ChevronDown, null)
-            }
-            Text(
-                "${tabs.size} ${tabsPlural(tabs.size)}",
-                Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            IconButton(
-                onClick = { requestExit(onNew) },
-                enabled = exitAction == null,
-                modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
-            ) {
-                Icon(Icons.Filled.Add, null)
-            }
-        }
-
-        when (tabs.size) {
-            0 -> EmptyState(AppIcons.Globe, "Нет открытых вкладок")
-            1 -> {
-                val tab = tabs.first()
-                Box(
-                    Modifier.fillMaxSize().padding(top = 8.dp),
-                    contentAlignment = Alignment.TopCenter,
-                ) {
-                    BrowserTabCard(
-                        tab = tab,
-                        isCurrent = tab.id == currentId,
-                        iconsDir = iconsDir,
-                        modifier = Modifier.width(224.dp),
-                        onSelect = { requestExit { onSelect(tab.id) } },
-                        onClose = { onClose(tab.id) },
-                    )
-                }
-            }
-            else -> {
-                val gridState = rememberLazyGridState()
-                LaunchedEffect(currentId, tabs.size) {
-                    val currentIndex = tabs.indexOfFirst { it.id == currentId }
-                    if (currentIndex >= 0) {
-                        val rowStart = currentIndex - currentIndex % 2
-                        gridState.scrollToItem(rowStart)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .graphicsLayer {
+                    alpha = chromeProgress
+                    if (!hasHero) {
+                        val scale = 0.985f + 0.015f * chromeProgress
+                        scaleX = scale
+                        scaleY = scale
                     }
-                }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                },
+        ) {
+            Row(
+                Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = { requestExit(currentId, action = onDismiss) },
+                    enabled = exitAction == null,
+                    modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
                 ) {
-                    items(tabs, key = { it.id }) { tab ->
+                    Icon(AppIcons.ChevronDown, null)
+                }
+                Text(
+                    "${tabs.size} ${tabsPlural(tabs.size)}",
+                    Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                IconButton(
+                    onClick = { requestExit(null, useHero = false, action = onNew) },
+                    enabled = exitAction == null,
+                    modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
+                ) {
+                    Icon(Icons.Filled.Add, null)
+                }
+            }
+
+            when (tabs.size) {
+                0 -> EmptyState(AppIcons.Globe, "Нет открытых вкладок")
+                1 -> {
+                    val tab = tabs.first()
+                    Box(
+                        Modifier.fillMaxSize().padding(top = 8.dp),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
                         BrowserTabCard(
                             tab = tab,
                             isCurrent = tab.id == currentId,
                             iconsDir = iconsDir,
-                            modifier = Modifier.animateItem(
-                                fadeInSpec = tween(MotionTokens.Standard),
-                                placementSpec = spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                ),
-                                fadeOutSpec = tween(MotionTokens.Quick),
-                            ),
-                            onSelect = { requestExit { onSelect(tab.id) } },
+                            modifier = Modifier
+                                .width(224.dp)
+                                .onGloballyPositioned { cardBounds[tab.id] = it.boundsInWindow() },
+                            onSelect = { requestExit(tab.id) { onSelect(tab.id) } },
                             onClose = { onClose(tab.id) },
                         )
                     }
                 }
+                else -> {
+                    val gridState = rememberLazyGridState()
+                    LaunchedEffect(currentId, tabs.size) {
+                        val currentIndex = tabs.indexOfFirst { it.id == currentId }
+                        if (currentIndex >= 0) {
+                            val rowStart = currentIndex - currentIndex % 2
+                            gridState.scrollToItem(rowStart)
+                        }
+                    }
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(tabs, key = { it.id }) { tab ->
+                            BrowserTabCard(
+                                tab = tab,
+                                isCurrent = tab.id == currentId,
+                                iconsDir = iconsDir,
+                                modifier = Modifier
+                                    .animateItem(
+                                        fadeInSpec = tween(MotionTokens.Standard),
+                                        placementSpec = spring(
+                                            dampingRatio = Spring.DampingRatioNoBouncy,
+                                            stiffness = Spring.StiffnessMediumLow,
+                                        ),
+                                        fadeOutSpec = tween(MotionTokens.Quick),
+                                    )
+                                    .onGloballyPositioned { cardBounds[tab.id] = it.boundsInWindow() },
+                                onSelect = { requestExit(tab.id) { onSelect(tab.id) } },
+                                onClose = { onClose(tab.id) },
+                            )
+                        }
+                    }
+                }
             }
+        }
+
+        if (hasHero) {
+            val target = heroTarget!!
+            val root = rootBounds
+            val targetScaleX = (target.width / root.width).coerceAtLeast(0.01f)
+            val targetScaleY = (target.height / root.height).coerceAtLeast(0.01f)
+            val targetX = target.left - root.left
+            val targetY = target.top - root.top
+            val p = transitionProgress
+            val heroAlpha = if (p < 0.82f) 1f else ((1f - p) / 0.18f).coerceIn(0f, 1f)
+
+            Image(
+                bitmap = heroPreview!!.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        transformOrigin = TransformOrigin(0f, 0f)
+                        scaleX = mix(1f, targetScaleX, p)
+                        scaleY = mix(1f, targetScaleY, p)
+                        translationX = mix(0f, targetX, p)
+                        translationY = mix(0f, targetY, p)
+                        alpha = heroAlpha
+                    }
+                    .clip(Radius.card),
+            )
         }
     }
 }
+
+private fun mix(start: Float, end: Float, fraction: Float): Float =
+    start + (end - start) * fraction.coerceIn(0f, 1f)
 
 private fun tabsPlural(n: Int) = when {
     n % 10 == 1 && n % 100 != 11 -> "вкладка"
