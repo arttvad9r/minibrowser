@@ -6,9 +6,15 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -149,27 +155,47 @@ private fun DownloadsScreen(
             }
         }
 
-        if (downloads.isEmpty()) {
-            Box(
-                Modifier.fillMaxWidth().weight(1f),
-                contentAlignment = Alignment.Center,
-            ) {
-                EmptyState(
-                    AppIcons.Download,
-                    "Загрузок пока нет",
-                    "Скачанные через Minibrowser файлы появятся здесь.",
-                )
-            }
-            return@Column
-        }
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            items(downloads, key = { it.id }) { item ->
-                DownloadCard(item, dateFormat, onOpen)
+        AnimatedContent(
+            targetState = downloads.isEmpty(),
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            transitionSpec = {
+                fadeIn(tween(MotionTokens.Standard)) togetherWith fadeOut(tween(MotionTokens.Quick))
+            },
+            label = "downloadsContent",
+        ) { empty ->
+            if (empty) {
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    EmptyState(
+                        AppIcons.Download,
+                        "Загрузок пока нет",
+                        "Скачанные через Minibrowser файлы появятся здесь.",
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(downloads, key = { it.id }) { item ->
+                        DownloadCard(
+                            item = item,
+                            dateFormat = dateFormat,
+                            onOpen = onOpen,
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(MotionTokens.Standard),
+                                placementSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                                fadeOutSpec = tween(MotionTokens.Quick),
+                            ),
+                        )
+                    }
+                }
             }
         }
     }
@@ -180,6 +206,7 @@ private fun DownloadCard(
     item: BrowserDownload,
     dateFormat: DateFormat,
     onOpen: (BrowserDownload) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val canOpen = item.status == DownloadStatus.Completed && !item.location.isNullOrBlank()
     val iconTint by animateColorAsState(
@@ -191,17 +218,17 @@ private fun DownloadCard(
         animationSpec = tween(MotionTokens.Standard),
         label = "downloadStatusColor",
     )
-    var modifier = Modifier
+    var cardModifier = modifier
         .fillMaxWidth()
         .clip(Radius.card)
         .background(MaterialTheme.colorScheme.surface)
         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card)
     if (canOpen) {
-        modifier = modifier.softClickable(pressedScale = 0.985f) { onOpen(item) }
+        cardModifier = cardModifier.softClickable(pressedScale = 0.985f) { onOpen(item) }
     }
 
     Row(
-        modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        cardModifier.padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
