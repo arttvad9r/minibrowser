@@ -5,7 +5,7 @@
   function enforceViewportPolicy() {
     // Gecko currently behaves most reliably when the page's original viewport meta
     // is modified in place. Do not append a second viewport meta tag.
-    const viewport = document.querySelector('meta[name="viewport" i]');
+    const viewport = document.head?.querySelector('meta[name="viewport" i]');
     if (!viewport) return;
 
     const parts = (viewport.getAttribute("content") || "")
@@ -21,16 +21,28 @@
     }
   }
 
-  enforceViewportPolicy();
+  function observeHead() {
+    const head = document.head;
+    if (!head) return false;
 
-  // ChatGPT is an SPA and may update document metadata after startup. Re-apply only
-  // when its existing viewport meta appears or changes; all other sites are excluded
-  // by the extension manifest.
-  const observer = new MutationObserver(enforceViewportPolicy);
-  observer.observe(document, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    attributeFilter: ["content", "name"],
-  });
+    enforceViewportPolicy();
+    const observer = new MutationObserver(enforceViewportPolicy);
+    observer.observe(head, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["content", "name"],
+    });
+    return true;
+  }
+
+  if (!observeHead()) {
+    // document_start can run before <head> exists. Watch only until it appears,
+    // then move observation into <head> so normal ChatGPT body updates/streaming
+    // do not trigger this compatibility hook.
+    const bootstrapObserver = new MutationObserver(() => {
+      if (observeHead()) bootstrapObserver.disconnect();
+    });
+    bootstrapObserver.observe(document, { subtree: true, childList: true });
+  }
 })();
