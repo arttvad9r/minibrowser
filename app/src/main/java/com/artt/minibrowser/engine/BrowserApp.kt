@@ -2,6 +2,7 @@ package com.artt.minibrowser.engine
 
 import android.app.Activity
 import android.app.Application
+import android.app.Application.ActivityLifecycleCallbacks
 import android.os.Build
 import android.os.Bundle
 import android.view.View
