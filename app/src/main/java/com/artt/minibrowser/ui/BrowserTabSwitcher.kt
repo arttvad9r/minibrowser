@@ -2,6 +2,7 @@ package com.artt.minibrowser.ui
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -31,11 +32,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -44,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.engine.Tab
+import kotlinx.coroutines.delay
 import java.io.File
 
 /**
@@ -61,7 +68,24 @@ fun BrowserTabSwitcher(
     onNew: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val reveal by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(MotionTokens.Standard),
+        label = "tabSwitcherReveal",
+    )
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .graphicsLayer {
+                alpha = reveal
+                scaleX = 0.992f + 0.008f * reveal
+                scaleY = 0.992f + 0.008f * reveal
+            },
+    ) {
         Row(
             Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -127,6 +151,18 @@ private fun BrowserTabCard(
 ) {
     val host = hostOf(tab.url)
     val preview = TabPreviewStore[tab.id]
+    var closing by remember(tab.id) { mutableStateOf(false) }
+    LaunchedEffect(closing) {
+        if (closing) {
+            delay(MotionTokens.Quick.toLong())
+            onClose()
+        }
+    }
+    val closeProgress by animateFloatAsState(
+        targetValue = if (closing) 1f else 0f,
+        animationSpec = tween(MotionTokens.Quick),
+        label = "tabClose",
+    )
     val borderColor by animateColorAsState(
         targetValue = if (isCurrent) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant,
         animationSpec = tween(MotionTokens.Standard),
@@ -141,10 +177,16 @@ private fun BrowserTabCard(
     Column(
         Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                alpha = 1f - closeProgress
+                val scale = 1f - 0.035f * closeProgress
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(Radius.card)
             .background(cardColor)
             .border(if (isCurrent) 1.5.dp else 1.dp, borderColor, Radius.card)
-            .softClickable(pressedScale = 0.985f, onClick = onSelect),
+            .softClickable(enabled = !closing, pressedScale = 0.985f, onClick = onSelect),
     ) {
         Row(
             Modifier.fillMaxWidth().height(44.dp).padding(start = 12.dp, end = 2.dp),
@@ -172,7 +214,8 @@ private fun BrowserTabCard(
                 fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
             )
             IconButton(
-                onClick = onClose,
+                onClick = { if (!closing) closing = true },
+                enabled = !closing,
                 modifier = Modifier.size(40.dp).semantics { contentDescription = "Закрыть вкладку" },
             ) {
                 Icon(
