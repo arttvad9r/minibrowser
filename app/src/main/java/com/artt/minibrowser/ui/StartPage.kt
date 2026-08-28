@@ -13,7 +13,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -136,8 +135,10 @@ fun StartPage(
 
             AnimatedVisibility(
                 visible = recent.isNotEmpty(),
-                enter = fadeIn(tween(MotionTokens.Standard)) + expandVertically(tween(MotionTokens.Standard)),
-                exit = fadeOut(tween(MotionTokens.Quick)) + shrinkVertically(tween(MotionTokens.Standard)),
+                enter = fadeIn(tween(MotionTokens.Quick)) +
+                    expandVertically(animationSpec = standardSpatialSpring()),
+                exit = fadeOut(tween(MotionTokens.Quick)) +
+                    shrinkVertically(animationSpec = standardSpatialSpring()),
             ) {
                 RecentCard(
                     recent,
@@ -191,7 +192,8 @@ private fun BookmarkRow(
                         .clip(Radius.button)
                         .background(MaterialTheme.colorScheme.surface)
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.button)
-                        .combinedClickable(
+                        .softCombinedClickable(
+                            pressedScale = 0.95f,
                             onClick = { onOpen(bm.url) },
                             onLongClick = { onLongPress(bm) },
                         ),
