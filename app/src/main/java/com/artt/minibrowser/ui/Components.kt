@@ -264,7 +264,7 @@ fun ToggleRow(
             .fillMaxWidth()
             .clip(Radius.small)
             .clickable { onChecked(!checked) }
-            .animateContentSize(animationSpec = tween(MotionTokens.Standard))
+            .animateContentSize(animationSpec = standardSpatialSpring())
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -342,7 +342,7 @@ fun SettingsRow(
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .heightIn(min = 54.dp)
-            .animateContentSize(animationSpec = tween(MotionTokens.Standard))
+            .animateContentSize(animationSpec = standardSpatialSpring())
             .padding(horizontal = 16.dp, vertical = 9.dp)
             .semantics { contentDescription = title },
         verticalAlignment = Alignment.CenterVertically,
@@ -375,7 +375,7 @@ fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
         AnimatedVisibility(
             visible = selected,
-            enter = fadeIn(tween(MotionTokens.Quick)) + scaleIn(tween(MotionTokens.Standard), initialScale = 0.82f),
+            enter = fadeIn(tween(MotionTokens.Quick)) + scaleIn(MotionTokens.StandardSpatial, initialScale = 0.82f),
             exit = fadeOut(tween(MotionTokens.Quick)) + scaleOut(tween(MotionTokens.Quick), targetScale = 0.82f),
         ) {
             Icon(Icons.Filled.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
@@ -415,7 +415,7 @@ fun BookmarkActionsSheet(
     var renaming by remember { mutableStateOf(false) }
     var text by remember(bookmark.url) { mutableStateOf(bookmark.title) }
     BrowserBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.animateContentSize(animationSpec = tween(MotionTokens.Standard))) {
+        Column(Modifier.animateContentSize(animationSpec = standardSpatialSpring())) {
             if (renaming) {
                 Text("Переименовать", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
