@@ -89,11 +89,22 @@ private object FaviconMemoryCache {
         private set
 
     fun get(key: String): Bitmap? = synchronized(cache) { cache.get(key) }
-    fun put(key: String, bitmap: Bitmap) = synchronized(cache) { cache.put(key, bitmap) }
+
+    fun putIfCurrent(key: String, bitmap: Bitmap, expectedGeneration: Int): Boolean {
+        if (generation != expectedGeneration) return false
+        return synchronized(cache) {
+            if (generation != expectedGeneration) {
+                false
+            } else {
+                cache.put(key, bitmap)
+                true
+            }
+        }
+    }
 
     fun clear() {
-        synchronized(cache) { cache.evictAll() }
         generation++
+        synchronized(cache) { cache.evictAll() }
     }
 }
 
@@ -119,8 +130,9 @@ fun Favicon(source: String, iconsDir: File, size: Dp, modifier: Modifier = Modif
                 val f = FaviconFetcher.fetch(origin, iconsDir)
                 if (f.exists()) decodeSampledFavicon(f) else null
             }
-            if (loaded != null) FaviconMemoryCache.put(key, loaded)
-            bmp = loaded
+            if (loaded != null && FaviconMemoryCache.putIfCurrent(key, loaded, cacheGeneration)) {
+                bmp = loaded
+            }
         }
     }
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
