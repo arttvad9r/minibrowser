@@ -252,7 +252,7 @@ private fun RecentCard(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = onRefresh, modifier = Modifier.size(48.dp)) {
                 Icon(
                     Icons.Filled.Refresh,
                     "Обновить недавние",
