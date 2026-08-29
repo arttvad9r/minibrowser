@@ -11,6 +11,22 @@ import kotlin.test.assertEquals
 
 class PageBookmarkViewModelTest {
     @Test
+    fun productionProviderStaysLazyForNonWebUrl() {
+        var resolutions = 0
+        val viewModel = PageBookmarkViewModel(
+            repositoryProvider = {
+                resolutions++
+                error("repository should stay lazy")
+            },
+        )
+
+        viewModel.sync("about:blank")
+
+        assertEquals(0, resolutions)
+        assertEquals(PageBookmarkUiState(), viewModel.uiState.value)
+    }
+
+    @Test
     fun nonWebUrlDoesNotCheckStorage() {
         var checks = 0
         val viewModel = pageBookmarkViewModel(
