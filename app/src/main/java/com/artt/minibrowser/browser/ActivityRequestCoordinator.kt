@@ -8,7 +8,7 @@ package com.artt.minibrowser.browser
  */
 class ActivityRequestCoordinator<T> {
     private data class Request<T>(
-        val start: (((T) -> Unit) -> Unit),
+        val start: ((T) -> Unit) -> Unit,
         val cancel: () -> Unit,
     )
 
@@ -27,7 +27,7 @@ class ActivityRequestCoordinator<T> {
     fun cancelAll() {
         val cancelled = synchronized(lock) {
             buildList {
-                active?.let(::add)
+                active?.let { add(it) }
                 addAll(queue)
             }.also {
                 active = null
@@ -43,17 +43,17 @@ class ActivityRequestCoordinator<T> {
     }
 
     private fun startRequest(request: Request<T>) {
-        var failure: Throwable? = null
+        var failed = false
         synchronized(lock) {
             if (active !== request) return
             try {
                 request.start { complete(request) }
-            } catch (error: Throwable) {
-                failure = error
+            } catch (_: Throwable) {
+                failed = true
             }
         }
 
-        if (failure != null) {
+        if (failed) {
             val stillActive = synchronized(lock) { active === request }
             if (stillActive) {
                 runCatching { request.cancel() }
