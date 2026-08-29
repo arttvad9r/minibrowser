@@ -15,16 +15,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 1
         versionName = "0.1"
-        // Личное устройство arm64; без фильтра в APK попадают все 4 ABI GeckoView (~300 МБ лишних).
-        ndk { abiFilters += "arm64-v8a" }
     }
     buildFeatures {
         compose = true
         buildConfig = true
     }
-    // Релиз подписываем debug-ключом: ставится поверх debug-сборки на личном телефоне.
     buildTypes {
+        debug {
+            // arm64 для телефона + x86_64 для локального/CI emulator smoke test.
+            ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        }
         release {
+            // Личное устройство arm64; не кладём остальные GeckoView ABI в release APK.
+            ndk { abiFilters += "arm64-v8a" }
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
