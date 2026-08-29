@@ -3,6 +3,7 @@ package com.artt.minibrowser.ui
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -86,7 +87,9 @@ fun BrowserTabSwitcher(
     var exitHeroId by remember { mutableStateOf<Long?>(null) }
     var heroEnabledForExit by remember { mutableStateOf(true) }
     var predictiveActive by remember { mutableStateOf(false) }
+    var predictiveReturning by remember { mutableStateOf(false) }
     var predictiveProgress by remember { mutableFloatStateOf(0f) }
+    val predictiveReturn = remember { Animatable(1f) }
     var rootBounds by remember { mutableStateOf(Rect.Zero) }
     val cardBounds = remember { mutableStateMapOf<Long, Rect>() }
 
@@ -122,6 +125,7 @@ fun BrowserTabSwitcher(
     PredictiveBackHandler(enabled = exitAction == null) { events ->
         var receivedProgress = false
         try {
+            predictiveReturning = false
             predictiveActive = true
             events.collect { event ->
                 receivedProgress = true
@@ -135,19 +139,24 @@ fun BrowserTabSwitcher(
                 requestExit(currentId, action = onDismiss)
             }
         } catch (_: CancellationException) {
+            val visibleProgress = (1f - predictiveProgress).coerceIn(0f, 1f)
             predictiveActive = false
+            predictiveReturning = true
+            predictiveReturn.snapTo(visibleProgress)
+            predictiveReturn.animateTo(1f, MotionTokens.ExpressiveSpatial)
             predictiveProgress = 0f
+            predictiveReturning = false
         }
     }
 
-    val transitionProgress = if (predictiveActive) {
-        1f - predictiveProgress
-    } else {
-        settledProgress
+    val transitionProgress = when {
+        predictiveActive -> 1f - predictiveProgress
+        predictiveReturning -> predictiveReturn.value
+        else -> settledProgress
     }.coerceIn(0f, 1f)
 
     val heroId = when {
-        predictiveActive -> currentId
+        predictiveActive || predictiveReturning -> currentId
         exitAction != null && heroEnabledForExit -> exitHeroId
         exitAction != null -> null
         else -> currentId
@@ -229,13 +238,10 @@ fun BrowserTabSwitcher(
                     val gridState = rememberLazyGridState()
                     LaunchedEffect(currentId, tabs.size) {
                         val currentIndex = tabs.indexOfFirst { it.id == currentId }
-                        if (currentIndex >= 0) {
-                            val rowStart = currentIndex - currentIndex % 2
-                            gridState.scrollToItem(rowStart)
-                        }
+                        if (currentIndex >= 0) gridState.scrollToItem(currentIndex)
                     }
                     LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                        columns = GridCells.Adaptive(minSize = 164.dp),
                         state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
