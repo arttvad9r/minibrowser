@@ -277,6 +277,7 @@ class TabManager(
     private val persistRequests = PersistSignalQueue()
     private val persistRevision = AtomicLong(0L)
     private val clearGeneration = AtomicLong(0L)
+    private val hotTabLimit = BrowserPerformance.policy.hotTabLimit
     private val lifecycleOwner = context as? LifecycleOwner
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onDestroy(owner: LifecycleOwner) {
@@ -287,6 +288,7 @@ class TabManager(
     val currentId = MutableStateFlow<Long?>(null)
     private var seq = 0L
     private var closed = false
+    private var appVisible = true
 
     init {
         lifecycleOwner?.lifecycle?.addObserver(lifecycleObserver)
@@ -311,6 +313,7 @@ class TabManager(
         currentId.value = tab.id
         openTab(tab)
         url?.let(tab.session::loadUri)
+        enforceHotTabBudget()
         return tab
     }
 
@@ -320,6 +323,7 @@ class TabManager(
         val tab = createTab(private)
         deactivateOthers(tab.id)
         currentId.value = tab.id
+        tab.session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
         runtime.webExtensionController.setTabActive(tab.session, true)
         return tab.session
     }
@@ -352,23 +356,35 @@ class TabManager(
         if (closed) return
         tab.session.open(runtime)
         val selected = tab.id == currentId.value
-        tab.session.setActive(selected)
-        tab.session.setFocused(selected)
+        val active = selected && appVisible
+        tab.session.setActive(active)
+        tab.session.setFocused(active)
+        tab.session.setPriorityHint(if (active) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT)
         runtime.webExtensionController.setTabActive(tab.session, selected)
         applyDesktop(tab)
-        tab.persistedSessionState?.takeIf { tab.persistedSessionStateUrl == tab.url }?.let { encoded ->
-            runCatching {
-                GeckoSession.SessionState.fromString(encoded)?.let(tab.session::restoreState)
-                    ?: error("Invalid session state")
-            }.onFailure {
-                tab.persistedSessionState = null
-                tab.persistedSessionStateUrl = null
-                tab.restoreUrlOnOpen = true
+
+        var restored = false
+        tab.latestSessionState?.takeIf { tab.latestSessionStateUrl == tab.url }?.let { state ->
+            restored = runCatching {
+                tab.session.restoreState(state)
+                true
+            }.getOrDefault(false)
+        }
+        if (!restored) {
+            tab.persistedSessionState?.takeIf { tab.persistedSessionStateUrl == tab.url }?.let { encoded ->
+                restored = runCatching {
+                    GeckoSession.SessionState.fromString(encoded)?.let {
+                        tab.session.restoreState(it)
+                        true
+                    } ?: false
+                }.getOrDefault(false)
+                if (!restored) {
+                    tab.persistedSessionState = null
+                    tab.persistedSessionStateUrl = null
+                }
             }
         }
-        if (tab.restoreUrlOnOpen && tab.url.isNotBlank() &&
-            (tab.persistedSessionState == null || tab.persistedSessionStateUrl != tab.url)
-        ) {
+        if (tab.restoreUrlOnOpen && tab.url.isNotBlank() && !restored) {
             tab.session.loadUri(tab.url)
         }
         tab.restoreUrlOnOpen = false
@@ -381,8 +397,10 @@ class TabManager(
             val selected = tab.id == id
             runtime.webExtensionController.setTabActive(tab.session, selected)
             if (tab.session.isOpen) {
-                tab.session.setActive(selected)
-                tab.session.setFocused(selected)
+                val active = selected && appVisible
+                tab.session.setActive(active)
+                tab.session.setFocused(active)
+                tab.session.setPriorityHint(if (active) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT)
             }
         }
         currentId.value = id
@@ -391,6 +409,7 @@ class TabManager(
             if (!it.session.isOpen) openTab(it)
             applyDesktop(it)
         }
+        enforceHotTabBudget()
     }
 
     fun closeTab(id: Long) {
@@ -399,6 +418,7 @@ class TabManager(
         if (idx < 0) return
         val dying = _tabs.value[idx]
         runtime.webExtensionController.setTabActive(dying.session, false)
+        dying.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
         closeIfOpen(dying.session)
         _tabs.value = _tabs.value - dying
         if (currentId.value == id) {
@@ -412,11 +432,53 @@ class TabManager(
 
     fun setAppVisible(visible: Boolean) {
         if (closed) return
+        appVisible = visible
         _tabs.value.filter { it.session.isOpen }.forEach { tab ->
             val active = visible && tab.id == currentId.value
             tab.session.setActive(active)
             tab.session.setFocused(active)
+            tab.session.setPriorityHint(if (active) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT)
         }
+    }
+
+    /**
+     * Keep only a bounded LRU set of fully open Gecko sessions. Closed cold tabs remain logical tabs
+     * and reopen from Gecko's SessionState, so history/scroll/zoom/form state is retained without
+     * paying the resident cost of an unlimited number of content sessions.
+     */
+    private fun enforceHotTabBudget() {
+        if (closed) return
+        var openCount = _tabs.value.count { it.session.isOpen }
+        if (openCount <= hotTabLimit) return
+
+        val selectedId = currentId.value
+        val coldest = _tabs.value
+            .asSequence()
+            .filter { it.id != selectedId && it.session.isOpen }
+            .sortedBy { it.lastAccess }
+            .toList()
+        for (tab in coldest) {
+            if (openCount <= hotTabLimit) break
+            val hasRestorableState = tab.url.isBlank() || tab.url == "about:blank" ||
+                (tab.latestSessionState != null && tab.latestSessionStateUrl == tab.url)
+            if (!hasRestorableState) continue
+            hibernateTab(tab)
+            openCount--
+        }
+    }
+
+    private fun hibernateTab(tab: Tab) {
+        if (!tab.session.isOpen || tab.id == currentId.value) return
+        runtime.webExtensionController.setTabActive(tab.session, false)
+        tab.session.setFocused(false)
+        tab.session.setActive(false)
+        tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+        tab.latestSessionState?.takeIf { tab.latestSessionStateUrl == tab.url }?.let { state ->
+            tab.persistedSessionState = state.toString()
+            tab.persistedSessionStateUrl = tab.url
+        }
+        closeIfOpen(tab.session)
+        tab.restoreUrlOnOpen = true
     }
 
     suspend fun clearWebData(): GeckoResult<Void> {
@@ -424,6 +486,7 @@ class TabManager(
         val clearRequest = clearGeneration.incrementAndGet()
         _tabs.value.forEach { tab ->
             runtime.webExtensionController.setTabActive(tab.session, false)
+            tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
             closeIfOpen(tab.session)
         }
         _tabs.value = emptyList()
@@ -473,6 +536,7 @@ class TabManager(
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
         _tabs.value.forEach { tab ->
             runCatching { runtime.webExtensionController.setTabActive(tab.session, false) }
+            runCatching { tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT) }
             closeIfOpen(tab.session)
         }
     }
@@ -690,6 +754,7 @@ class TabManager(
     private fun deactivateOthers(selectedId: Long) {
         _tabs.value.filter { it.id != selectedId }.forEach {
             runtime.webExtensionController.setTabActive(it.session, false)
+            it.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
             if (it.session.isOpen) {
                 it.session.setFocused(false)
                 it.session.setActive(false)
@@ -717,6 +782,7 @@ class TabManager(
         if (closed) return
         val wasActive = tab.id == currentId.value
         runtime.webExtensionController.setTabActive(tab.session, false)
+        tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
         closeIfOpen(tab.session)
         tab.canGoBack = false
         tab.canGoForward = false
@@ -726,8 +792,10 @@ class TabManager(
         attachDelegates(tab)
         fresh.open(runtime)
         applyDesktop(tab)
-        fresh.setActive(wasActive)
-        fresh.setFocused(wasActive)
+        val active = wasActive && appVisible
+        fresh.setActive(active)
+        fresh.setFocused(active)
+        fresh.setPriorityHint(if (active) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT)
         runtime.webExtensionController.setTabActive(fresh, wasActive)
 
         val latest = tab.latestSessionState.takeIf { tab.latestSessionStateUrl == tab.url }
