@@ -10,6 +10,24 @@ internal fun isHistoryUrl(url: String): Boolean {
         value.startsWith("http://", ignoreCase = true)
 }
 
+/**
+ * Normal writes already reject non-web URLs. Reuse the Room result directly in that common case;
+ * allocate a filtered copy only when an old/legacy database actually contains an internal row.
+ */
+internal fun webHistoryEntries(entries: List<HistoryEntry>): List<HistoryEntry> {
+    var result: ArrayList<HistoryEntry>? = null
+    for (index in entries.indices) {
+        val entry = entries[index]
+        if (isHistoryUrl(entry.url)) {
+            result?.add(entry)
+        } else if (result == null) {
+            result = ArrayList(entries.size - 1)
+            for (retainedIndex in 0 until index) result.add(entries[retainedIndex])
+        }
+    }
+    return result ?: entries
+}
+
 private fun historyHost(url: String): String =
     runCatching { URI(url).host.orEmpty() }
         .getOrDefault("")
@@ -105,8 +123,7 @@ class HistoryRepository(private val dao: AppDao) {
         val query = q.trim()
         // Пустой omnibox на новой вкладке должен оставаться чистым; история уже видна на Start page.
         if (query.isEmpty()) return emptyList()
-        val rows = dao.searchHistory(query)
-            .filter { isHistoryUrl(it.url) }
+        val rows = webHistoryEntries(dao.searchHistory(query))
             .let(::collapseHistoryNoise)
         val bookmarks = dao.bookmarksMatching(query).map {
             Suggestion(it.title.ifBlank { it.url }, it.url)
@@ -124,10 +141,7 @@ class HistoryRepository(private val dao: AppDao) {
     suspend fun recent(limit: Int): List<HistoryEntry> {
         if (limit <= 0) return emptyList()
         val fetchLimit = (limit * 4 + 40).coerceAtMost(1000)
-        val cleaned = dao.recentHistory(fetchLimit)
-            .asSequence()
-            .filter { isHistoryUrl(it.url) }
-            .toList()
+        val cleaned = webHistoryEntries(dao.recentHistory(fetchLimit))
             .let(::collapseHistoryNoise)
         return if (limit <= 8) distinctRecentSites(cleaned, limit) else cleaned.take(limit)
     }
