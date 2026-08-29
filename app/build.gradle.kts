@@ -34,6 +34,12 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
+        }
     }
     // Дефолтный паттерн AAPT вырезает каталоги, начинающиеся с "_"
     // (<dir>_*), из-за чего из APK пропадает _locales расширений.
