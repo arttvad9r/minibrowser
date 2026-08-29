@@ -35,6 +35,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +44,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -136,6 +139,8 @@ private fun DownloadsScreen(
     onClear: () -> Unit,
 ) {
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
+    var showClearConfirm by remember { mutableStateOf(false) }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -151,7 +156,7 @@ private fun DownloadsScreen(
             }
             Text("Загрузки", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
             if (downloads.isNotEmpty()) {
-                TextButton(onClick = onClear) { Text("Очистить") }
+                TextButton(onClick = { showClearConfirm = true }) { Text("Очистить") }
             }
         }
 
@@ -198,6 +203,25 @@ private fun DownloadsScreen(
                 }
             }
         }
+    }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("Очистить историю загрузок?") },
+            text = { Text("Записи о загрузках будут удалены. Скачанные файлы останутся на устройстве.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearConfirm = false
+                        onClear()
+                    },
+                ) { Text("Очистить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("Отмена") }
+            },
+        )
     }
 }
 
