@@ -9,8 +9,8 @@ private const val GIB = 1024L * 1024L * 1024L
  * Capability-based browser resource policy.
  *
  * Do not key performance behavior to a marketing model name. Android reports the memory that is
- * actually available to this device/ROM, so the same build stays sensible after an OS update and
- * on other phones. A OnePlus 13s (12 GB RAM) lands in the high-memory tier.
+ * actually available to this device/ROM, so the same build stays sensible after OS updates and on
+ * devices with different RAM configurations.
  */
 data class BrowserPerformancePolicy(
     val totalMemoryBytes: Long,
