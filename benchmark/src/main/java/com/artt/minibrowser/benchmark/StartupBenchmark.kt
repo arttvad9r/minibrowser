@@ -2,8 +2,10 @@ package com.artt.minibrowser.benchmark
 
 import androidx.benchmark.macro.BaselineProfileMode
 import androidx.benchmark.macro.CompilationMode
+import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
+import androidx.benchmark.macro.TraceSectionMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -12,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 internal const val TARGET_PACKAGE = "com.artt.minibrowser"
+private const val TAB_STORE_LOAD_TRACE = "TabStore.loadState"
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
@@ -30,10 +33,18 @@ class StartupBenchmark {
         ),
     )
 
+    @OptIn(ExperimentalMetricApi::class)
     private fun startup(compilationMode: CompilationMode) {
         benchmarkRule.measureRepeated(
             packageName = TARGET_PACKAGE,
-            metrics = listOf(StartupTimingMetric()),
+            metrics = listOf(
+                StartupTimingMetric(),
+                TraceSectionMetric(
+                    sectionName = TAB_STORE_LOAD_TRACE,
+                    mode = TraceSectionMetric.Mode.First,
+                    label = "tabStoreLoad",
+                ),
+            ),
             compilationMode = compilationMode,
             startupMode = StartupMode.COLD,
             iterations = 8,
