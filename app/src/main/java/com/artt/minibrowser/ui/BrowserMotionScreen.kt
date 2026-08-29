@@ -5,7 +5,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -18,13 +17,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 
 /**
  * Full-screen app destination over the browser.
  *
- * Destinations move as one fully opaque bottom-origin surface. This avoids the white/empty frame
- * caused by fading only the destination content while an opaque background had already covered the
- * previous screen, and it never alpha-blends a live GeckoView with Compose.
+ * The opaque destination surface never moves. Only its content gets a small bottom-origin spatial
+ * offset, so closing a screen cannot expose an empty Gecko/about:blank frame underneath. Keeping
+ * the travel short also avoids turning a 120-180 ms UI transition into a multi-thousand-pixel
+ * fling on tall displays.
  */
 @Composable
 fun BrowserMotionScreen(
@@ -41,7 +42,7 @@ fun BrowserMotionScreen(
     suspend fun animateReveal(target: Float) {
         activeAnimations++
         try {
-            reveal.animateTo(target, animationSpec = tween(MotionTokens.Quick))
+            reveal.animateTo(target, animationSpec = tween(MotionTokens.Screen))
         } finally {
             activeAnimations--
         }
@@ -65,17 +66,24 @@ fun BrowserMotionScreen(
 
     BackHandler(enabled = pendingExit == null) { requestExit(onBack) }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val density = LocalDensity.current
-        val travelPx = with(density) { maxHeight.toPx() }
+    val density = LocalDensity.current
+    val travelPx = with(density) { 28.dp.toPx() }
 
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         Box(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    translationY = if (fromBottom) (1f - reveal.value) * travelPx else 0f
-                }
-                .background(MaterialTheme.colorScheme.background),
+                    if (fromBottom) {
+                        translationY = (1f - reveal.value) * travelPx
+                        // Blend only destination content against its own opaque surface, never Gecko.
+                        alpha = 0.94f + reveal.value * 0.06f
+                    }
+                },
         ) {
             content(::requestExit)
         }
