@@ -1,15 +1,12 @@
 package com.artt.minibrowser.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,11 +54,11 @@ import kotlinx.coroutines.delay
 import java.io.File
 
 /**
- * Tab overview with memory-only page previews.
+ * Stable two-column tab overview.
  *
- * The overlay uses one short compositor-only fade. Selecting a card activates its Gecko session
- * immediately underneath the still-opaque overview, then the overview fades away. This avoids the
- * old pause-then-swap feeling where the selected page appeared only after the exit animation ended.
+ * The background stays opaque for the whole transition, so a changing Gecko surface is never
+ * blended through the overview. Cards themselves do not run independent spring/scale/color
+ * animations: there is one short content fade for the screen, and that is all.
  */
 @Composable
 fun BrowserTabSwitcher(
@@ -75,13 +72,14 @@ fun BrowserTabSwitcher(
 ) {
     var visible by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val overviewCurrentId = remember { currentId }
 
     LaunchedEffect(Unit) { visible = true }
 
     val reveal by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = tween(MotionTokens.Quick),
-        label = "tabSwitcherFade",
+        label = "tabSwitcherContentFade",
     )
 
     LaunchedEffect(pendingAction) {
@@ -105,83 +103,80 @@ fun BrowserTabSwitcher(
 
     BackHandler(enabled = pendingAction == null) { requestExit(onDismiss) }
 
-    Column(
+    Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .graphicsLayer { alpha = reveal },
+            .background(MaterialTheme.colorScheme.background),
     ) {
-        Row(
-            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = reveal },
         ) {
-            IconButton(
-                onClick = { requestExit(onDismiss) },
-                enabled = pendingAction == null,
-                modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
+            Row(
+                Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(AppIcons.ChevronDown, null)
-            }
-            Text(
-                "${tabs.size} ${tabsPlural(tabs.size)}",
-                Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            IconButton(
-                onClick = { requestExit(onNew) },
-                enabled = pendingAction == null,
-                modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
-            ) {
-                Icon(Icons.Filled.Add, null)
-            }
-        }
-
-        when (tabs.size) {
-            0 -> EmptyState(AppIcons.Globe, "Нет открытых вкладок")
-            1 -> {
-                val tab = tabs.first()
-                Box(
-                    Modifier.fillMaxSize().padding(top = 8.dp),
-                    contentAlignment = Alignment.TopCenter,
+                IconButton(
+                    onClick = { requestExit(onDismiss) },
+                    enabled = pendingAction == null,
+                    modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
                 ) {
-                    BrowserTabCard(
-                        tab = tab,
-                        isCurrent = tab.id == currentId,
-                        iconsDir = iconsDir,
-                        modifier = Modifier.width(224.dp),
-                        onSelect = { activateAndExit(tab.id) },
-                        onClose = { onClose(tab.id) },
-                    )
+                    Icon(AppIcons.ChevronDown, null)
+                }
+                Text(
+                    "${tabs.size} ${tabsPlural(tabs.size)}",
+                    Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                IconButton(
+                    onClick = { requestExit(onNew) },
+                    enabled = pendingAction == null,
+                    modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
+                ) {
+                    Icon(Icons.Filled.Add, null)
                 }
             }
-            else -> {
-                val initialIndex = tabs.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
-                val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    state = gridState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(tabs, key = { it.id }) { tab ->
+
+            when (tabs.size) {
+                0 -> EmptyState(AppIcons.Globe, "Нет открытых вкладок")
+                1 -> {
+                    val tab = tabs.first()
+                    Box(
+                        Modifier.fillMaxSize().padding(top = 8.dp),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
                         BrowserTabCard(
                             tab = tab,
-                            isCurrent = tab.id == currentId,
+                            isCurrent = tab.id == overviewCurrentId,
                             iconsDir = iconsDir,
-                            modifier = Modifier.animateItem(
-                                fadeInSpec = tween(MotionTokens.Standard),
-                                placementSpec = spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMediumLow,
-                                ),
-                                fadeOutSpec = tween(MotionTokens.Quick),
-                            ),
+                            modifier = Modifier.width(224.dp),
                             onSelect = { activateAndExit(tab.id) },
                             onClose = { onClose(tab.id) },
                         )
+                    }
+                }
+                else -> {
+                    val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
+                    val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(tabs, key = { it.id }) { tab ->
+                            BrowserTabCard(
+                                tab = tab,
+                                isCurrent = tab.id == overviewCurrentId,
+                                iconsDir = iconsDir,
+                                onSelect = { activateAndExit(tab.id) },
+                                onClose = { onClose(tab.id) },
+                            )
+                        }
                     }
                 }
             }
@@ -206,51 +201,24 @@ private fun BrowserTabCard(
 ) {
     val host = hostOf(tab.url)
     val preview = if (tab.isPrivate) null else TabPreviewStore[tab.id]
-    var closing by remember(tab.id) { mutableStateOf(false) }
-    LaunchedEffect(closing) {
-        if (closing) {
-            delay(MotionTokens.Quick.toLong())
-            onClose()
-        }
+    val borderColor = when {
+        isCurrent -> MaterialTheme.colorScheme.primary
+        tab.isPrivate -> MaterialTheme.colorScheme.outline
+        else -> MaterialTheme.colorScheme.outlineVariant
     }
-    val closeProgress by animateFloatAsState(
-        targetValue = if (closing) 1f else 0f,
-        animationSpec = tween(MotionTokens.Quick),
-        label = "tabClose",
-    )
-    val borderColor by animateColorAsState(
-        targetValue = when {
-            tab.isPrivate && isCurrent -> MaterialTheme.colorScheme.primary
-            tab.isPrivate -> MaterialTheme.colorScheme.outline
-            isCurrent -> MaterialTheme.colorScheme.outline
-            else -> MaterialTheme.colorScheme.outlineVariant
-        },
-        animationSpec = tween(MotionTokens.Standard),
-        label = "tabBorder",
-    )
-    val cardColor by animateColorAsState(
-        targetValue = when {
-            tab.isPrivate -> MaterialTheme.colorScheme.surfaceContainerHighest
-            isCurrent -> MaterialTheme.colorScheme.surface
-            else -> MaterialTheme.colorScheme.surfaceContainerLow
-        },
-        animationSpec = tween(MotionTokens.Standard),
-        label = "tabSurface",
-    )
+    val cardColor = when {
+        tab.isPrivate -> MaterialTheme.colorScheme.surfaceContainerHighest
+        isCurrent -> MaterialTheme.colorScheme.surfaceContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerLow
+    }
 
     Column(
         modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                alpha = 1f - closeProgress
-                val scale = 1f - 0.035f * closeProgress
-                scaleX = scale
-                scaleY = scale
-            }
             .clip(Radius.card)
             .background(cardColor)
-            .border(1.dp, borderColor, Radius.card)
-            .softClickable(enabled = !closing, pressedScale = 0.985f, onClick = onSelect),
+            .border(if (isCurrent) 1.5.dp else 1.dp, borderColor, Radius.card)
+            .clickable(onClick = onSelect),
     ) {
         if (tab.isPrivate) {
             Box(Modifier.fillMaxWidth().height(40.dp)) {
@@ -264,8 +232,7 @@ private fun BrowserTabCard(
                     fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
                 )
                 IconButton(
-                    onClick = { if (!closing) closing = true },
-                    enabled = !closing,
+                    onClick = onClose,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .size(36.dp)
@@ -297,8 +264,7 @@ private fun BrowserTabCard(
                     fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
                 )
                 IconButton(
-                    onClick = { if (!closing) closing = true },
-                    enabled = !closing,
+                    onClick = onClose,
                     modifier = Modifier.size(36.dp).semantics { contentDescription = "Закрыть вкладку" },
                 ) {
                     Icon(
@@ -320,22 +286,16 @@ private fun BrowserTabCard(
                     else MaterialTheme.colorScheme.surfaceVariant,
                 ),
         ) {
-            Crossfade(
-                targetState = preview,
-                animationSpec = tween(MotionTokens.Standard),
-                label = "tabPreview",
-            ) { bitmap ->
-                if (bitmap != null && !bitmap.isRecycled) {
-                    Image(
-                        bitmap.asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.TopCenter,
-                    )
-                } else {
-                    TabPreviewFallback(tab, host, iconsDir)
-                }
+            if (preview != null && !preview.isRecycled) {
+                Image(
+                    preview.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.TopCenter,
+                )
+            } else {
+                TabPreviewFallback(tab, host, iconsDir)
             }
         }
     }
