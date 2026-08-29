@@ -1,5 +1,6 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.engine.reserveUniqueDownloadFile
 import com.artt.minibrowser.engine.writeLegacyDownload
 import java.io.ByteArrayInputStream
 import java.io.IOException
@@ -10,6 +11,8 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class LegacyDownloadWriteTest {
     @Test
@@ -45,6 +48,29 @@ class LegacyDownloadWriteTest {
 
             assertFailsWith<IOException> { writeLegacyDownload(target, failingInput) }
             assertFalse(target.exists())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun reservesDifferentPathsForSameConcurrentFilename() {
+        val dir = Files.createTempDirectory("minibrowser-legacy-reserve").toFile()
+        try {
+            var first = dir.resolve("missing")
+            var second = dir.resolve("missing")
+            val a = Thread { first = reserveUniqueDownloadFile(dir, "report.pdf") }
+            val b = Thread { second = reserveUniqueDownloadFile(dir, "report.pdf") }
+
+            a.start()
+            b.start()
+            a.join()
+            b.join()
+
+            assertNotEquals(first.canonicalPath, second.canonicalPath)
+            assertTrue(first.isFile)
+            assertTrue(second.isFile)
+            assertEquals(setOf("report.pdf", "report (1).pdf"), setOf(first.name, second.name))
         } finally {
             dir.deleteRecursively()
         }
