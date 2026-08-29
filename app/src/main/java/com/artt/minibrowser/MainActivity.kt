@@ -89,10 +89,8 @@ import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.areRequestedPermissionsSatisfied
-import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
-import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.data.SettingsRepository
@@ -292,25 +290,15 @@ class MainActivity : ComponentActivity() {
                 externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
             }
 
-            var bookmarks by remember { mutableStateOf(emptyList<Bookmark>()) }
-            var bmReload by remember { mutableIntStateOf(0) }
-            LaunchedEffect(screen, currentTab?.url, bmReload) {
-                val needsBookmarks = screen == BrowserScreen.Browser &&
-                    (currentTab?.url.isNullOrBlank() || currentTab?.url == "about:blank")
-                if (needsBookmarks) bookmarks = bookmarksRepo.all()
-            }
             var bookmarked by remember { mutableStateOf(false) }
             LaunchedEffect(screen, currentTab?.url) {
-                val u = currentTab?.url
-                bookmarked = !u.isNullOrBlank() && u.startsWith("http") && bookmarksRepo.isBookmarked(u)
+                if (screen == BrowserScreen.Browser) {
+                    val u = currentTab?.url
+                    bookmarked = !u.isNullOrBlank() && u.startsWith("http") && bookmarksRepo.isBookmarked(u)
+                }
             }
-            var recent by remember { mutableStateOf(emptyList<HistoryEntry>()) }
-            var recentReload by remember { mutableIntStateOf(0) }
             val showStart = screen == BrowserScreen.Browser &&
                 (currentTab?.url.isNullOrBlank() || currentTab.url == "about:blank")
-            LaunchedEffect(showStart, currentTab?.url, recentReload) {
-                if (showStart) recent = historyRepo.recent(3)
-            }
 
             BackHandler(enabled = screen == BrowserScreen.Browser && currentTab?.canGoBack == true) {
                 currentTab?.session?.goBack()
@@ -399,7 +387,6 @@ class MainActivity : ComponentActivity() {
                                         if (bookmarked) bookmarksRepo.remove(t.url)
                                         else bookmarksRepo.add(t.url, t.title)
                                         bookmarked = !bookmarked
-                                        bmReload++
                                     }
                                 },
                                 onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
@@ -424,21 +411,31 @@ class MainActivity : ComponentActivity() {
                                 GeckoContent(currentTab, Modifier.fillMaxSize())
                                 SmoothPageProgress(currentTab)
                                 if (showStart) {
-                                    StartPage(
-                                        bookmarks, iconsDir, recent, currentTab?.isPrivate == true,
-                                        onOpen = { uri -> currentTab?.session?.loadUri(uri) },
-                                        onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
-                                        onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
-                                        onRefreshRecent = { recentReload++ },
-                                        onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
-                                        onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } },
-                                        onAdd = { url, title ->
-                                            scope.launch {
-                                                bookmarksRepo.add(url, title)
-                                                bmReload++
-                                            }
-                                        },
-                                    )
+                                    if (currentTab?.isPrivate == true) {
+                                        StartPage(
+                                            bookmarks = emptyList(),
+                                            iconsDir = iconsDir,
+                                            recent = emptyList(),
+                                            isPrivate = true,
+                                            onOpen = { uri -> currentTab.session.loadUri(uri) },
+                                            onAllBookmarks = {},
+                                            onAllHistory = {},
+                                            onRefreshRecent = {},
+                                            onRename = { _, _ -> },
+                                            onDelete = {},
+                                            onAdd = { _, _ -> },
+                                        )
+                                    } else {
+                                        StartPageRoute(
+                                            bookmarksRepository = bookmarksRepo,
+                                            historyRepository = historyRepo,
+                                            iconsDir = iconsDir,
+                                            refreshKey = currentTab?.id,
+                                            onOpen = { uri -> currentTab?.session?.loadUri(uri) },
+                                            onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
+                                            onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
+                                        )
+                                    }
                                 }
                                 if (!showStart && currentTab?.loadError != null) {
                                     ErrorOverlay(currentTab.loadError.orEmpty()) { currentSession?.reload() }
@@ -466,8 +463,6 @@ class MainActivity : ComponentActivity() {
                                             if (withBookmarks) bookmarksRepo.clearAll()
                                             com.artt.minibrowser.ui.clearFaviconCaches(iconsDir)
                                             tabManager.clearWebData()
-                                            bmReload++
-                                            recentReload++
                                         }
                                     },
                                 )
