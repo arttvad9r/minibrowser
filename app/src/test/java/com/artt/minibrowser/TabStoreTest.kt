@@ -6,6 +6,7 @@ import com.artt.minibrowser.data.TabStore
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TabStoreTest {
@@ -68,6 +69,18 @@ class TabStoreTest {
 
         assertTrue(TabStore.loadState(dir) in states)
         assertTrue(!File(dir, "open_tabs.json.tmp").exists())
+        dir.deleteRecursively()
+    }
+
+    @Test fun versionedWriteRejectsSnapshotOlderThanClearBarrier() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "tabs-versioned-${System.nanoTime()}")
+        val old = PersistedBrowserState(1, listOf(PersistedTab(1, "https://private-before-clear.example", "Old")))
+        val cleared = PersistedBrowserState()
+
+        assertTrue(TabStore.saveStateVersioned(dir, old, revision = 4))
+        assertTrue(TabStore.saveStateVersioned(dir, cleared, revision = 5))
+        assertFalse(TabStore.saveStateVersioned(dir, old, revision = 4))
+        assertEquals(cleared, TabStore.loadState(dir))
         dir.deleteRecursively()
     }
 
