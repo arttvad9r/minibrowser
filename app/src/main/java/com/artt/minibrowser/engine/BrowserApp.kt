@@ -18,6 +18,7 @@ import java.io.File
 object Engine { lateinit var runtime: GeckoRuntime }
 
 internal const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
+internal const val DB_INIT_TRACE = "DbHolder.init"
 
 internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: String): Boolean =
     currentProcess == null || currentProcess == mainProcess
@@ -37,7 +38,6 @@ class BrowserApp : Application() {
             maxBytes = performance.previewCacheBytes,
             backgroundBytes = performance.backgroundPreviewCacheBytes,
         )
-        DbHolder.init(this)
         // Download history is intentionally lazy: most launches never open Downloads or start a
         // transfer, so reading/parsing downloads.json must not compete with GeckoRuntime cold start.
         val contentBlocking = ContentBlocking.Settings.Builder()
@@ -69,6 +69,15 @@ class BrowserApp : Application() {
             // Gecko documents this as a pure performance feature. On multicore/high-memory phones,
             // parallel marking trades spare CPU cores for shorter JavaScript GC marking pauses.
             Engine.runtime.settings.setParallelMarkingEnabled(true)
+        }
+
+        // Give Gecko first access to startup CPU/IO. Room's database object is still ready before
+        // MainActivity is created, but its classloading/configuration no longer precedes runtime boot.
+        Trace.beginSection(DB_INIT_TRACE)
+        try {
+            DbHolder.init(this)
+        } finally {
+            Trace.endSection()
         }
     }
 
