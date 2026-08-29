@@ -101,7 +101,6 @@ internal fun MotionHistoryScreen(
                                 Modifier
                                     .fillMaxWidth()
                                     .clickable { requestExit { onOpen(entry.url) } }
-                                    .animateItem()
                                     .padding(horizontal = 20.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -186,7 +185,6 @@ internal fun MotionBookmarksScreen(
                             Modifier
                                 .fillMaxWidth()
                                 .clickable { requestExit { onOpen(bookmark.url) } }
-                                .animateItem()
                                 .padding(horizontal = 20.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -236,11 +234,7 @@ internal fun MotionBookmarksScreen(
     }
 }
 
-/**
- * Reflect Gecko's real progress without intentionally lagging behind it. The previous interpolated
- * bar kept animating after Gecko had already reported page completion, which made fast pages look
- * slower than they were.
- */
+/** Reflect Gecko's real progress without adding an artificial catch-up animation. */
 @Composable
 internal fun SmoothPageProgress(tab: Tab?) {
     val progress = tab?.progress ?: -1f
