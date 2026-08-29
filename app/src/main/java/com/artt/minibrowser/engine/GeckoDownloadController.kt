@@ -26,6 +26,16 @@ import java.io.InputStream
 
 private data class SavedDownload(val location: String, val bytes: Long)
 
+/** Writes one legacy download and guarantees that a failed copy never leaves a partial file. */
+internal fun writeLegacyDownload(file: File, input: InputStream): Long {
+    try {
+        return FileOutputStream(file).use { output -> input.copyTo(output) }
+    } catch (error: Throwable) {
+        file.delete()
+        throw error
+    }
+}
+
 /**
  * Download transfers can outlive an Activity (for example during recreation). Keep only the
  * application context in this process-level scope; the Activity-owned controller is used solely
@@ -108,14 +118,9 @@ private object DownloadIo {
         val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         if (!dir.exists() && !dir.mkdirs()) error("Unable to create Downloads directory")
         val file = uniqueFile(dir, name)
-        try {
-            val bytes = FileOutputStream(file).use { output -> input.copyTo(output) }
-            MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf(mime), null)
-            return SavedDownload(Uri.fromFile(file).toString(), bytes)
-        } catch (error: Throwable) {
-            file.delete()
-            throw error
-        }
+        val bytes = writeLegacyDownload(file, input)
+        MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf(mime), null)
+        return SavedDownload(Uri.fromFile(file).toString(), bytes)
     }
 
     private fun uniqueFile(dir: File, name: String): File {
