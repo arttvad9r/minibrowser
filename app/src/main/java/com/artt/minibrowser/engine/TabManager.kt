@@ -350,7 +350,7 @@ class TabManager(
     }
 
     fun clearWebData(): GeckoResult<Void> {
-        if (closed) return GeckoResult.fromValue(null)
+        if (closed) return GeckoResult.fromValue<Void>(null)
         _tabs.value.forEach { tab ->
             runtime.webExtensionController.setTabActive(tab.session, false)
             closeIfOpen(tab.session)
@@ -372,6 +372,9 @@ class TabManager(
 
     fun close() {
         if (closed) return
+        val finalSnapshot = capturePersistenceSnapshot()
+        runCatching { TabStore.saveState(storeDir, serializePersistenceSnapshot(finalSnapshot)) }
+            .onFailure { Log.e("MinibrowserTabs", "Failed to persist final tab metadata", it) }
         closed = true
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
         _tabs.value.forEach { tab ->
