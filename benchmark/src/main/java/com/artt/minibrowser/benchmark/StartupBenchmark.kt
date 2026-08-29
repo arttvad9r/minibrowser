@@ -34,6 +34,13 @@ class StartupBenchmark {
         ),
     )
 
+    @Test
+    fun coldWithBaselineProfile() = startup(
+        CompilationMode.Partial(
+            baselineProfileMode = BaselineProfileMode.Require,
+        ),
+    )
+
     @OptIn(ExperimentalMetricApi::class)
     private fun startup(compilationMode: CompilationMode) {
         benchmarkRule.measureRepeated(
