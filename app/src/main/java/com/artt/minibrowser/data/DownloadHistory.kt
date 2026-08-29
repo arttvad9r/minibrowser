@@ -1,6 +1,7 @@
 package com.artt.minibrowser.data
 
 import android.content.Context
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +44,27 @@ internal fun downloadSourceForHistory(value: String): String = runCatching {
     URI(uri.scheme.lowercase(), null, uri.host, uri.port, null, null, null).toString()
 }.getOrDefault("")
 
+internal fun normalizeRestoredDownload(item: BrowserDownload, now: Long): BrowserDownload {
+    val sanitized = item.copy(sourceUrl = downloadSourceForHistory(item.sourceUrl))
+    return if (sanitized.status == DownloadStatus.Downloading) {
+        sanitized.copy(
+            status = DownloadStatus.Failed,
+            finishedAt = now,
+            error = "Загрузка была прервана",
+        )
+    } else {
+        sanitized
+    }
+}
+
+/** Live callbacks win by id; restored history then fills the remaining bounded slots. */
+internal fun mergeRestoredDownloads(
+    live: List<BrowserDownload>,
+    restored: List<BrowserDownload>,
+    limit: Int = 200,
+): List<BrowserDownload> =
+    (live + restored).distinctBy { it.id }.take(limit.coerceAtLeast(0))
+
 /**
  * Writes a complete replacement before publishing it. The target is never truncated in place,
  * so a process death during temp-file creation leaves the previous valid history untouched.
@@ -70,9 +92,9 @@ internal fun writeTextAtomically(target: File, value: String) {
 /**
  * Small bounded app-owned history for files downloaded by Minibrowser only.
  *
- * UI-visible state changes synchronously, but JSON serialization + fsync run on one IO writer.
- * Download callbacks are often delivered on the Android UI thread, so doing a full atomic fsync in
- * start/complete/fail caused avoidable frame stalls exactly when a download began or finished.
+ * UI-visible state changes synchronously, but file restore, JSON serialization and fsync all run on
+ * IO. The writer waits for the initial restore so an early download callback cannot overwrite the
+ * previous process' history with a partial snapshot.
  */
 object DownloadHistory {
     private const val MAX_ITEMS = 200
@@ -80,33 +102,42 @@ object DownloadHistory {
     private val _items = MutableStateFlow<List<BrowserDownload>>(emptyList())
     val items: StateFlow<List<BrowserDownload>> = _items.asStateFlow()
     private var storeFile: File? = null
+    private var discardRestoredHistory = false
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val restoreComplete = CompletableDeferred<Unit>()
     private val persistRequests = Channel<List<BrowserDownload>>(Channel.CONFLATED)
 
     init {
         ioScope.launch {
+            restoreComplete.await()
             for (snapshot in persistRequests) persistSnapshot(snapshot)
         }
     }
 
     fun init(context: Context) {
-        synchronized(lock) {
+        val file = synchronized(lock) {
             if (storeFile != null) return
-            storeFile = File(context.filesDir, "downloads.json")
-            val now = System.currentTimeMillis()
-            val loaded = loadLocked().map { item ->
-                val sanitized = item.copy(sourceUrl = downloadSourceForHistory(item.sourceUrl))
-                if (sanitized.status == DownloadStatus.Downloading) {
-                    sanitized.copy(
-                        status = DownloadStatus.Failed,
-                        finishedAt = now,
-                        error = "Загрузка была прервана",
-                    )
-                } else sanitized
-            }.take(MAX_ITEMS)
-            _items.value = loaded
-            // Rewrite legacy entries asynchronously, removing query/fragment secrets from disk.
-            schedulePersistLocked()
+            File(context.filesDir, "downloads.json").also { storeFile = it }
+        }
+        ioScope.launch {
+            try {
+                val now = System.currentTimeMillis()
+                val restored = load(file)
+                    .map { normalizeRestoredDownload(it, now) }
+                    .take(MAX_ITEMS)
+                synchronized(lock) {
+                    _items.value = if (discardRestoredHistory) {
+                        _items.value.take(MAX_ITEMS)
+                    } else {
+                        mergeRestoredDownloads(_items.value, restored, MAX_ITEMS)
+                    }
+                    // Publish the merged/sanitized snapshot before unblocking the writer. Because
+                    // the channel is conflated, any pre-restore partial snapshot is replaced by it.
+                    schedulePersistLocked()
+                }
+            } finally {
+                restoreComplete.complete(Unit)
+            }
         }
     }
 
@@ -149,6 +180,7 @@ object DownloadHistory {
 
     fun clear() {
         synchronized(lock) {
+            if (!restoreComplete.isCompleted) discardRestoredHistory = true
             _items.value = emptyList()
             schedulePersistLocked()
         }
@@ -187,8 +219,7 @@ object DownloadHistory {
         runCatching { writeTextAtomically(file, array.toString()) }
     }
 
-    private fun loadLocked(): List<BrowserDownload> {
-        val file = storeFile ?: return emptyList()
+    private fun load(file: File): List<BrowserDownload> {
         if (!file.isFile) return emptyList()
         return runCatching {
             val array = JSONArray(file.readText())
