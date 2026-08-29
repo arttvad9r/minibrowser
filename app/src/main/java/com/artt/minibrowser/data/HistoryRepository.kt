@@ -2,6 +2,8 @@ package com.artt.minibrowser.data
 
 import java.net.URI
 
+private val HISTORY_WHITESPACE = Regex("\\s+")
+
 internal fun isHistoryUrl(url: String): Boolean {
     val value = url.trim()
     return value.startsWith("https://", ignoreCase = true) ||
@@ -18,7 +20,7 @@ private fun historyDisplayKey(entry: HistoryEntry): String {
     val title = entry.title
         .trim()
         .lowercase()
-        .replace(Regex("\\s+"), " ")
+        .replace(HISTORY_WHITESPACE, " ")
     return "${historyHost(entry.url)}|$title"
 }
 
@@ -35,13 +37,17 @@ internal fun collapseHistoryNoise(
     if (entries.size < 2) return entries
     val sorted = entries.sortedByDescending { it.visitedAt }
     val result = ArrayList<HistoryEntry>(sorted.size)
+    var previousKey: String? = null
+    var previousVisitedAt: Long? = null
     sorted.forEach { entry ->
-        val previous = result.lastOrNull()
-        val delta = previous?.let { it.visitedAt - entry.visitedAt }
-        val isNavigationNoise = previous != null &&
-            historyDisplayKey(previous) == historyDisplayKey(entry) &&
-            delta != null && delta in 0..windowMs
-        if (!isNavigationNoise) result += entry
+        val key = historyDisplayKey(entry)
+        val delta = previousVisitedAt?.let { it - entry.visitedAt }
+        val isNavigationNoise = previousKey == key && delta != null && delta in 0..windowMs
+        if (!isNavigationNoise) {
+            result += entry
+            previousKey = key
+            previousVisitedAt = entry.visitedAt
+        }
     }
     return result
 }
