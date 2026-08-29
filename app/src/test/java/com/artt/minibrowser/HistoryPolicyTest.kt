@@ -7,6 +7,7 @@ import com.artt.minibrowser.data.isHistoryUrl
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class HistoryPolicyTest {
@@ -59,7 +60,9 @@ class HistoryPolicyTest {
             HistoryEntry("https://example.com/b", "Страница B", 490_000, 1),
             HistoryEntry("https://example.com/c", "Страница A", 100_000, 1),
         )
-        assertEquals(rows, collapseHistoryNoise(rows))
+        val result = collapseHistoryNoise(rows)
+        assertSame(rows, result)
+        assertEquals(rows, result)
     }
 
     @Test fun startPageRecentUsesDistinctHosts() {
