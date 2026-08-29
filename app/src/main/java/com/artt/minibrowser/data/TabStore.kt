@@ -17,6 +17,9 @@ data class PersistedTab(
     val desktop: Boolean = false,
     val sessionState: String? = null,
     val lastAccess: Long = 0L,
+    // URL the Gecko session state belongs to. Older persisted files do not have this field;
+    // for those, a non-null state is assumed to belong to `url` for backwards compatibility.
+    val sessionStateUrl: String? = null,
 )
 
 @Serializable
