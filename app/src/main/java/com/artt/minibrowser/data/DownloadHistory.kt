@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.net.URI
 import java.util.UUID
 
 enum class DownloadStatus { Downloading, Completed, Failed }
@@ -24,8 +25,16 @@ data class BrowserDownload(
     val error: String? = null,
 )
 
-/** Small app-owned history for files downloaded by Minibrowser only. */
+/** Keep only the origin for display; signed download URLs frequently contain credentials in query parameters. */
+internal fun downloadSourceForHistory(value: String): String = runCatching {
+    val uri = URI(value)
+    if (uri.scheme?.lowercase() !in setOf("http", "https") || uri.host.isNullOrBlank()) return@runCatching ""
+    URI(uri.scheme.lowercase(), null, uri.host, uri.port, null, null, null).toString()
+}.getOrDefault("")
+
+/** Small bounded app-owned history for files downloaded by Minibrowser only. */
 object DownloadHistory {
+    private const val MAX_ITEMS = 200
     private val lock = Any()
     private val _items = MutableStateFlow<List<BrowserDownload>>(emptyList())
     val items: StateFlow<List<BrowserDownload>> = _items.asStateFlow()
@@ -37,15 +46,17 @@ object DownloadHistory {
             storeFile = File(context.filesDir, "downloads.json")
             val now = System.currentTimeMillis()
             val loaded = loadLocked().map { item ->
-                if (item.status == DownloadStatus.Downloading) {
-                    item.copy(
+                val sanitized = item.copy(sourceUrl = downloadSourceForHistory(item.sourceUrl))
+                if (sanitized.status == DownloadStatus.Downloading) {
+                    sanitized.copy(
                         status = DownloadStatus.Failed,
                         finishedAt = now,
                         error = "Загрузка была прервана",
                     )
-                } else item
-            }
+                } else sanitized
+            }.take(MAX_ITEMS)
             _items.value = loaded
+            // Rewrites legacy entries as well, removing query/fragment secrets from disk.
             persistLocked()
         }
     }
@@ -55,12 +66,12 @@ object DownloadHistory {
         val item = BrowserDownload(
             id = id,
             name = name,
-            sourceUrl = sourceUrl,
+            sourceUrl = downloadSourceForHistory(sourceUrl),
             mime = mime,
             status = DownloadStatus.Downloading,
             startedAt = System.currentTimeMillis(),
         )
-        _items.value = listOf(item) + _items.value
+        _items.value = (listOf(item) + _items.value).take(MAX_ITEMS)
         persistLocked()
         id
     }
@@ -96,7 +107,7 @@ object DownloadHistory {
 
     private fun update(id: String, transform: (BrowserDownload) -> BrowserDownload) {
         synchronized(lock) {
-            _items.value = _items.value.map { if (it.id == id) transform(it) else it }
+            _items.value = _items.value.map { if (it.id == id) transform(it) else it }.take(MAX_ITEMS)
             persistLocked()
         }
     }
@@ -107,7 +118,7 @@ object DownloadHistory {
         return runCatching {
             val array = JSONArray(file.readText())
             buildList {
-                for (index in 0 until array.length()) {
+                for (index in 0 until minOf(array.length(), MAX_ITEMS)) {
                     val o = array.getJSONObject(index)
                     add(
                         BrowserDownload(
@@ -132,7 +143,7 @@ object DownloadHistory {
     private fun persistLocked() {
         val file = storeFile ?: return
         val array = JSONArray()
-        _items.value.forEach { item ->
+        _items.value.take(MAX_ITEMS).forEach { item ->
             array.put(
                 JSONObject().apply {
                     put("id", item.id)
