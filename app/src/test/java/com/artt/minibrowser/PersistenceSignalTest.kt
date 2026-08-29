@@ -7,12 +7,15 @@ import com.artt.minibrowser.engine.PersistenceSnapshot
 import com.artt.minibrowser.engine.PersistenceTabSnapshot
 import com.artt.minibrowser.engine.mergePersistSignal
 import com.artt.minibrowser.engine.serializePersistenceSnapshot
+import com.artt.minibrowser.engine.shouldCreateBlankTabAfterClear
 import com.artt.minibrowser.engine.snapshotPersistedState
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PersistenceSignalTest {
     @Test fun immediateSignalWinsOverDirtyDebounce() {
@@ -64,6 +67,41 @@ class PersistenceSignalTest {
         assertEquals("https://latest.example", persisted.tabs.single().url)
         assertEquals("state-c", persisted.tabs.single().sessionState)
         assertEquals("https://latest.example", persisted.tabs.single().sessionStateUrl)
+    }
+
+    @Test fun onlyLatestClearRestoresOneBlankTab() {
+        assertTrue(
+            shouldCreateBlankTabAfterClear(
+                requestGeneration = 2,
+                currentGeneration = 2,
+                hasTabs = false,
+                isClosed = false,
+            ),
+        )
+        assertFalse(
+            shouldCreateBlankTabAfterClear(
+                requestGeneration = 1,
+                currentGeneration = 2,
+                hasTabs = false,
+                isClosed = false,
+            ),
+        )
+        assertFalse(
+            shouldCreateBlankTabAfterClear(
+                requestGeneration = 2,
+                currentGeneration = 2,
+                hasTabs = true,
+                isClosed = false,
+            ),
+        )
+        assertFalse(
+            shouldCreateBlankTabAfterClear(
+                requestGeneration = 2,
+                currentGeneration = 2,
+                hasTabs = false,
+                isClosed = true,
+            ),
+        )
     }
 
     @Test
