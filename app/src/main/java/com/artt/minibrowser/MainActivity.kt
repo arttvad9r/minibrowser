@@ -148,26 +148,30 @@ class MainActivity : ComponentActivity() {
     ) { grants ->
         val requested = pendingPermissionRequest
         pendingPermissionRequest = emptySet()
-        permissionCompletion?.invoke(areRequestedPermissionsSatisfied(requested, grants))
+        val completion = permissionCompletion
         permissionCompletion = null
+        completion?.invoke(areRequestedPermissionsSatisfied(requested, grants))
     }
     private val filePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments(),
     ) { uris ->
-        fileCompletion?.invoke(uris.toTypedArray())
+        val completion = fileCompletion
         fileCompletion = null
+        completion?.invoke(uris.toTypedArray())
     }
     private val singleFilePickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
-        fileCompletion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
+        val completion = fileCompletion
         fileCompletion = null
+        completion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
     }
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
-        fileCompletion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
+        val completion = fileCompletion
         fileCompletion = null
+        completion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
     }
 
     private fun openExternalUri(value: String) {
@@ -417,7 +421,6 @@ class MainActivity : ComponentActivity() {
                                 if (showStart) {
                                     StartPage(
                                         bookmarks, iconsDir, recent, currentTab?.isPrivate == true,
-                                        onSearchFocus = { omniboxFocus.requestFocus() },
                                         onOpen = { uri -> currentTab?.session?.loadUri(uri) },
                                         onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
                                         onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
@@ -609,7 +612,7 @@ private fun TopBar(
         suggestions = if (focused && text.isNotBlank() && userHasEdited) onSuggest(text) else emptyList()
     }
     val navigate: (String) -> Unit = { q ->
-        when (val target = com.artt.minibrowser.engine.resolveNavigation(q, engine)) {
+        when (val target = com.artt.minibrowser.engine.resolveNavigation(q)) {
             is NavigationTarget.External -> onExternal(target.uri)
             is NavigationTarget.Web, is NavigationTarget.Internal, is NavigationTarget.Search ->
                 onNavigate(buildLoadUri(q, engine))
@@ -922,11 +925,11 @@ private fun MenuSheet(
         }
         MenuDivider()
         SheetRow(Icons.Filled.Search, "Найти на странице", enabled = httpPage, onClick = { onDismiss(); onFind() })
-        if (httpPage && tab != null) {
+        tab?.takeIf { httpPage }?.let { currentTab ->
             ToggleRow(
                 AppIcons.Desktop,
                 "Версия для ПК",
-                tab.desktop,
+                currentTab.desktop,
                 onChecked = { onDismiss(); onToggleDesktop() },
             )
         }
