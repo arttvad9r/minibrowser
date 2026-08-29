@@ -107,7 +107,11 @@ object FaviconFetcher {
                 }
                 if (dst.exists()) {
                     dst.setLastModified(System.currentTimeMillis())
-                    trimFaviconDiskCache(iconsDir = dst.parentFile ?: return@synchronized)
+                    trimFaviconDiskCache(
+                        iconsDir = dst.parentFile ?: return@synchronized,
+                        maxFiles = MAX_CACHE_FILES,
+                        maxBytes = MAX_CACHE_BYTES,
+                    )
                 }
             }
         } else {
