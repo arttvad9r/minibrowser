@@ -12,7 +12,6 @@ import org.mozilla.geckoview.WebExtensionController
 object ExtensionLoader {
     const val UBLOCK_ID = "uBlock0@raymondhill.net"
     const val VOT_ID = "vot-ext@firefox"
-    const val CHATGPT_VIEWPORT_ID = "chatgpt-viewport@minibrowser"
 
     enum class Status { Installing, Enabled, Disabled, Error }
     data class ExtensionState(val status: Status, val error: String? = null)
@@ -31,12 +30,6 @@ object ExtensionLoader {
     fun installAll(runtime: GeckoRuntime, adblockEnabled: Boolean, votEnabled: Boolean) {
         installBuiltIn(runtime, UBLOCK_ID, "resource://android/assets/extensions/ublock/", adblockEnabled)
         installBuiltIn(runtime, VOT_ID, "resource://android/assets/extensions/vot/", votEnabled)
-        installBuiltIn(
-            runtime,
-            CHATGPT_VIEWPORT_ID,
-            "resource://android/assets/extensions/chatgpt-viewport/",
-            true,
-        )
     }
 
     fun setAdblock(runtime: GeckoRuntime, enabled: Boolean) {
@@ -55,8 +48,7 @@ object ExtensionLoader {
         installBuiltIn(runtime, VOT_ID, "resource://android/assets/extensions/vot/", desiredEnabled)
     }
 
-    internal fun privateAllowedInPrivate(id: String): Boolean =
-        id == UBLOCK_ID || id == CHATGPT_VIEWPORT_ID
+    internal fun privateAllowedInPrivate(id: String): Boolean = id == UBLOCK_ID
 
     private fun installBuiltIn(runtime: GeckoRuntime, id: String, resource: String, enabled: Boolean) {
         val controller = runtime.webExtensionController
