@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,6 +73,7 @@ fun BrowserTabSwitcher(
 ) {
     var visible by remember { mutableStateOf(false) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var switchTarget by remember { mutableStateOf<Long?>(null) }
     val overviewCurrentId = remember { currentId }
 
     LaunchedEffect(Unit) { visible = true }
@@ -90,18 +92,33 @@ fun BrowserTabSwitcher(
         action()
     }
 
+    // A GeckoSession swap can do synchronous UI-thread work. Keep the overview fully opaque while
+    // it happens, let Compose/AndroidView apply the new session for two frames, and only then run
+    // the cheap overlay fade. This prevents session attachment from stalling the transition itself.
+    LaunchedEffect(switchTarget, currentId) {
+        val target = switchTarget ?: return@LaunchedEffect
+        if (currentId != target) return@LaunchedEffect
+        withFrameNanos { }
+        withFrameNanos { }
+        visible = false
+        delay(MotionTokens.Quick.toLong())
+        switchTarget = null
+        onDismiss()
+    }
+
     fun requestExit(action: () -> Unit) {
-        if (pendingAction != null) return
+        if (pendingAction != null || switchTarget != null) return
         pendingAction = action
     }
 
     fun activateAndExit(id: Long) {
-        if (pendingAction != null) return
+        if (pendingAction != null || switchTarget != null) return
+        switchTarget = id
         onSelect(id)
-        requestExit(onDismiss)
     }
 
-    BackHandler(enabled = pendingAction == null) { requestExit(onDismiss) }
+    val inputEnabled = pendingAction == null && switchTarget == null
+    BackHandler(enabled = inputEnabled) { requestExit(onDismiss) }
 
     Box(
         Modifier
@@ -119,7 +136,7 @@ fun BrowserTabSwitcher(
             ) {
                 IconButton(
                     onClick = { requestExit(onDismiss) },
-                    enabled = pendingAction == null,
+                    enabled = inputEnabled,
                     modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
                 ) {
                     Icon(AppIcons.ChevronDown, null)
@@ -132,7 +149,7 @@ fun BrowserTabSwitcher(
                 )
                 IconButton(
                     onClick = { requestExit(onNew) },
-                    enabled = pendingAction == null,
+                    enabled = inputEnabled,
                     modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
                 ) {
                     Icon(Icons.Filled.Add, null)
@@ -153,7 +170,7 @@ fun BrowserTabSwitcher(
                             iconsDir = iconsDir,
                             modifier = Modifier.width(224.dp),
                             onSelect = { activateAndExit(tab.id) },
-                            onClose = { onClose(tab.id) },
+                            onClose = { if (inputEnabled) onClose(tab.id) },
                         )
                     }
                 }
@@ -174,7 +191,7 @@ fun BrowserTabSwitcher(
                                 isCurrent = tab.id == overviewCurrentId,
                                 iconsDir = iconsDir,
                                 onSelect = { activateAndExit(tab.id) },
-                                onClose = { onClose(tab.id) },
+                                onClose = { if (inputEnabled) onClose(tab.id) },
                             )
                         }
                     }
