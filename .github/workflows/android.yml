@@ -34,8 +34,10 @@ jobs:
         run: ./gradlew :app:assembleDebug --stacktrace
       - name: Release APK
         run: ./gradlew :app:assembleRelease --stacktrace
-      - name: Benchmark test APK
+      - name: Performance benchmark APK
         run: ./gradlew :benchmark:assembleBenchmark -PminibrowserAbi=x86_64 --stacktrace
+      - name: Profile generator APK
+        run: ./gradlew :benchmark:assembleProfile -PminibrowserAbi=x86_64 --stacktrace
 
   instrumentation:
     runs-on: ubuntu-latest
@@ -72,7 +74,7 @@ jobs:
             -camera-back none -camera-front none -no-snapshot -no-metrics
           script: |
             ./gradlew :app:connectedDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
-            ./gradlew :benchmark:connectedBenchmarkAndroidTest \
+            ./gradlew :benchmark:connectedProfileAndroidTest \
               -PminibrowserAbi=x86_64 \
               -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile \
               --stacktrace
