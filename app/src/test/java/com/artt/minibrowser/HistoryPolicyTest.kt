@@ -4,6 +4,7 @@ import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.collapseHistoryNoise
 import com.artt.minibrowser.data.distinctRecentSites
 import com.artt.minibrowser.data.isHistoryUrl
+import com.artt.minibrowser.data.webHistoryEntries
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -22,6 +23,21 @@ class HistoryPolicyTest {
         assertFalse(isHistoryUrl("file:///tmp/test"))
         assertFalse(isHistoryUrl("data:text/plain,test"))
         assertFalse(isHistoryUrl(""))
+    }
+
+    @Test fun webHistoryFastPathReusesInput() {
+        val rows = listOf(
+            HistoryEntry("https://example.com/a", "A", 2, 1),
+            HistoryEntry("http://example.com/b", "B", 1, 1),
+        )
+        assertSame(rows, webHistoryEntries(rows))
+    }
+
+    @Test fun webHistoryFilteringDropsLegacyInternalRows() {
+        val first = HistoryEntry("https://example.com/a", "A", 3, 1)
+        val internal = HistoryEntry("about:blank", "Blank", 2, 1)
+        val last = HistoryEntry("https://example.com/b", "B", 1, 1)
+        assertEquals(listOf(first, last), webHistoryEntries(listOf(first, internal, last)))
     }
 
     @Test fun collapsesFastSameSiteSameTitleNavigationNoise() {
