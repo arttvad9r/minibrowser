@@ -7,14 +7,6 @@ package com.artt.minibrowser.ui
 
 import android.graphics.Bitmap
 import android.util.LruCache
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -136,24 +128,19 @@ fun Favicon(source: String, iconsDir: File, size: Dp, modifier: Modifier = Modif
         }
     }
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
-        Crossfade(
-            targetState = bmp,
-            animationSpec = tween(MotionTokens.Standard),
-            label = "favicon",
-        ) { bitmap ->
-            if (bitmap != null) {
-                Image(bitmap.asImageBitmap(), null, Modifier.size(size))
-            } else if (displayHost.isNotBlank()) {
-                Box(
-                    Modifier.size(size).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        displayHost.removePrefix("www.").take(1).uppercase(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = (size.value * 0.45f).sp,
-                    )
-                }
+        val bitmap = bmp
+        if (bitmap != null) {
+            Image(bitmap.asImageBitmap(), null, Modifier.size(size))
+        } else if (displayHost.isNotBlank()) {
+            Box(
+                Modifier.size(size).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    displayHost.removePrefix("www.").take(1).uppercase(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = (size.value * 0.45f).sp,
+                )
             }
         }
     }
@@ -174,7 +161,7 @@ fun SectionHeader(
             Row(
                 Modifier
                     .clip(Radius.small)
-                    .softClickable(pressedScale = 0.96f, onClick = onAction)
+                    .softClickable(onClick = onAction)
                     .padding(horizontal = 4.dp, vertical = 2.dp)
                     .semantics { contentDescription = actionLabel },
                 verticalAlignment = Alignment.CenterVertically,
@@ -259,8 +246,6 @@ fun SheetRow(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    // Действие, которое сейчас невозможно выполнить, не должно раздувать меню серой строкой.
-    // Информационные disabled-строки без click-handler (например, «Запуск…») остаются видимыми.
     if (!enabled && onClick != null) return
 
     val alpha = if (enabled) 1f else 0.52f
@@ -300,7 +285,6 @@ fun ToggleRow(
             .fillMaxWidth()
             .clip(Radius.small)
             .toggleable(value = checked, role = Role.Switch, onValueChange = onChecked)
-            .animateContentSize(animationSpec = standardSpatialSpring())
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -330,7 +314,7 @@ fun QuickAction(icon: ImageVector, label: String, onClick: () -> Unit) {
     Column(
         Modifier
             .clip(Radius.button)
-            .softClickable(pressedScale = 0.95f, onClick = onClick)
+            .softClickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -378,7 +362,6 @@ fun SettingsRow(
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .heightIn(min = 54.dp)
-            .animateContentSize(animationSpec = standardSpatialSpring())
             .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -396,7 +379,7 @@ fun SettingsRow(
     }
 }
 
-/** Строка выбора: компактная 48dp hit-area, галка появляется без движения layout. */
+/** Строка выбора: компактная 48dp hit-area, место под галку зарезервировано без layout-motion. */
 @Composable
 fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
     Row(
@@ -408,12 +391,10 @@ fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-        AnimatedVisibility(
-            visible = selected,
-            enter = fadeIn(tween(MotionTokens.Quick)) + scaleIn(MotionTokens.StandardSpatial, initialScale = 0.82f),
-            exit = fadeOut(tween(MotionTokens.Quick)) + scaleOut(tween(MotionTokens.Quick), targetScale = 0.82f),
-        ) {
-            Icon(Icons.Filled.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+        Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+            if (selected) {
+                Icon(Icons.Filled.Check, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+            }
         }
     }
 }
@@ -450,7 +431,7 @@ fun BookmarkActionsSheet(
     var renaming by remember { mutableStateOf(false) }
     var text by remember(bookmark.url) { mutableStateOf(bookmark.title) }
     BrowserBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.animateContentSize(animationSpec = standardSpatialSpring())) {
+        Column {
             if (renaming) {
                 Text("Переименовать", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
