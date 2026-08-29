@@ -20,6 +20,29 @@ class ActivityRequestCoordinatorTest {
     }
 
     @Test
+    fun synchronousLaunchFailureCancelsRequestAndDoesNotWedgeQueue() {
+        val coordinator = ActivityRequestCoordinator<String>()
+        val events = mutableListOf<String>()
+
+        coordinator.enqueue(
+            start = {
+                events += "first-start"
+                error("launcher unavailable")
+            },
+            cancel = { events += "first-cancel" },
+        )
+        coordinator.enqueue(
+            start = { finish ->
+                events += "second-start"
+                finish("done")
+            },
+            cancel = { events += "second-cancel" },
+        )
+
+        assertEquals(listOf("first-start", "first-cancel", "second-start"), events)
+    }
+
+    @Test
     fun cancelAllCancelsActiveAndQueuedRequestsAndAllowsNewRequest() {
         val coordinator = ActivityRequestCoordinator<String>()
         val events = mutableListOf<String>()
