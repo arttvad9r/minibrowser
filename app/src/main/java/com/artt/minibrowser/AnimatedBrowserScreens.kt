@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -26,15 +27,18 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.artt.minibrowser.browser.HistoryOperation
+import com.artt.minibrowser.browser.HistoryUiState
+import com.artt.minibrowser.browser.HistoryViewModel
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
@@ -45,14 +49,13 @@ import com.artt.minibrowser.ui.BrowserMotionScreen
 import com.artt.minibrowser.ui.EmptyState
 import com.artt.minibrowser.ui.Favicon
 import com.artt.minibrowser.ui.hostOf
-import kotlinx.coroutines.launch
 import java.io.File
 import java.text.DateFormat
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Date
 
-/** History destination. */
+/** History destination. Repository access is owned by the destination ViewModel, not the renderer. */
 @Composable
 internal fun MotionHistoryScreen(
     repo: HistoryRepository,
@@ -60,12 +63,37 @@ internal fun MotionHistoryScreen(
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
 ) {
-    var entries by remember { mutableStateOf(emptyList<HistoryEntry>()) }
-    var reload by remember { mutableIntStateOf(0) }
+    // This destination only enters composition when History is open, so constructing the factory and
+    // ViewModel here preserves lazy Room creation on the ordinary browser cold-start path.
+    val factory = remember(repo) { HistoryViewModel.factory(repo) }
+    val historyViewModel: HistoryViewModel = viewModel(factory = factory)
+    val state by historyViewModel.uiState.collectAsStateWithLifecycle()
+
+    // Re-read history whenever this destination is re-entered. Existing content stays visible while
+    // the refresh runs, so returning to History does not flash an artificial loading state.
+    LaunchedEffect(historyViewModel) { historyViewModel.refresh() }
+
+    HistoryScreen(
+        state = state,
+        iconsDir = iconsDir,
+        onBack = onBack,
+        onOpen = onOpen,
+        onClear = historyViewModel::clear,
+        onRetry = historyViewModel::retry,
+    )
+}
+
+@Composable
+private fun HistoryScreen(
+    state: HistoryUiState,
+    iconsDir: File,
+    onBack: () -> Unit,
+    onOpen: (String) -> Unit,
+    onClear: () -> Unit,
+    onRetry: () -> Unit,
+) {
     var confirmClear by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
     val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
-    LaunchedEffect(reload) { entries = repo.recent(200) }
 
     BrowserMotionScreen(onBack = onBack) { requestExit ->
         Column(Modifier.fillMaxSize()) {
@@ -77,49 +105,71 @@ internal fun MotionHistoryScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
                 }
                 Text("История", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = { confirmClear = true }) {
-                    Text("Очистить", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (state is HistoryUiState.Content && state.entries.isNotEmpty()) {
+                    TextButton(onClick = { confirmClear = true }) {
+                        Text("Очистить", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
 
-            if (entries.isEmpty()) {
-                EmptyState(AppIcons.History, "История пуста", "Посещённые страницы появятся здесь.")
-            } else {
-                val groups = remember(entries) { motionGroupByDay(entries) }
-                LazyColumn(Modifier.fillMaxSize()) {
-                    groups.forEach { (label, groupEntries) ->
-                        item(key = "header_$label") {
-                            Text(
-                                label,
-                                Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+            when (state) {
+                HistoryUiState.Loading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                HistoryUiState.Empty -> {
+                    EmptyState(AppIcons.History, "История пуста", "Посещённые страницы появятся здесь.")
+                }
+                is HistoryUiState.Error -> {
+                    val title = when (state.operation) {
+                        HistoryOperation.Load -> "Не удалось загрузить историю"
+                        HistoryOperation.Clear -> "Не удалось очистить историю"
+                    }
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            EmptyState(AppIcons.History, title, "Повторите попытку.")
+                            TextButton(onClick = onRetry) { Text("Повторить") }
                         }
-                        items(groupEntries, key = { it.url }) { entry ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { requestExit { onOpen(entry.url) } }
-                                    .padding(horizontal = 20.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Favicon(entry.url, iconsDir, 28.dp)
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        entry.title.ifBlank { entry.url },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Text(
-                                        "${hostOf(entry.url)} · ${timeFormat.format(Date(entry.visitedAt))}",
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                    }
+                }
+                is HistoryUiState.Content -> {
+                    val groups = remember(state.entries) { motionGroupByDay(state.entries) }
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        groups.forEach { (label, groupEntries) ->
+                            item(key = "header_$label") {
+                                Text(
+                                    label,
+                                    Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            items(groupEntries, key = { it.url }) { entry ->
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { requestExit { onOpen(entry.url) } }
+                                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Favicon(entry.url, iconsDir, 28.dp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            entry.title.ifBlank { entry.url },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            "${hostOf(entry.url)} · ${timeFormat.format(Date(entry.visitedAt))}",
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -141,10 +191,7 @@ internal fun MotionHistoryScreen(
                 TextButton(
                     onClick = {
                         confirmClear = false
-                        scope.launch {
-                            repo.clear()
-                            reload++
-                        }
+                        onClear()
                     },
                 ) { Text("Очистить") }
             },
