@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -65,6 +66,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -90,6 +92,7 @@ fun BrowserTabSwitcher(
     var predictiveReturning by remember { mutableStateOf(false) }
     var predictiveProgress by remember { mutableFloatStateOf(0f) }
     val predictiveReturn = remember { Animatable(1f) }
+    val motionScope = rememberCoroutineScope()
     var rootBounds by remember { mutableStateOf(Rect.Zero) }
     val cardBounds = remember { mutableStateMapOf<Long, Rect>() }
 
@@ -142,10 +145,12 @@ fun BrowserTabSwitcher(
             val visibleProgress = (1f - predictiveProgress).coerceIn(0f, 1f)
             predictiveActive = false
             predictiveReturning = true
-            predictiveReturn.snapTo(visibleProgress)
-            predictiveReturn.animateTo(1f, MotionTokens.ExpressiveSpatial)
-            predictiveProgress = 0f
-            predictiveReturning = false
+            motionScope.launch {
+                predictiveReturn.snapTo(visibleProgress)
+                predictiveReturn.animateTo(1f, MotionTokens.ExpressiveSpatial)
+                predictiveProgress = 0f
+                predictiveReturning = false
+            }
         }
     }
 
