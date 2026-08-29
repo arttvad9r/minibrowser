@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -364,7 +365,7 @@ class MainActivity : ComponentActivity() {
                         .background(MaterialTheme.colorScheme.background)
                         .focusable(),
                 ) {
-                    Box(Modifier.fillMaxSize().systemBarsPadding()) {
+                    Box(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
                         Column(Modifier.fillMaxSize()) {
                             if (!inFullscreen) TopBar(
                                 currentTab,
@@ -494,7 +495,7 @@ class MainActivity : ComponentActivity() {
                         if (showSwitcher) {
                             BrowserTabSwitcher(
                                 tabs, currentId, iconsDir,
-                                onSelect = { tabManager.select(it); browserViewModel.showSwitcher(false) },
+                                onSelect = { tabManager.select(it) },
                                 onClose = {
                                     TabPreviewStore.remove(it)
                                     tabManager.closeTab(it)
