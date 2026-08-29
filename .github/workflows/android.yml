@@ -34,6 +34,20 @@ jobs:
         run: ./gradlew :app:assembleDebug --stacktrace
       - name: Release APK
         run: ./gradlew :app:assembleRelease --stacktrace
+      - name: Verify packaged baseline profile
+        run: |
+          if [ ! -f app/src/main/baselineProfiles/baseline-prof.txt ]; then
+            echo "No committed Baseline Profile yet"
+            exit 0
+          fi
+          apk="$(find app/build/outputs/apk/release -type f -name '*.apk' -print -quit)"
+          test -n "$apk"
+          unzip -l "$apk" | grep -q 'assets/dexopt/baseline.prof'
+          unzip -l "$apk" | grep -q 'assets/dexopt/baseline.profm'
+          profile_bytes="$(unzip -p "$apk" assets/dexopt/baseline.prof | wc -c)"
+          test "$profile_bytes" -gt 0
+          test "$profile_bytes" -lt 1572864
+          echo "Packaged baseline.prof: $profile_bytes bytes"
       - name: Performance benchmark APK
         run: ./gradlew :benchmark:assembleBenchmark -PminibrowserAbi=x86_64 --stacktrace
       - name: Profile generator APK
@@ -42,6 +56,8 @@ jobs:
   instrumentation:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
@@ -92,3 +108,25 @@ jobs:
           path: |
             benchmark/build/outputs/**/*-baseline-prof.txt
             benchmark/build/outputs/**/*-startup-prof.txt
+      - name: Commit generated profile rules
+        if: success() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ ! -f .github/profile-autocommit.pending ]; then
+            echo "Profile import sentinel is absent; nothing to commit"
+            exit 0
+          fi
+          core="$(find benchmark/build/outputs -type f -name 'core-browser-baseline-prof.txt' -print -quit)"
+          startup="$(find benchmark/build/outputs -type f -name 'startup-startup-prof.txt' -print -quit)"
+          test -n "$core"
+          test -n "$startup"
+          git fetch origin "$HEAD_REF"
+          git switch -C "$HEAD_REF" "origin/$HEAD_REF"
+          python3 scripts/merge-profile-rules.py "$core" "$startup" app/src/main/baselineProfiles
+          rm .github/profile-autocommit.pending
+          git add app/src/main/baselineProfiles .github/profile-autocommit.pending
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "Package generated baseline profiles"
+          git push origin HEAD:"$HEAD_REF"
