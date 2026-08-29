@@ -39,6 +39,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             isDebuggable = false
+            // Baseline/Profile generation must observe stable, original method signatures. A
+            // minified/optimized target would generate rules for R8-transformed code and make the
+            // captured profile unsuitable for the real release source graph.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
     // Дефолтный паттерн AAPT вырезает каталоги, начинающиеся с "_"
