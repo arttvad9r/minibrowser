@@ -53,6 +53,29 @@ class BookmarksViewModelTest {
     }
 
     @Test
+    fun refreshFailurePreservesExistingContent() {
+        val existing = Bookmark("https://example.com", "Example", "example.com", 1)
+        var reads = 0
+        val viewModel = bookmarksViewModel(
+            loadBookmarks = {
+                if (reads++ == 0) listOf(existing) else error("refresh failed")
+            },
+        )
+        viewModel.refresh()
+
+        viewModel.refresh()
+
+        assertEquals(
+            BookmarksUiState(
+                bookmarks = listOf(existing),
+                isLoading = false,
+                error = BookmarksOperation.Load,
+            ),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
     fun renameReloadsBookmarks() {
         val updated = Bookmark("https://example.com", "Renamed", "example.com", 1)
         var renamed: Pair<String, String>? = null
@@ -82,7 +105,7 @@ class BookmarksViewModelTest {
     }
 
     @Test
-    fun mutationFailurePreservesContentAndPublishesError() {
+    fun mutationFailurePreservesContentAndPublishesMutationError() {
         val existing = Bookmark("https://example.com", "Example", "example.com", 1)
         val viewModel = bookmarksViewModel(
             loadBookmarks = { listOf(existing) },
@@ -97,6 +120,32 @@ class BookmarksViewModelTest {
                 bookmarks = listOf(existing),
                 isLoading = false,
                 error = BookmarksOperation.Delete,
+            ),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun postMutationReloadFailureIsReportedAsLoadError() {
+        val existing = Bookmark("https://example.com", "Example", "example.com", 1)
+        var reads = 0
+        var deleted: String? = null
+        val viewModel = bookmarksViewModel(
+            loadBookmarks = {
+                if (reads++ == 0) listOf(existing) else error("reload failed")
+            },
+            deleteBookmark = { deleted = it },
+        )
+        viewModel.refresh()
+
+        viewModel.delete(existing.url)
+
+        assertEquals(existing.url, deleted)
+        assertEquals(
+            BookmarksUiState(
+                bookmarks = listOf(existing),
+                isLoading = false,
+                error = BookmarksOperation.Load,
             ),
             viewModel.uiState.value,
         )
