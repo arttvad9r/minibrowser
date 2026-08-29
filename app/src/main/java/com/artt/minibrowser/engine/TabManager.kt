@@ -3,22 +3,24 @@ package com.artt.minibrowser.engine
 import android.app.Activity
 import android.os.SystemClock
 import android.util.Log
-import com.artt.minibrowser.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.HistorySink
 import com.artt.minibrowser.data.PersistedBrowserState
 import com.artt.minibrowser.data.PersistedTab
 import com.artt.minibrowser.data.TabStore
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
@@ -212,13 +214,22 @@ class TabManager(
         GeckoContextMenuController(activity) { uri, private -> newTab(uri, private) }
     }
     private val _tabs = MutableStateFlow<List<Tab>>(emptyList())
-    private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val persistJob = SupervisorJob()
+    private val persistScope = CoroutineScope(persistJob + Dispatchers.IO)
     private val persistRequests = PersistSignalQueue()
+    private val lifecycleOwner = context as? LifecycleOwner
+    private val lifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onDestroy(owner: LifecycleOwner) {
+            close()
+        }
+    }
     val tabs get() = _tabs
     val currentId = MutableStateFlow<Long?>(null)
     private var seq = 0L
+    private var closed = false
 
     init {
+        lifecycleOwner?.lifecycle?.addObserver(lifecycleObserver)
         persistScope.launch {
             while (true) {
                 persistRequests.nextForWrite()
@@ -231,6 +242,7 @@ class TabManager(
     }
 
     fun newTab(url: String?, private: Boolean = false): Tab {
+        check(!closed) { "TabManager is closed" }
         val tab = createTab(private)
         deactivateOthers(tab.id)
         currentId.value = tab.id
@@ -241,6 +253,7 @@ class TabManager(
 
     /** Creates the session GeckoView will own for target="_blank"/window.open(). */
     fun newWindowSession(private: Boolean): GeckoSession {
+        check(!closed) { "TabManager is closed" }
         val tab = createTab(private)
         deactivateOthers(tab.id)
         currentId.value = tab.id
@@ -269,6 +282,7 @@ class TabManager(
     }
 
     private fun openTab(tab: Tab) {
+        if (closed) return
         tab.session.open(runtime)
         val selected = tab.id == currentId.value
         tab.session.setActive(selected)
@@ -291,6 +305,7 @@ class TabManager(
     }
 
     fun select(id: Long) {
+        if (closed) return
         val selectedTab = _tabs.value.firstOrNull { it.id == id } ?: return
         _tabs.value.forEach { tab ->
             val selected = tab.id == id
@@ -309,6 +324,7 @@ class TabManager(
     }
 
     fun closeTab(id: Long) {
+        if (closed) return
         val idx = _tabs.value.indexOfFirst { it.id == id }
         if (idx < 0) return
         val dying = _tabs.value[idx]
@@ -325,6 +341,7 @@ class TabManager(
     fun current(): Tab? = _tabs.value.firstOrNull { it.id == currentId.value }
 
     fun setAppVisible(visible: Boolean) {
+        if (closed) return
         _tabs.value.filter { it.session.isOpen }.forEach { tab ->
             val active = visible && tab.id == currentId.value
             tab.session.setActive(active)
@@ -333,23 +350,39 @@ class TabManager(
     }
 
     fun clearWebData(): GeckoResult<Void> {
+        if (closed) return GeckoResult.fromValue(null)
         _tabs.value.forEach { tab ->
             runtime.webExtensionController.setTabActive(tab.session, false)
             closeIfOpen(tab.session)
         }
         _tabs.value = emptyList()
         currentId.value = null
-        return runtime.storageController.clearData(StorageController.ClearFlags.ALL).accept {
-            newTab(null)
-        }
+        return runtime.storageController.clearData(StorageController.ClearFlags.ALL).accept(
+            { if (!closed) newTab(null) },
+            { error ->
+                Log.e("MinibrowserTabs", "Failed to clear web data", error)
+                if (!closed) newTab(null)
+            },
+        )
     }
 
     fun persist() {
         requestPersist(immediate = true)
     }
 
+    fun close() {
+        if (closed) return
+        closed = true
+        lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
+        _tabs.value.forEach { tab ->
+            runCatching { runtime.webExtensionController.setTabActive(tab.session, false) }
+            closeIfOpen(tab.session)
+        }
+        persistJob.cancel()
+    }
+
     private fun requestPersist(immediate: Boolean) {
-        persistRequests.send(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
+        if (!closed) persistRequests.send(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
     }
 
     private fun capturePersistenceSnapshot(): PersistenceSnapshot = PersistenceSnapshot(
@@ -375,7 +408,7 @@ class TabManager(
             newTab(null)
         } else {
             val selected = saved.selectedId?.takeIf { id -> _tabs.value.any { it.id == id } }
-                ?: _tabs.value.first().id
+                ?: _tabs.value.maxByOrNull { it.lastAccess }!!.id
             currentId.value = selected
             _tabs.value.first { it.id == selected }.let(::openTab)
         }
@@ -390,6 +423,7 @@ class TabManager(
                 tab.scrollY = 0
                 tab.progress = 0.05f
                 tab.url = url
+                tab.title = ""
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
@@ -573,6 +607,7 @@ class TabManager(
             .build()
 
     private fun recoverDeadSession(tab: Tab) {
+        if (closed) return
         val wasActive = tab.id == currentId.value
         runtime.webExtensionController.setTabActive(tab.session, false)
         closeIfOpen(tab.session)
@@ -587,14 +622,27 @@ class TabManager(
         fresh.setActive(wasActive)
         fresh.setFocused(wasActive)
         runtime.webExtensionController.setTabActive(fresh, wasActive)
-        val restored = tab.persistedSessionState?.let { encoded ->
+
+        val latest = tab.latestSessionState
+        val restoredLatest = latest?.let { state ->
             runCatching {
-                GeckoSession.SessionState.fromString(encoded)?.let {
-                    fresh.restoreState(it)
-                    true
-                } ?: false
+                fresh.restoreState(state)
+                true
             }.getOrDefault(false)
         } == true
-        if (!restored) fresh.loadUri(tab.url.ifEmpty { "about:blank" })
+        val restoredPersisted = if (!restoredLatest) {
+            tab.persistedSessionState?.let { encoded ->
+                runCatching {
+                    GeckoSession.SessionState.fromString(encoded)?.let {
+                        fresh.restoreState(it)
+                        true
+                    } ?: false
+                }.getOrDefault(false)
+            } == true
+        } else false
+
+        if (!restoredLatest && !restoredPersisted) {
+            fresh.loadUri(tab.url.ifEmpty { "about:blank" })
+        }
     }
 }
