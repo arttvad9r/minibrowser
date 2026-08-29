@@ -26,7 +26,7 @@ class SettingsViewModelTest {
         val viewModel = settingsViewModel(
             prefs = prefs,
             extensionStates = extensionStates,
-            initializeExtensions = initialized::add,
+            initializeExtensions = { initialized += it },
         )
 
         assertEquals(
