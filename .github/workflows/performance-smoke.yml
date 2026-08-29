@@ -1,0 +1,58 @@
+name: Performance smoke
+
+on:
+  pull_request:
+
+concurrency:
+  group: performance-smoke-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cold-restore-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Cold restore macrobenchmark smoke
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+            -camera-back none -camera-front none -no-snapshot -no-metrics
+          script: >-
+            ./gradlew :benchmark:connectedBenchmarkAndroidTest
+            -PminibrowserAbi=x86_64
+            '-Pandroid.testInstrumentationRunnerArguments.class=com.artt.minibrowser.benchmark.StartupBenchmark#coldRestoreTenTabsWithBaselineProfile'
+            -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR
+            --stacktrace
+      - name: Upload benchmark reports and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cold-restore-smoke-output
+          if-no-files-found: warn
+          path: |
+            benchmark/build/outputs/connected_android_test_additional_output/**
+            benchmark/build/outputs/androidTest-results/**
