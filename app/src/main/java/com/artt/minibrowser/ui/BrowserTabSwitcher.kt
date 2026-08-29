@@ -255,7 +255,7 @@ private fun BrowserTabCard(
             .clickable(onClick = onSelect),
     ) {
         if (tab.isPrivate) {
-            Box(Modifier.fillMaxWidth().height(40.dp)) {
+            Box(Modifier.fillMaxWidth().height(48.dp)) {
                 Text(
                     "Приватная вкладка",
                     Modifier.align(Alignment.Center),
@@ -269,7 +269,7 @@ private fun BrowserTabCard(
                     onClick = onClose,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .size(36.dp)
+                        .size(48.dp)
                         .semantics { contentDescription = "Закрыть вкладку" },
                 ) {
                     Icon(
@@ -282,7 +282,7 @@ private fun BrowserTabCard(
             }
         } else {
             Row(
-                Modifier.fillMaxWidth().height(40.dp).padding(start = 10.dp, end = 2.dp),
+                Modifier.fillMaxWidth().height(48.dp).padding(start = 10.dp, end = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Favicon(if (host.isNotBlank()) tab.url else host, iconsDir, 17.dp)
@@ -299,7 +299,7 @@ private fun BrowserTabCard(
                 )
                 IconButton(
                     onClick = onClose,
-                    modifier = Modifier.size(36.dp).semantics { contentDescription = "Закрыть вкладку" },
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = "Закрыть вкладку" },
                 ) {
                     Icon(
                         Icons.Filled.Close,
