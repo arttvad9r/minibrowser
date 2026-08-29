@@ -65,6 +65,14 @@ internal fun mergeRestoredDownloads(
 ): List<BrowserDownload> =
     (live + restored).distinctBy { it.id }.take(limit.coerceAtLeast(0))
 
+internal fun shouldPersistRestoredDownloadMerge(
+    live: List<BrowserDownload>,
+    rawRestored: List<BrowserDownload>,
+    normalizedRestored: List<BrowserDownload>,
+    discardRestoredHistory: Boolean,
+): Boolean =
+    discardRestoredHistory || live.isNotEmpty() || rawRestored != normalizedRestored
+
 /**
  * Writes a complete replacement before publishing it. The target is never truncated in place,
  * so a process death during temp-file creation leaves the previous valid history untouched.
@@ -122,18 +130,24 @@ object DownloadHistory {
         ioScope.launch {
             try {
                 val now = System.currentTimeMillis()
-                val restored = load(file)
-                    .map { normalizeRestoredDownload(it, now) }
-                    .take(MAX_ITEMS)
+                val rawRestored = load(file).take(MAX_ITEMS)
+                val restored = rawRestored.map { normalizeRestoredDownload(it, now) }
                 synchronized(lock) {
-                    _items.value = if (discardRestoredHistory) {
-                        _items.value.take(MAX_ITEMS)
+                    val live = _items.value
+                    val discard = discardRestoredHistory
+                    _items.value = if (discard) {
+                        live.take(MAX_ITEMS)
                     } else {
-                        mergeRestoredDownloads(_items.value, restored, MAX_ITEMS)
+                        mergeRestoredDownloads(live, restored, MAX_ITEMS)
                     }
-                    // Publish the merged/sanitized snapshot before unblocking the writer. Because
-                    // the channel is conflated, any pre-restore partial snapshot is replaced by it.
-                    schedulePersistLocked()
+                    // Do not rewrite an already-sanitized, settled file on every cold start. A
+                    // rewrite is needed only when normalization changed data, a live callback raced
+                    // the restore, or the user cleared history before the restore completed.
+                    if (shouldPersistRestoredDownloadMerge(live, rawRestored, restored, discard)) {
+                        // Publish the merged/sanitized snapshot before unblocking the writer. Because
+                        // the channel is conflated, any pre-restore partial snapshot is replaced by it.
+                        schedulePersistLocked()
+                    }
                 }
             } finally {
                 restoreComplete.complete(Unit)
