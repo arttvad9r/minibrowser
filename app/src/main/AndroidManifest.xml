@@ -14,9 +14,6 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:theme="@style/AppTheme">
-        <activity
-            android:name=".DownloadsActivity"
-            android:exported="false"/>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"
