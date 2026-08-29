@@ -19,6 +19,7 @@ object TabPreviewStore {
     private const val MAX_PREVIEW_WIDTH = 420
     private const val MAX_CACHE_BYTES = 24L * 1024L * 1024L
     private const val RETIRE_DELAY_MS = 1_000L
+    private const val OVERVIEW_CAPTURE_DELAY_MS = 160L
 
     private val previews = mutableStateMapOf<Long, Bitmap>()
     private val lru = LinkedHashMap<Long, Unit>(16, 0.75f, true)
@@ -81,16 +82,38 @@ object TabPreviewStore {
         // Intentionally deferred to captureCurrent()/captureBeforeSessionSwap().
     }
 
+    /**
+     * Opening the overview must not synchronously contend with a Gecko compositor readback.
+     * Schedule the fresh preview just after the short overview fade; stale targets are discarded
+     * if the tab/session changes in the meantime.
+     */
     fun captureCurrent() {
         val view = currentView.get() ?: return
         val id = currentTabId ?: return
-        if (id in privateTabs || id in removedTabs || !isPreviewableUrl(currentUrl)) return
-        capture(view, id, currentUrl)
+        val url = currentUrl
+        if (id in privateTabs || id in removedTabs || !isPreviewableUrl(url)) return
+        val expectedGeneration = generation
+
+        mainHandler.postDelayed({
+            if (
+                generation != expectedGeneration ||
+                currentView.get() !== view ||
+                currentTabId != id ||
+                currentUrl != url ||
+                id in privateTabs ||
+                id in removedTabs
+            ) return@postDelayed
+            capture(view, id, url)
+        }, OVERVIEW_CAPTURE_DELAY_MS)
     }
 
     /** Called before GeckoView releases the old session so its last visible frame is not lost. */
     fun captureBeforeSessionSwap(view: GeckoView) {
-        if (currentView.get() === view) captureCurrent()
+        if (currentView.get() !== view) return
+        val id = currentTabId ?: return
+        val url = currentUrl
+        if (id in privateTabs || id in removedTabs || !isPreviewableUrl(url)) return
+        capture(view, id, url)
     }
 
     fun remove(tabId: Long) {
