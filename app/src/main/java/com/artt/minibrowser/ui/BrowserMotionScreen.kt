@@ -22,14 +22,14 @@ import androidx.compose.ui.platform.LocalDensity
 /**
  * Full-screen app destination over the browser.
  *
- * Bottom-origin destinations move as one fully opaque surface. This avoids the white/empty frame
+ * Destinations move as one fully opaque bottom-origin surface. This avoids the white/empty frame
  * caused by fading only the destination content while an opaque background had already covered the
  * previous screen, and it never alpha-blends a live GeckoView with Compose.
  */
 @Composable
 fun BrowserMotionScreen(
     onBack: () -> Unit,
-    fromBottom: Boolean = false,
+    fromBottom: Boolean = true,
     content: @Composable (requestExit: (() -> Unit) -> Unit) -> Unit,
 ) {
     val reveal = remember(fromBottom) { Animatable(if (fromBottom) 0f else 1f) }
