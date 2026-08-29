@@ -251,7 +251,7 @@ fun BrowserTabSwitcher(
                         if (currentIndex >= 0) gridState.scrollToItem(currentIndex)
                     }
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 164.dp),
+                        columns = GridCells.Fixed(2),
                         state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
