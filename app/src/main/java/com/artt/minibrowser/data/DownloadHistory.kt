@@ -7,7 +7,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStreamWriter
 import java.net.URI
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.util.UUID
 
 enum class DownloadStatus { Downloading, Completed, Failed }
@@ -31,6 +37,30 @@ internal fun downloadSourceForHistory(value: String): String = runCatching {
     if (uri.scheme?.lowercase() !in setOf("http", "https") || uri.host.isNullOrBlank()) return@runCatching ""
     URI(uri.scheme.lowercase(), null, uri.host, uri.port, null, null, null).toString()
 }.getOrDefault("")
+
+/**
+ * Writes a complete replacement before publishing it. The target is never truncated in place,
+ * so a process death during temp-file creation leaves the previous valid history untouched.
+ */
+internal fun writeTextAtomically(target: File, value: String) {
+    target.parentFile?.mkdirs()
+    val temp = File(target.parentFile, "${target.name}.tmp")
+    try {
+        FileOutputStream(temp).use { output ->
+            val writer = OutputStreamWriter(output, Charsets.UTF_8)
+            writer.write(value)
+            writer.flush()
+            output.fd.sync()
+        }
+        try {
+            Files.move(temp.toPath(), target.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(temp.toPath(), target.toPath(), REPLACE_EXISTING)
+        }
+    } finally {
+        temp.delete()
+    }
+}
 
 /** Small bounded app-owned history for files downloaded by Minibrowser only. */
 object DownloadHistory {
@@ -159,14 +189,6 @@ object DownloadHistory {
                 },
             )
         }
-        runCatching {
-            file.parentFile?.mkdirs()
-            val temp = File(file.parentFile, "${file.name}.tmp")
-            temp.writeText(array.toString())
-            if (!temp.renameTo(file)) {
-                file.writeText(array.toString())
-                temp.delete()
-            }
-        }
+        runCatching { writeTextAtomically(file, array.toString()) }
     }
 }
