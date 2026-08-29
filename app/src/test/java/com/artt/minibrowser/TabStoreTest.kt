@@ -1,8 +1,8 @@
 package com.artt.minibrowser
 
-import com.artt.minibrowser.data.TabStore
 import com.artt.minibrowser.data.PersistedBrowserState
 import com.artt.minibrowser.data.PersistedTab
+import com.artt.minibrowser.data.TabStore
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,10 +16,12 @@ class TabStoreTest {
         assertTrue(File(dir, "open_tabs.json").exists())
         dir.deleteRecursively()
     }
+
     @Test fun emptyWhenMissing() {
         val dir = File(System.getProperty("java.io.tmpdir"), "tabs-none-${System.nanoTime()}")
         assertEquals(emptyList(), TabStore.load(dir))
     }
+
     @Test fun privateTabsNotSaved() {
         val dir = File(System.getProperty("java.io.tmpdir"), "tabs-priv-${System.nanoTime()}").apply { mkdirs() }
         TabStore.save(dir, emptyList())
@@ -33,6 +35,38 @@ class TabStoreTest {
         val state = TabStore.loadState(dir)
         assertEquals(7, state.selectedId)
         assertEquals(true, state.tabs.single().desktop)
+        assertTrue(!File(dir, "open_tabs.json.tmp").exists())
+        dir.deleteRecursively()
+    }
+
+    @Test fun replacingExistingStateLeavesOnlyCompleteNewJson() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "tabs-replace-${System.nanoTime()}")
+        val first = PersistedBrowserState(1, listOf(PersistedTab(1, "https://one.example", "One")))
+        val second = PersistedBrowserState(2, listOf(PersistedTab(2, "https://two.example", "Two", desktop = true)))
+
+        TabStore.saveState(dir, first)
+        TabStore.saveState(dir, second)
+
+        assertEquals(second, TabStore.loadState(dir))
+        assertTrue(!File(dir, "open_tabs.json.tmp").exists())
+        dir.deleteRecursively()
+    }
+
+    @Test fun concurrentLifecycleFlushesKeepStoreReadable() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "tabs-concurrent-${System.nanoTime()}")
+        val states = (1L..8L).map { id ->
+            PersistedBrowserState(id, listOf(PersistedTab(id, "https://$id.example", "Tab $id")))
+        }
+        val threads = states.map { state ->
+            Thread {
+                repeat(12) { TabStore.saveState(dir, state) }
+            }
+        }
+
+        threads.forEach(Thread::start)
+        threads.forEach(Thread::join)
+
+        assertTrue(TabStore.loadState(dir) in states)
         assertTrue(!File(dir, "open_tabs.json.tmp").exists())
         dir.deleteRecursively()
     }
