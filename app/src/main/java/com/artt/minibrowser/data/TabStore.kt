@@ -1,5 +1,6 @@
 package com.artt.minibrowser.data
 
+import android.os.Trace
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -27,6 +28,21 @@ data class PersistedBrowserState(
     val selectedId: Long? = null,
     val tabs: List<PersistedTab> = emptyList(),
 )
+
+internal const val TAB_STORE_LOAD_TRACE = "TabStore.loadState"
+
+/** android.os.Trace is a no-op measurement aid; JVM unit tests use Android stubs that may throw. */
+private inline fun <T> tracedTabStoreLoad(block: () -> T): T {
+    val started = runCatching {
+        Trace.beginSection(TAB_STORE_LOAD_TRACE)
+        true
+    }.getOrDefault(false)
+    return try {
+        block()
+    } finally {
+        if (started) runCatching { Trace.endSection() }
+    }
+}
 
 object TabStore {
     private const val FILE_NAME = "open_tabs.json"
@@ -94,11 +110,11 @@ object TabStore {
 
     fun load(dir: File): List<String> = loadState(dir).tabs.map { it.url }
 
-    fun loadState(dir: File): PersistedBrowserState {
+    fun loadState(dir: File): PersistedBrowserState = tracedTabStoreLoad {
         val target = File(dir, FILE_NAME)
-        if (!target.isFile) return PersistedBrowserState()
+        if (!target.isFile) return@tracedTabStoreLoad PersistedBrowserState()
         val text = target.readText()
-        return runCatching {
+        runCatching {
             json.decodeFromString(PersistedBrowserState.serializer(), text)
         }.getOrElse {
             runCatching {
