@@ -146,13 +146,8 @@ class PersistenceSignalTest {
             nowNanos = { now },
             awaitNextOrTimeout = { _, _ ->
                 awaitCalls++
-                check(awaitCalls <= 3) { "wait called after the 3s deadline" }
-                now = when (awaitCalls) {
-                    1 -> 1_000_000_000L
-                    2 -> 2_000_000_000L
-                    3 -> 3_001_000_000L
-                    else -> 3_001_000_000L
-                }
+                check(awaitCalls <= 5) { "wait called after the 5s deadline" }
+                now = awaitCalls * 1_000_000_000L + if (awaitCalls == 5) 1_000_000L else 0L
                 queue.send(PersistSignal.Dirty)
                 Unit
             },
@@ -160,7 +155,7 @@ class PersistenceSignalTest {
         queue.send(PersistSignal.Dirty)
 
         assertEquals(PersistSignal.Dirty, queue.nextForWrite())
-        assertEquals(3, awaitCalls)
+        assertEquals(5, awaitCalls)
     }
 
     @Test
@@ -172,8 +167,8 @@ class PersistenceSignalTest {
             nowNanos = { now },
             awaitNextOrTimeout = { _, timeoutMs ->
                 awaitCalls++
-                assertEquals(1_000L, timeoutMs)
-                now += 900_000_000L
+                assertEquals(1_500L, timeoutMs)
+                now += 1_400_000_000L
                 if (awaitCalls < 3) queue.send(PersistSignal.Dirty)
                 null
             },
@@ -185,7 +180,7 @@ class PersistenceSignalTest {
     }
 
     @Test
-    fun dirtySignalsCannotExtendDebouncePastThreeSeconds() = runBlocking {
+    fun dirtySignalsCannotExtendDebouncePastFiveSeconds() = runBlocking {
         var now = 0L
         var awaitCalls = 0
         lateinit var queue: PersistSignalQueue
@@ -201,6 +196,6 @@ class PersistenceSignalTest {
         queue.send(PersistSignal.Dirty)
 
         assertEquals(PersistSignal.Dirty, queue.nextForWrite())
-        assertEquals(3, awaitCalls)
+        assertEquals(5, awaitCalls)
     }
 }
