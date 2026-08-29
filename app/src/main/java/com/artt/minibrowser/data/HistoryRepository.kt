@@ -68,10 +68,10 @@ class HistoryRepository(private val dao: AppDao) {
         dao.recordVisit(url, title, System.currentTimeMillis())
     }
 
-    // Заголовок приходит после onVisited — обновляем существующую запись, визит не дублируем.
+    // Заголовок приходит после onVisited — обновляем только существующую запись, визит не дублируем.
     suspend fun updateTitle(url: String, title: String?) {
         if (!isHistoryUrl(url) || title.isNullOrBlank()) return
-        dao.updateHistoryTitle(url, title, System.currentTimeMillis())
+        dao.updateHistoryTitle(url, title)
     }
 
     suspend fun suggest(q: String): List<Suggestion> {
@@ -106,5 +106,5 @@ class HistoryRepository(private val dao: AppDao) {
         return if (limit <= 8) distinctRecentSites(cleaned, limit) else cleaned.take(limit)
     }
 
-    suspend fun clear() = dao.clearHistory()
+    suspend fun clear() = HistorySink.clear()
 }
