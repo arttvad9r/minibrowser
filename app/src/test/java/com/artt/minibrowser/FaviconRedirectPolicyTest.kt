@@ -1,10 +1,13 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.engine.FaviconFetcher
 import com.artt.minibrowser.engine.faviconOrigin
 import com.artt.minibrowser.engine.sameOriginFaviconRedirect
 import java.net.URL
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 class FaviconRedirectPolicyTest {
@@ -71,5 +74,18 @@ class FaviconRedirectPolicyTest {
     fun rejectsNonWebSchemes() {
         assertNull(faviconOrigin("file:///tmp/favicon.ico"))
         assertNull(faviconOrigin("about:blank"))
+    }
+
+    @Test
+    fun clearDeletesDiskCache() {
+        val dir = Files.createTempDirectory("minibrowser-favicons").toFile()
+        FaviconFetcher.cacheFile("https://example.com", dir).apply {
+            parentFile?.mkdirs()
+            writeText("stale")
+        }
+
+        FaviconFetcher.clear(dir)
+
+        assertFalse(dir.exists())
     }
 }
