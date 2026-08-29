@@ -14,11 +14,16 @@ android {
     }
 
     targetProjectPath = ":app"
-    // Macrobenchmark must run in a process separate from the measured browser process.
+    // Macrobenchmark/profile collection must run in a process separate from the measured browser.
     experimentalProperties["android.experimental.self-instrumenting"] = true
 
     buildTypes {
+        // Measures the R8/minified app:benchmark target.
         create("benchmark") {
+            isDebuggable = true
+        }
+        // Collects HRF rules from the non-minified app:profile target.
+        create("profile") {
             isDebuggable = true
         }
     }
