@@ -123,6 +123,7 @@ import com.artt.minibrowser.ui.StartPage
 import com.artt.minibrowser.ui.TabPreviewStore
 import com.artt.minibrowser.ui.ToggleRow
 import com.artt.minibrowser.ui.hostOf
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoSession
@@ -521,6 +522,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        if (::tabManager.isInitialized) tabManager.trimForBackground()
+    }
+
     override fun onResume() {
         super.onResume()
         if (::tabManager.isInitialized) tabManager.setAppVisible(true)
@@ -609,7 +615,14 @@ private fun TopBar(
     val focusManager = LocalFocusManager.current
     LaunchedEffect(focused, text, rawUrl, newTab) {
         val userHasEdited = newTab || text != rawUrl
-        suggestions = if (focused && text.isNotBlank() && userHasEdited) onSuggest(text) else emptyList()
+        if (focused && text.isNotBlank() && userHasEdited) {
+            // Room's LIKE search is cheap in isolation but typing used to queue one query per key.
+            // LaunchedEffect cancellation makes this a latest-query-only debounce.
+            delay(90)
+            suggestions = onSuggest(text)
+        } else {
+            suggestions = emptyList()
+        }
     }
     val navigate: (String) -> Unit = { q ->
         when (val target = com.artt.minibrowser.engine.resolveNavigation(q)) {
@@ -1008,6 +1021,10 @@ private fun FindBar(session: GeckoSession, onClose: () -> Unit) {
             }
         }
     }
+    LaunchedEffect(q, session) {
+        if (q.isNotBlank()) delay(70)
+        doFind(false)
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -1023,7 +1040,7 @@ private fun FindBar(session: GeckoSession, onClose: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BrowserTextField(q, { q = it; doFind(false) }, Modifier.weight(1f), placeholder = "Найти на странице")
+            BrowserTextField(q, { q = it }, Modifier.weight(1f), placeholder = "Найти на странице")
             if (total > 0) {
                 Text(
                     formatFindCounter(current, total),
