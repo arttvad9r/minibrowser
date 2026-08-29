@@ -1,6 +1,7 @@
 package com.artt.minibrowser.ui
 
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -36,7 +37,9 @@ fun BrowserMotionScreen(
     var leaving by remember { mutableStateOf(false) }
     var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
     var predictiveActive by remember { mutableStateOf(false) }
+    var predictiveReturning by remember { mutableStateOf(false) }
     var predictiveProgress by remember { mutableFloatStateOf(0f) }
+    val predictiveReturn = remember { Animatable(1f) }
     val density = LocalDensity.current
     val travelPx = with(density) { 22.dp.toPx() }
 
@@ -64,6 +67,7 @@ fun BrowserMotionScreen(
     PredictiveBackHandler(enabled = !leaving) { events ->
         var receivedProgress = false
         try {
+            predictiveReturning = false
             predictiveActive = true
             events.collect { event ->
                 receivedProgress = true
@@ -77,15 +81,20 @@ fun BrowserMotionScreen(
                 requestExit(onBack)
             }
         } catch (_: CancellationException) {
+            val visibleProgress = (1f - predictiveProgress).coerceIn(0f, 1f)
             predictiveActive = false
+            predictiveReturning = true
+            predictiveReturn.snapTo(visibleProgress)
+            predictiveReturn.animateTo(1f, MotionTokens.StandardSpatial)
             predictiveProgress = 0f
+            predictiveReturning = false
         }
     }
 
-    val progress = if (predictiveActive) {
-        1f - predictiveProgress
-    } else {
-        settledProgress
+    val progress = when {
+        predictiveActive -> 1f - predictiveProgress
+        predictiveReturning -> predictiveReturn.value
+        else -> settledProgress
     }.coerceIn(0f, 1f)
 
     Box(
