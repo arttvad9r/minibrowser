@@ -74,9 +74,9 @@ jobs:
             -camera-back none -camera-front none -no-snapshot -no-metrics
           script: |
             ./gradlew :app:connectedDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
-            # The debug tests and profile target share an applicationId. Clear all test-created
-            # tabs/history/settings so profile rules are generated from a deterministic clean state.
-            adb shell pm clear com.artt.minibrowser
+            # connectedAndroidTest may uninstall the debug target when it finishes. Clear data when
+            # the package is still present; otherwise the profile variant will be installed fresh.
+            adb shell pm clear com.artt.minibrowser || true
             ./gradlew :benchmark:connectedProfileAndroidTest \
               -PminibrowserAbi=x86_64 \
               -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile \
