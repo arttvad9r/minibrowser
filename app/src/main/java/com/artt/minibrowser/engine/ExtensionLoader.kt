@@ -95,7 +95,14 @@ object ExtensionLoader {
     private fun setInstalled(runtime: GeckoRuntime, id: String, enabled: Boolean) {
         val controller = runtime.webExtensionController
         val desiredState = recordDesired(id, enabled)
-        setStateIfCurrent(id, desiredState.generation, Status.Installing)
+        // Keep the control mounted while Gecko applies the async policy change. Installing is only
+        // an installation state; using it for an ordinary enable/disable made Settings remove the
+        // Switch for roughly half a second on every tap and recreate it at the final position.
+        setStateIfCurrent(
+            id,
+            desiredState.generation,
+            if (enabled) Status.Enabled else Status.Disabled,
+        )
         reconcileInstalled(controller, id, desiredState.generation)
     }
 
