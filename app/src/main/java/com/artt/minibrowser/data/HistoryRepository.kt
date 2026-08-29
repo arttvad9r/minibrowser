@@ -107,6 +107,31 @@ internal fun distinctRecentSites(entries: List<HistoryEntry>, limit: Int): List<
         .toList()
 }
 
+/** Bookmarks keep priority over history; build only the final bounded omnibox list. */
+internal fun mergeSuggestions(
+    bookmarks: List<Bookmark>,
+    history: List<Suggestion>,
+    limit: Int = 8,
+): List<Suggestion> {
+    if (limit <= 0) return emptyList()
+    val result = ArrayList<Suggestion>(minOf(limit, bookmarks.size + history.size))
+    val seenUrls = HashSet<String>()
+
+    for (bookmark in bookmarks) {
+        if (seenUrls.add(bookmark.url)) {
+            result += Suggestion(bookmark.title.ifBlank { bookmark.url }, bookmark.url)
+            if (result.size == limit) return result
+        }
+    }
+    for (suggestion in history) {
+        if (seenUrls.add(suggestion.url)) {
+            result += suggestion
+            if (result.size == limit) break
+        }
+    }
+    return result
+}
+
 class HistoryRepository(private val dao: AppDao) {
     suspend fun record(url: String, title: String?) {
         if (!isHistoryUrl(url)) return
@@ -123,16 +148,16 @@ class HistoryRepository(private val dao: AppDao) {
         val query = q.trim()
         // Пустой omnibox на новой вкладке должен оставаться чистым; история уже видна на Start page.
         if (query.isEmpty()) return emptyList()
+
+        // Bookmarks are rendered first. Once all eight slots are filled, avoid the history query
+        // and all of its filtering/ranking work entirely.
+        val bookmarks = dao.bookmarksMatching(query)
+        if (bookmarks.size >= 8) return mergeSuggestions(bookmarks, emptyList())
+
         val rows = webHistoryEntries(dao.searchHistory(query))
             .let(::collapseHistoryNoise)
-        val bookmarks = dao.bookmarksMatching(query).map {
-            Suggestion(it.title.ifBlank { it.url }, it.url)
-        }
-        val history = rankSuggestions(
-            rows.map { Scored(it.url, it.title, it.visitedAt) },
-            query,
-        )
-        return (bookmarks + history).distinctBy { it.url }.take(8)
+        val history = rankSuggestions(rows, query)
+        return mergeSuggestions(bookmarks, history)
     }
 
     // Читаем с запасом: после удаления internal URL и схлопывания быстрых SPA/redirect-переходов
