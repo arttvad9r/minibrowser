@@ -1,7 +1,7 @@
 package com.artt.minibrowser.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -9,15 +9,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 
 /**
  * Full-screen app destination over the browser.
@@ -31,25 +31,27 @@ fun BrowserMotionScreen(
     fromBottom: Boolean = false,
     content: @Composable (requestExit: (() -> Unit) -> Unit) -> Unit,
 ) {
-    var visible by remember { mutableStateOf(false) }
+    val reveal = remember { Animatable(0f) }
     var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var activeAnimations by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
     val travelPx = if (fromBottom) with(density) { 20.dp.toPx() } else 0f
 
-    LaunchedEffect(Unit) { visible = true }
+    HighFrameRateDuringMotion(activeAnimations > 0)
 
-    val reveal by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(MotionTokens.Quick),
-        label = "browserScreenContentReveal",
-    )
+    suspend fun animateReveal(target: Float) {
+        activeAnimations++
+        try {
+            reveal.animateTo(target, animationSpec = tween(MotionTokens.Quick))
+        } finally {
+            activeAnimations--
+        }
+    }
 
     LaunchedEffect(pendingExit) {
-        val action = pendingExit ?: return@LaunchedEffect
-        visible = false
-        delay(MotionTokens.Quick.toLong())
-        pendingExit = null
-        action()
+        val action = pendingExit
+        animateReveal(if (action == null) 1f else 0f)
+        action?.invoke()
     }
 
     fun requestExit(action: () -> Unit) {
@@ -68,8 +70,8 @@ fun BrowserMotionScreen(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    alpha = reveal
-                    translationY = (1f - reveal) * travelPx
+                    alpha = reveal.value
+                    translationY = (1f - reveal.value) * travelPx
                 },
         ) {
             content(::requestExit)
