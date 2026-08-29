@@ -394,21 +394,25 @@ class TabManager(
     fun select(id: Long) {
         if (closed) return
         val selectedTab = _tabs.value.firstOrNull { it.id == id } ?: return
-        _tabs.value.forEach { tab ->
-            val selected = tab.id == id
-            runtime.webExtensionController.setTabActive(tab.session, selected)
-            if (tab.session.isOpen) {
-                val active = selected && appVisible
-                tab.session.setActive(active)
-                tab.session.setFocused(active)
-                tab.session.setPriorityHint(if (active) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT)
-            }
+        val previousId = currentId.value
+
+        if (previousId != id) {
+            _tabs.value.firstOrNull { it.id == previousId }?.let(::deactivateTab)
+            currentId.value = id
         }
-        currentId.value = id
-        selectedTab.let {
-            it.lastAccess = System.currentTimeMillis()
-            if (!it.session.isOpen) openTab(it)
-            applyDesktop(it)
+
+        selectedTab.lastAccess = System.currentTimeMillis()
+        if (!selectedTab.session.isOpen) {
+            openTab(selectedTab)
+        } else {
+            runtime.webExtensionController.setTabActive(selectedTab.session, true)
+            val active = appVisible
+            selectedTab.session.setActive(active)
+            selectedTab.session.setFocused(active)
+            selectedTab.session.setPriorityHint(
+                if (active) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT,
+            )
+            applyDesktop(selectedTab)
         }
         enforceHotTabBudget()
     }
@@ -460,6 +464,9 @@ class TabManager(
             .toList()
         for (tab in coldest) {
             if (openCount <= hotTabLimit) break
+            // Never discard an in-flight navigation merely to hit the steady-state budget. Once
+            // Gecko finishes and flushes a restorable state, onSessionStateChange retries the trim.
+            if (tab.progress >= 0f) continue
             val hasRestorableState = tab.url.isBlank() || tab.url == "about:blank" ||
                 (tab.latestSessionState != null && tab.latestSessionStateUrl == tab.url)
             if (!hasRestorableState) continue
@@ -474,10 +481,8 @@ class TabManager(
         tab.session.setFocused(false)
         tab.session.setActive(false)
         tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
-        tab.latestSessionState?.takeIf { tab.latestSessionStateUrl == tab.url }?.let { state ->
-            tab.persistedSessionState = state.toString()
-            tab.persistedSessionStateUrl = tab.url
-        }
+        // Keep the SessionState object in memory. Serializing it here can be surprisingly expensive
+        // and would run on the tab-switch UI path; persistence serializes snapshots on Dispatchers.IO.
         closeIfOpen(tab.session)
         tab.restoreUrlOnOpen = true
     }
@@ -594,6 +599,9 @@ class TabManager(
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 tab.progress = -1f
+                if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > hotTabLimit) {
+                    enforceHotTabBudget()
+                }
             }
 
             override fun onProgressChange(session: GeckoSession, progress: Int) {
@@ -751,15 +759,19 @@ class TabManager(
         }
     }
 
-    private fun deactivateOthers(selectedId: Long) {
-        _tabs.value.filter { it.id != selectedId }.forEach {
-            runtime.webExtensionController.setTabActive(it.session, false)
-            it.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
-            if (it.session.isOpen) {
-                it.session.setFocused(false)
-                it.session.setActive(false)
-            }
+    private fun deactivateTab(tab: Tab) {
+        runtime.webExtensionController.setTabActive(tab.session, false)
+        tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+        if (tab.session.isOpen) {
+            tab.session.setFocused(false)
+            tab.session.setActive(false)
         }
+    }
+
+    private fun deactivateOthers(selectedId: Long) {
+        val previousId = currentId.value ?: return
+        if (previousId == selectedId) return
+        _tabs.value.firstOrNull { it.id == previousId }?.let(::deactivateTab)
     }
 
     private fun applyDesktop(tab: Tab) {
