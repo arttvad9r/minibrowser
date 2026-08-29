@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -60,7 +61,7 @@ import com.artt.minibrowser.engine.Tab
 import java.io.File
 
 /**
- * Stable two-column tab overview.
+ * Stable adaptive tab overview.
  *
  * The overview keeps one opaque surface mounted and moves only its content by a small amount. This
  * prevents a close/open transition from exposing Gecko or an empty new-tab frame while avoiding the
@@ -196,30 +197,39 @@ fun BrowserTabSwitcher(
                     }
                 }
                 else -> {
-                    val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
-                    val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        state = gridState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        items(tabs, key = { it.id }) { tab ->
-                            BrowserTabCard(
-                                tab = tab,
-                                isCurrent = tab.id == overviewCurrentId,
-                                iconsDir = iconsDir,
-                                onSelect = { activateAndExit(tab.id) },
-                                onClose = { if (inputEnabled) onClose(tab.id) },
-                            )
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                        val columns = tabGridColumnCount(maxWidth.value)
+                        val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
+                        val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(columns),
+                            state = gridState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            items(tabs, key = { it.id }) { tab ->
+                                BrowserTabCard(
+                                    tab = tab,
+                                    isCurrent = tab.id == overviewCurrentId,
+                                    iconsDir = iconsDir,
+                                    onSelect = { activateAndExit(tab.id) },
+                                    onClose = { if (inputEnabled) onClose(tab.id) },
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
+}
+
+internal fun tabGridColumnCount(widthDp: Float): Int = when {
+    widthDp >= 840f -> 4
+    widthDp >= 600f -> 3
+    else -> 2
 }
 
 private fun tabsPlural(n: Int) = when {
