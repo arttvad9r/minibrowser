@@ -50,7 +50,8 @@ object FaviconFetcher {
         if (dst.exists()) return dst
         if (negative[origin]?.let { it > System.currentTimeMillis() } == true) return dst
         val fetchGeneration = generation.get()
-        val deferred = inFlight.computeIfAbsent(origin) {
+        val inFlightKey = faviconInFlightKey(origin, fetchGeneration)
+        val deferred = inFlight.computeIfAbsent(inFlightKey) {
             scope.async { fetchOnce(origin, dst, fetchGeneration) }
         }
         return try {
@@ -60,7 +61,7 @@ object FaviconFetcher {
                 }
             }
         } finally {
-            inFlight.remove(origin, deferred)
+            inFlight.remove(inFlightKey, deferred)
         }
     }
 
@@ -192,6 +193,9 @@ internal fun faviconOrigin(pageUrlOrHost: String): String? = runCatching {
     val port = if (uri.port == defaultPort) -1 else uri.port
     URI(scheme, null, host, port, null, null, null).toASCIIString()
 }.getOrNull()
+
+internal fun faviconInFlightKey(origin: String, generation: Long): String =
+    "$generation\n$origin"
 
 internal fun faviconTempFile(cacheFile: File, generation: Long): File =
     File("${cacheFile.path}.$generation.tmp")
