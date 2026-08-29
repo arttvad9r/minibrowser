@@ -53,7 +53,7 @@ class StartupBenchmark {
     fun coldRestoreTenTabsWithBaselineProfile() {
         benchmarkRule.measureRepeated(
             packageName = TARGET_PACKAGE,
-            metrics = startupMetrics(),
+            metrics = restoreStartupMetrics(),
             compilationMode = CompilationMode.Partial(
                 baselineProfileMode = BaselineProfileMode.Require,
             ),
@@ -120,11 +120,13 @@ class StartupBenchmark {
             mode = TraceSectionMetric.Mode.First,
             label = "tabRestoreMaterialize",
         ),
-        TraceSectionMetric(
-            sectionName = TAB_RESTORE_OPEN_SELECTED_TRACE,
-            mode = TraceSectionMetric.Mode.First,
-            label = "tabRestoreOpenSelected",
-        ),
+    )
+
+    @OptIn(ExperimentalMetricApi::class)
+    private fun restoreStartupMetrics() = startupMetrics() + TraceSectionMetric(
+        sectionName = TAB_RESTORE_OPEN_SELECTED_TRACE,
+        mode = TraceSectionMetric.Mode.First,
+        label = "tabRestoreOpenSelected",
     )
 
     private fun clickDescription(device: UiDevice, description: String) {
