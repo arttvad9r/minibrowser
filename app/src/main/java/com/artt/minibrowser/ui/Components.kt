@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.engine.FaviconFetcher
 import com.artt.minibrowser.engine.decodeSampledFavicon
+import com.artt.minibrowser.engine.faviconOrigin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -90,13 +91,17 @@ private object FaviconMemoryCache {
 
 /** Favicon с дисковым кэшем и bounded sampled bitmap cache. */
 @Composable
-fun Favicon(host: String, iconsDir: File, size: Dp, modifier: Modifier = Modifier) {
-    val key = host.trim().lowercase()
+fun Favicon(source: String, iconsDir: File, size: Dp, modifier: Modifier = Modifier) {
+    val origin = remember(source) { faviconOrigin(source) }
+    val displayHost = remember(source) {
+        hostOf(source).ifBlank { hostOf("https://${source.trim()}") }.ifBlank { source.trim() }
+    }
+    val key = origin ?: source.trim().lowercase()
     var bmp by remember(key) { mutableStateOf(FaviconMemoryCache.get(key)) }
-    LaunchedEffect(key) {
-        if (key.isNotBlank() && bmp == null) {
+    LaunchedEffect(key, origin) {
+        if (origin != null && bmp == null) {
             val loaded = withContext(Dispatchers.IO) {
-                val f = FaviconFetcher.fetch(key, iconsDir)
+                val f = FaviconFetcher.fetch(origin, iconsDir)
                 if (f.exists()) decodeSampledFavicon(f) else null
             }
             if (loaded != null) FaviconMemoryCache.put(key, loaded)
@@ -111,13 +116,13 @@ fun Favicon(host: String, iconsDir: File, size: Dp, modifier: Modifier = Modifie
         ) { bitmap ->
             if (bitmap != null) {
                 Image(bitmap.asImageBitmap(), null, Modifier.size(size))
-            } else if (host.isNotBlank()) {
+            } else if (displayHost.isNotBlank()) {
                 Box(
                     Modifier.size(size).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        host.removePrefix("www.").take(1).uppercase(),
+                        displayHost.removePrefix("www.").take(1).uppercase(),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = (size.value * 0.45f).sp,
                     )
