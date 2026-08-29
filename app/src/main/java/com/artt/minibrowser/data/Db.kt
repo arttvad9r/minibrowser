@@ -1,6 +1,7 @@
 package com.artt.minibrowser.data
 
 import android.content.Context
+import android.os.Trace
 import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -93,6 +94,8 @@ data class Bookmark(
 @Database(entities = [HistoryEntry::class, Bookmark::class], version = 3, exportSchema = false)
 abstract class AppDb : RoomDatabase() { abstract fun dao(): AppDao }
 
+internal const val DB_CREATE_TRACE = "DbHolder.create"
+
 // Application-scope: HistorySink вызывается из TabManager без жизненного цикла,
 // поэтому скоуп живёт здесь (переживает активити, гаснет только с процессом).
 object DbHolder {
@@ -107,14 +110,34 @@ object DbHolder {
         }
     }
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    lateinit var db: AppDb
-        private set
 
+    private val lock = Any()
+    @Volatile private var appContext: Context? = null
+    @Volatile private var database: AppDb? = null
+
+    val db: AppDb
+        get() = database ?: synchronized(lock) {
+            database ?: createDatabase(
+                requireNotNull(appContext) { "DbHolder.init(context) must run before database access" },
+            ).also { database = it }
+        }
+
+    /** Registers only the application Context. Room itself is created on first real data access. */
     fun init(context: Context) {
-        if (!::db.isInitialized) {
-            db = Room.databaseBuilder(context, AppDb::class.java, "minibrowser.db")
+        if (appContext != null) return
+        synchronized(lock) {
+            if (appContext == null) appContext = context.applicationContext
+        }
+    }
+
+    private fun createDatabase(context: Context): AppDb {
+        Trace.beginSection(DB_CREATE_TRACE)
+        return try {
+            Room.databaseBuilder(context, AppDb::class.java, "minibrowser.db")
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
+        } finally {
+            Trace.endSection()
         }
     }
 }

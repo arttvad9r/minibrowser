@@ -20,7 +20,7 @@ import java.util.regex.Pattern
 
 internal const val TARGET_PACKAGE = "com.artt.minibrowser"
 private const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
-private const val DB_INIT_TRACE = "DbHolder.init"
+private const val DB_CREATE_TRACE = "DbHolder.create"
 private const val TAB_STORE_LOAD_TRACE = "TabStore.loadState"
 private const val TAB_RESTORE_MATERIALIZE_TRACE = "TabManager.restoreTabs"
 private const val TAB_RESTORE_OPEN_SELECTED_TRACE = "TabManager.openSelected"
@@ -112,9 +112,9 @@ class StartupBenchmark {
             label = "geckoRuntimeCreate",
         ),
         TraceSectionMetric(
-            sectionName = DB_INIT_TRACE,
+            sectionName = DB_CREATE_TRACE,
             mode = TraceSectionMetric.Mode.First,
-            label = "dbInit",
+            label = "dbCreate",
         ),
         TraceSectionMetric(
             sectionName = TAB_STORE_LOAD_TRACE,

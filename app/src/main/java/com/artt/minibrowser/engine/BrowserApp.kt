@@ -18,7 +18,6 @@ import java.io.File
 object Engine { lateinit var runtime: GeckoRuntime }
 
 internal const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
-internal const val DB_INIT_TRACE = "DbHolder.init"
 
 internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: String): Boolean =
     currentProcess == null || currentProcess == mainProcess
@@ -32,6 +31,10 @@ class BrowserApp : Application() {
         // process name on API 26-27 instead of assuming the main process when /proc is unavailable.
         mainProcess = isMainApplicationProcess(currentProcessName(), applicationInfo.processName)
         if (!mainProcess) return
+
+        // Keep the singleton configured, but do not construct Room during Application startup.
+        // History/bookmark access creates it on demand after the browser UI has started composing.
+        DbHolder.init(this)
 
         val performance = BrowserPerformance.configure(this)
         TabPreviewStore.configureMemoryPolicy(
@@ -69,15 +72,6 @@ class BrowserApp : Application() {
             // Gecko documents this as a pure performance feature. On multicore/high-memory phones,
             // parallel marking trades spare CPU cores for shorter JavaScript GC marking pauses.
             Engine.runtime.settings.setParallelMarkingEnabled(true)
-        }
-
-        // Give Gecko first access to startup CPU/IO. Room's database object is still ready before
-        // MainActivity is created, but its classloading/configuration no longer precedes runtime boot.
-        Trace.beginSection(DB_INIT_TRACE)
-        try {
-            DbHolder.init(this)
-        } finally {
-            Trace.endSection()
         }
     }
 
