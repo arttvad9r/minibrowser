@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -68,6 +69,7 @@ internal fun MotionHistoryScreen(
 ) {
     var entries by remember { mutableStateOf(emptyList<HistoryEntry>()) }
     var reload by remember { mutableIntStateOf(0) }
+    var confirmClear by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
     LaunchedEffect(reload) { entries = repo.recent(200) }
@@ -82,7 +84,7 @@ internal fun MotionHistoryScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
                 }
                 Text("История", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                TextButton(onClick = { scope.launch { repo.clear(); reload++ } }) {
+                TextButton(onClick = { confirmClear = true }) {
                     Text("Очистить", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -133,6 +135,28 @@ internal fun MotionHistoryScreen(
                 }
             }
         }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Очистить историю?") },
+            text = { Text("Список посещённых страниц будет удалён. Это действие нельзя отменить.") },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text("Отмена") }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        scope.launch {
+                            repo.clear()
+                            reload++
+                        }
+                    },
+                ) { Text("Очистить") }
+            },
+        )
     }
 }
 
