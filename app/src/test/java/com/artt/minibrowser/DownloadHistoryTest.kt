@@ -2,11 +2,13 @@ package com.artt.minibrowser
 
 import com.artt.minibrowser.data.downloadSourceForHistory
 import com.artt.minibrowser.data.writeTextAtomically
+import com.artt.minibrowser.engine.shouldPersistDownloadHistory
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class DownloadHistoryTest {
     @Test fun stripsQueryFragmentAndCredentials() {
@@ -26,6 +28,11 @@ class DownloadHistoryTest {
     @Test fun rejectsNonWebAndMalformedSources() {
         assertEquals("", downloadSourceForHistory("file:///tmp/private"))
         assertEquals("", downloadSourceForHistory("not a url"))
+    }
+
+    @Test fun privateDownloadsDoNotPersistAppHistory() {
+        assertTrue(shouldPersistDownloadHistory(isPrivate = false))
+        assertFalse(shouldPersistDownloadHistory(isPrivate = true))
     }
 
     @Test fun atomicWriteReplacesExistingHistoryAndRemovesTempFile() {
