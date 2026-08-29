@@ -12,6 +12,7 @@ import org.mozilla.geckoview.WebExtensionController
 object ExtensionLoader {
     const val UBLOCK_ID = "uBlock0@raymondhill.net"
     const val VOT_ID = "vot-ext@firefox"
+    private const val LEGACY_CHATGPT_VIEWPORT_ID = "chatgpt-viewport@minibrowser"
 
     enum class Status { Installing, Enabled, Disabled, Error }
     data class ExtensionState(val status: Status, val error: String? = null)
@@ -28,6 +29,7 @@ object ExtensionLoader {
     private var nextInstallGeneration = 1L
 
     fun installAll(runtime: GeckoRuntime, adblockEnabled: Boolean, votEnabled: Boolean) {
+        disableLegacyChatGptViewport(runtime.webExtensionController)
         installBuiltIn(runtime, UBLOCK_ID, "resource://android/assets/extensions/ublock/", adblockEnabled)
         installBuiltIn(runtime, VOT_ID, "resource://android/assets/extensions/vot/", votEnabled)
     }
@@ -49,6 +51,32 @@ object ExtensionLoader {
     }
 
     internal fun privateAllowedInPrivate(id: String): Boolean = id == UBLOCK_ID
+
+    private fun disableLegacyChatGptViewport(controller: WebExtensionController) {
+        controller.list().accept(
+            { installed ->
+                installed?.firstOrNull { it.id == LEGACY_CHATGPT_VIEWPORT_ID }?.let { extension ->
+                    controller.disable(extension, WebExtensionController.EnableSource.APP).accept(
+                        {},
+                        { error ->
+                            Log.w(
+                                "MinibrowserExtension",
+                                "Failed to disable obsolete ChatGPT viewport extension",
+                                error,
+                            )
+                        },
+                    )
+                }
+            },
+            { error ->
+                Log.w(
+                    "MinibrowserExtension",
+                    "Failed to inspect installed extensions for obsolete ChatGPT workaround",
+                    error,
+                )
+            },
+        )
+    }
 
     private fun installBuiltIn(runtime: GeckoRuntime, id: String, resource: String, enabled: Boolean) {
         val controller = runtime.webExtensionController
