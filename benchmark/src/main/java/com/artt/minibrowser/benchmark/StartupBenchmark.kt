@@ -16,6 +16,8 @@ import org.junit.runner.RunWith
 internal const val TARGET_PACKAGE = "com.artt.minibrowser"
 private const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
 private const val TAB_STORE_LOAD_TRACE = "TabStore.loadState"
+private const val TAB_RESTORE_MATERIALIZE_TRACE = "TabManager.restoreTabs"
+private const val TAB_RESTORE_OPEN_SELECTED_TRACE = "TabManager.openSelected"
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
@@ -56,6 +58,16 @@ class StartupBenchmark {
                     sectionName = TAB_STORE_LOAD_TRACE,
                     mode = TraceSectionMetric.Mode.First,
                     label = "tabStoreLoad",
+                ),
+                TraceSectionMetric(
+                    sectionName = TAB_RESTORE_MATERIALIZE_TRACE,
+                    mode = TraceSectionMetric.Mode.First,
+                    label = "tabRestoreMaterialize",
+                ),
+                TraceSectionMetric(
+                    sectionName = TAB_RESTORE_OPEN_SELECTED_TRACE,
+                    mode = TraceSectionMetric.Mode.First,
+                    label = "tabRestoreOpenSelected",
                 ),
             ),
             compilationMode = compilationMode,
