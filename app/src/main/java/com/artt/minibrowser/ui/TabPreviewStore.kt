@@ -27,6 +27,9 @@ object TabPreviewStore {
     private var cachedBytes = 0L
     private val lastCapturedUrl = mutableMapOf<Long, String>()
     private val inFlight = mutableSetOf<Long>()
+    // Tab ids are monotonic within a TabManager process. Once an id is removed or invalidated by
+    // browsing-data clearing it must never publish pixels again, even if the old GeckoView manages
+    // one last Compose update before TabManager removes the session.
     private val removedTabs = mutableSetOf<Long>()
     private val privateTabs = mutableSetOf<Long>()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -37,7 +40,7 @@ object TabPreviewStore {
     private var currentUrl: String = ""
 
     operator fun get(tabId: Long): Bitmap? {
-        if (tabId in privateTabs) return null
+        if (tabId in privateTabs || tabId in removedTabs) return null
         val bitmap = previews[tabId] ?: return null
         lru[tabId] = Unit
         return bitmap
@@ -49,7 +52,12 @@ object TabPreviewStore {
         currentUrl = url
         if (tabId == null) return
 
-        removedTabs.remove(tabId)
+        if (tabId in removedTabs) {
+            removePreview(tabId)
+            lastCapturedUrl.remove(tabId)
+            inFlight.remove(tabId)
+            return
+        }
         if (isPrivate) {
             privateTabs += tabId
             removePreview(tabId)
@@ -70,14 +78,14 @@ object TabPreviewStore {
     ) {
         attach(view, tabId, url, isPrivate)
         val id = tabId ?: return
-        if (isPrivate || !pageSettled || !isPreviewableUrl(url) || lastCapturedUrl[id] == url) return
+        if (id in removedTabs || isPrivate || !pageSettled || !isPreviewableUrl(url) || lastCapturedUrl[id] == url) return
         capture(view, id, url)
     }
 
     fun captureCurrent() {
         val view = currentView.get() ?: return
         val id = currentTabId ?: return
-        if (id in privateTabs || !isPreviewableUrl(currentUrl)) return
+        if (id in privateTabs || id in removedTabs || !isPreviewableUrl(currentUrl)) return
         capture(view, id, currentUrl)
     }
 
@@ -100,18 +108,22 @@ object TabPreviewStore {
 
     /**
      * Drops every preview and invalidates callbacks from captures that started before this call.
-     * This is used by browsing-data clearing so page pixels cannot re-enter memory after the UI
-     * has already reported the data as cleared.
+     * Known old tab ids stay blocked for the rest of this process so a final old-UI Compose pass
+     * cannot start a fresh post-clear capture before TabManager finishes closing those sessions.
      */
     fun clear() {
         generation++
+        removedTabs += previews.keys
+        removedTabs += lastCapturedUrl.keys
+        removedTabs += inFlight
+        removedTabs += privateTabs
+        currentTabId?.let(removedTabs::add)
         val retired = previews.values.toList()
         previews.clear()
         lru.clear()
         cachedBytes = 0L
         lastCapturedUrl.clear()
         inFlight.clear()
-        removedTabs.clear()
         privateTabs.clear()
         currentView = WeakReference(null)
         currentTabId = null
