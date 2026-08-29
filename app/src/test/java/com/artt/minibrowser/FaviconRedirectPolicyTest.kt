@@ -3,12 +3,14 @@ package com.artt.minibrowser
 import com.artt.minibrowser.engine.FaviconFetcher
 import com.artt.minibrowser.engine.faviconOrigin
 import com.artt.minibrowser.engine.sameOriginFaviconRedirect
+import com.artt.minibrowser.engine.trimFaviconDiskCache
 import java.net.URL
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class FaviconRedirectPolicyTest {
     private val origin = URL("https://example.com/favicon.ico")
@@ -87,5 +89,29 @@ class FaviconRedirectPolicyTest {
         FaviconFetcher.clear(dir)
 
         assertFalse(dir.exists())
+    }
+
+    @Test
+    fun trimKeepsNewestFilesWithinBothLimits() {
+        val dir = Files.createTempDirectory("minibrowser-favicon-trim").toFile()
+        val oldest = dir.resolve("v2_old.png").apply {
+            writeBytes(ByteArray(4))
+            setLastModified(1_000)
+        }
+        val middle = dir.resolve("v4_middle.png").apply {
+            writeBytes(ByteArray(4))
+            setLastModified(2_000)
+        }
+        val newest = dir.resolve("v4_newest.png").apply {
+            writeBytes(ByteArray(4))
+            setLastModified(3_000)
+        }
+
+        trimFaviconDiskCache(dir, maxFiles = 2, maxBytes = 8)
+
+        assertFalse(oldest.exists())
+        assertTrue(middle.exists())
+        assertTrue(newest.exists())
+        dir.deleteRecursively()
     }
 }
