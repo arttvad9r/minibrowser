@@ -410,7 +410,7 @@ private fun BrowserTabCard(
                 Modifier.fillMaxWidth().height(40.dp).padding(start = 10.dp, end = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Favicon(host, iconsDir, 17.dp)
+                Favicon(if (host.isNotBlank()) tab.url else host, iconsDir, 17.dp)
                 Spacer(Modifier.width(7.dp))
                 Text(
                     tab.title.ifBlank {
@@ -482,7 +482,7 @@ private fun TabPreviewFallback(tab: Tab, host: String, iconsDir: File) {
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.72f),
             )
         } else if (host.isNotBlank()) {
-            Favicon(host, iconsDir, 40.dp)
+            Favicon(tab.url, iconsDir, 40.dp)
         } else {
             Icon(
                 AppIcons.Globe,
