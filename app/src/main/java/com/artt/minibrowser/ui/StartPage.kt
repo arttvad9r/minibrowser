@@ -199,7 +199,7 @@ private fun BookmarkRow(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Favicon(bm.host, iconsDir, 30.dp)
+                    Favicon(bm.url, iconsDir, 30.dp)
                 }
                 Spacer(Modifier.height(5.dp))
                 Text(
@@ -284,7 +284,7 @@ private fun RecentCard(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Favicon(hostOf(entry.url), iconsDir, 24.dp)
+                Favicon(entry.url, iconsDir, 24.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
