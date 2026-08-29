@@ -3,12 +3,6 @@ package com.artt.minibrowser.ui
 // Домашняя страница: один настоящий omnibox остаётся в chrome браузера;
 // здесь только лёгкий branding, быстрые закладки и недавние страницы.
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -131,13 +125,7 @@ fun StartPage(
             )
             Spacer(Modifier.height(18.dp))
 
-            AnimatedVisibility(
-                visible = recent.isNotEmpty(),
-                enter = fadeIn(tween(MotionTokens.Quick)) +
-                    expandVertically(animationSpec = standardSpatialSpring()),
-                exit = fadeOut(tween(MotionTokens.Quick)) +
-                    shrinkVertically(animationSpec = standardSpatialSpring()),
-            ) {
+            if (recent.isNotEmpty()) {
                 RecentCard(
                     recent,
                     iconsDir,
@@ -191,7 +179,6 @@ private fun BookmarkRow(
                         .background(MaterialTheme.colorScheme.surface)
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.button)
                         .softCombinedClickable(
-                            pressedScale = 0.95f,
                             onClick = { onOpen(bm.url) },
                             onLongClick = { onLongPress(bm) },
                         ),
@@ -217,7 +204,7 @@ private fun BookmarkRow(
                     .clip(Radius.button)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.button)
-                    .softClickable(pressedScale = 0.94f, onClick = onAdd),
+                    .softClickable(onClick = onAdd),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
