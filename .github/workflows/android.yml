@@ -20,6 +20,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Install Android SDK
         run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v6
@@ -42,6 +45,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Install compile SDK
         run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v6
@@ -61,5 +67,5 @@ jobs:
           disable-animations: true
           emulator-options: >-
             -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-            -camera-back none -camera-front none -no-snapshot
+            -camera-back none -camera-front none -no-snapshot -no-metrics
           script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
