@@ -59,10 +59,9 @@ import java.io.File
 /**
  * Tab overview with memory-only page previews.
  *
- * The previous full-screen-to-card hero transform depended on asynchronous Gecko screenshots and
- * post-layout card coordinates. On real devices that produced visible frame jumps in both
- * directions. The overview now uses one short compositor-only fade, while card moves caused by
- * closing a tab remain independently animated inside the grid.
+ * The overlay uses one short compositor-only fade. Selecting a card activates its Gecko session
+ * immediately underneath the still-opaque overview, then the overview fades away. This avoids the
+ * old pause-then-swap feeling where the selected page appeared only after the exit animation ended.
  */
 @Composable
 fun BrowserTabSwitcher(
@@ -96,6 +95,12 @@ fun BrowserTabSwitcher(
     fun requestExit(action: () -> Unit) {
         if (pendingAction != null) return
         pendingAction = action
+    }
+
+    fun activateAndExit(id: Long) {
+        if (pendingAction != null) return
+        onSelect(id)
+        requestExit(onDismiss)
     }
 
     BackHandler(enabled = pendingAction == null) { requestExit(onDismiss) }
@@ -145,7 +150,7 @@ fun BrowserTabSwitcher(
                         isCurrent = tab.id == currentId,
                         iconsDir = iconsDir,
                         modifier = Modifier.width(224.dp),
-                        onSelect = { requestExit { onSelect(tab.id) } },
+                        onSelect = { activateAndExit(tab.id) },
                         onClose = { onClose(tab.id) },
                     )
                 }
@@ -174,7 +179,7 @@ fun BrowserTabSwitcher(
                                 ),
                                 fadeOutSpec = tween(MotionTokens.Quick),
                             ),
-                            onSelect = { requestExit { onSelect(tab.id) } },
+                            onSelect = { activateAndExit(tab.id) },
                             onClose = { onClose(tab.id) },
                         )
                     }
