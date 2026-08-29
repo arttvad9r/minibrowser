@@ -112,7 +112,7 @@ internal fun MotionHistoryScreen(
                                     .padding(horizontal = 20.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Favicon(hostOf(entry.url), iconsDir, 28.dp)
+                                Favicon(entry.url, iconsDir, 28.dp)
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
@@ -197,7 +197,7 @@ internal fun MotionBookmarksScreen(
                                 .padding(horizontal = 20.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Favicon(bookmark.host, iconsDir, 40.dp)
+                            Favicon(bookmark.url, iconsDir, 40.dp)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
