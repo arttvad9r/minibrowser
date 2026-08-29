@@ -9,10 +9,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-data class Scored(val url: String, val title: String, val visitedAt: Long)
 data class Suggestion(val label: String, val url: String)
 
-private fun suggestionsDescending(history: List<Scored>): List<Scored> {
+private fun suggestionsDescending(history: List<HistoryEntry>): List<HistoryEntry> {
     for (index in 1 until history.size) {
         if (history[index - 1].visitedAt < history[index].visitedAt) {
             return history.sortedByDescending { it.visitedAt }
@@ -21,7 +20,7 @@ private fun suggestionsDescending(history: List<Scored>): List<Scored> {
     return history
 }
 
-fun rankSuggestions(history: List<Scored>, q: String): List<Suggestion> {
+fun rankSuggestions(history: List<HistoryEntry>, q: String): List<Suggestion> {
     if (history.isEmpty()) return emptyList()
     val needle = q.trim()
     val sorted = suggestionsDescending(history)
@@ -93,7 +92,8 @@ data class Bookmark(
     @Query("SELECT * FROM bookmarks ORDER BY position")
     suspend fun bookmarks(): List<Bookmark>
 
-    @Query("SELECT * FROM bookmarks WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' ORDER BY position LIMIT 50")
+    // Omnibox always gives bookmarks priority and renders at most eight suggestions total.
+    @Query("SELECT * FROM bookmarks WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' ORDER BY position LIMIT 8")
     suspend fun bookmarksMatching(q: String): List<Bookmark>
 
     @Query("SELECT COALESCE(MAX(position), -1) FROM bookmarks")
