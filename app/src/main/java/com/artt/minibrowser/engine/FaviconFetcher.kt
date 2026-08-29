@@ -29,10 +29,13 @@ object FaviconFetcher {
     private const val MAX_BYTES = 1024 * 1024
     private const val MAX_REDIRECTS = 3
     private const val NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000L
+    private const val MAX_CACHE_FILES = 256
+    private const val MAX_CACHE_BYTES = 32L * 1024 * 1024
     private val scope = kotlinx.coroutines.CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = ConcurrentHashMap<String, Deferred<File>>()
     private val negative = ConcurrentHashMap<String, Long>()
     private val generation = AtomicLong(0L)
+    private val diskLock = Any()
 
     fun cacheFile(key: String, iconsDir: File): File {
         val md5 = MessageDigest.getInstance("MD5").digest(key.lowercase().trim().toByteArray())
@@ -62,16 +65,17 @@ object FaviconFetcher {
     }
 
     /**
-     * Invalidate memory-side fetch state before deleting disk files. A fetch that was already in
-     * progress carries the old generation and is not allowed to publish its temporary file after
-     * this call returns.
+     * Invalidates in-memory fetch state and removes disk state atomically with respect to favicon
+     * publication. A request started before this call can never recreate a cache file afterwards.
      */
     fun clear(iconsDir: File) {
-        generation.incrementAndGet()
-        inFlight.values.forEach { it.cancel() }
-        inFlight.clear()
-        negative.clear()
-        iconsDir.deleteRecursively()
+        synchronized(diskLock) {
+            generation.incrementAndGet()
+            inFlight.values.forEach { it.cancel() }
+            inFlight.clear()
+            negative.clear()
+            iconsDir.deleteRecursively()
+        }
     }
 
     private suspend fun fetchOnce(
@@ -83,21 +87,27 @@ object FaviconFetcher {
         val temp = File("${dst.path}.tmp")
         temp.delete()
         if (downloadCandidate("$origin/favicon.ico", temp) != null) {
-            if (fetchGeneration != generation.get()) {
-                temp.delete()
-                return@withContext dst
-            }
-            runCatching {
-                Files.move(
-                    temp.toPath(),
-                    dst.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
-                    StandardCopyOption.ATOMIC_MOVE,
-                )
-            }.getOrElse {
-                if (!temp.renameTo(dst)) {
+            synchronized(diskLock) {
+                if (fetchGeneration != generation.get()) {
                     temp.delete()
-                    dst.delete()
+                    return@synchronized
+                }
+                runCatching {
+                    Files.move(
+                        temp.toPath(),
+                        dst.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE,
+                    )
+                }.getOrElse {
+                    if (!temp.renameTo(dst)) {
+                        temp.delete()
+                        dst.delete()
+                    }
+                }
+                if (dst.exists()) {
+                    dst.setLastModified(System.currentTimeMillis())
+                    trimFaviconDiskCache(iconsDir = dst.parentFile ?: return@synchronized)
                 }
             }
         } else {
@@ -176,6 +186,34 @@ internal fun faviconOrigin(pageUrlOrHost: String): String? = runCatching {
     val port = if (uri.port == defaultPort) -1 else uri.port
     URI(scheme, null, host, port, null, null, null).toASCIIString()
 }.getOrNull()
+
+/**
+ * Keeps the dedicated favicon directory bounded. Old cache-version files are included so changing
+ * the cache key/version cannot leak obsolete icons forever.
+ */
+internal fun trimFaviconDiskCache(
+    iconsDir: File,
+    maxFiles: Int = 256,
+    maxBytes: Long = 32L * 1024 * 1024,
+) {
+    if (maxFiles < 0 || maxBytes < 0) return
+    val files = iconsDir.listFiles()
+        ?.filter { it.isFile && !it.name.endsWith(".tmp") }
+        ?.sortedByDescending { it.lastModified() }
+        ?: return
+    var keptFiles = 0
+    var keptBytes = 0L
+    files.forEach { file ->
+        val size = file.length().coerceAtLeast(0L)
+        val keep = keptFiles < maxFiles && keptBytes + size <= maxBytes
+        if (keep) {
+            keptFiles++
+            keptBytes += size
+        } else {
+            file.delete()
+        }
+    }
+}
 
 private fun Int.isHttpRedirect(): Boolean =
     this == HttpURLConnection.HTTP_MOVED_PERM ||
