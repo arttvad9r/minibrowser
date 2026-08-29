@@ -174,26 +174,26 @@ fun SettingsScreen(
     }
 
     if (showEnginePicker) {
-        CompactChoiceSheet(onDismissRequest = { showEnginePicker = false }) {
+        CompactChoiceSheet(onDismissRequest = { showEnginePicker = false }) { dismiss ->
             Text("Поисковая система", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             SearchEngine.entries.forEach { engine ->
                 CompactChoiceRow(engine.label, engine == prefs.searchEngine) {
                     onEngine(engine)
-                    showEnginePicker = false
+                    dismiss()
                 }
             }
         }
     }
 
     if (showLanguagePicker) {
-        CompactChoiceSheet(onDismissRequest = { showLanguagePicker = false }) {
+        CompactChoiceSheet(onDismissRequest = { showLanguagePicker = false }) { dismiss ->
             Text("Язык перевода", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             translationLanguages.forEach { (label, code) ->
                 CompactChoiceRow(label, code == prefs.translateTarget) {
                     onTranslateLang(code)
-                    showLanguagePicker = false
+                    dismiss()
                 }
             }
         }
