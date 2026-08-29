@@ -57,6 +57,11 @@ class BrowserApp : Application() {
                 .setLnaBlocking(true)
                 .build()
         )
+        if (!performance.lowRamDevice && performance.totalMemoryBytes >= 6L * 1024L * 1024L * 1024L) {
+            // Gecko documents this as a pure performance feature. On multicore/high-memory phones,
+            // parallel marking trades spare CPU cores for shorter JavaScript GC marking pauses.
+            Engine.runtime.settings.setParallelMarkingEnabled(true)
+        }
     }
 
     /**
