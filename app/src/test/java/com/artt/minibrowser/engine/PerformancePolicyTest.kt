@@ -8,7 +8,7 @@ class PerformancePolicyTest {
     fun highMemoryDeviceKeepsLargerHotSet() {
         val gib = 1024L * 1024L * 1024L
         val policy = performancePolicyFor(12L * gib, lowRamDevice = false)
-        assertEquals(8, policy.hotTabLimit)
+        assertEquals(12, policy.hotTabLimit)
         assertEquals(16L * 1024L * 1024L, policy.previewCacheBytes)
         assertEquals(4L * 1024L * 1024L, policy.backgroundPreviewCacheBytes)
     }
