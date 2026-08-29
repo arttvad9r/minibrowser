@@ -138,6 +138,27 @@ internal data class PersistTabCandidate(
     val isPrivate: Boolean,
 )
 
+internal data class SessionStateSelection(
+    val state: String?,
+    val stateUrl: String?,
+)
+
+internal fun selectSessionStateForUrl(
+    tabUrl: String,
+    latestState: String?,
+    latestStateUrl: String?,
+    serializedState: String?,
+    serializedStateUrl: String?,
+): SessionStateSelection {
+    if (latestState != null && latestStateUrl == tabUrl) {
+        return SessionStateSelection(latestState, tabUrl)
+    }
+    if (serializedState != null && serializedStateUrl == tabUrl) {
+        return SessionStateSelection(serializedState, tabUrl)
+    }
+    return SessionStateSelection(null, null)
+}
+
 internal data class PersistenceTabSnapshot(
     val id: Long,
     val url: String,
@@ -145,7 +166,9 @@ internal data class PersistenceTabSnapshot(
     val desktop: Boolean,
     val lastAccess: Long,
     val latestSessionState: GeckoSession.SessionState?,
+    val latestSessionStateUrl: String?,
     val serializedSessionState: String?,
+    val serializedSessionStateUrl: String?,
     val isPrivate: Boolean,
 )
 
@@ -157,13 +180,21 @@ internal data class PersistenceSnapshot(
 internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): PersistedBrowserState = PersistedBrowserState(
     selectedId = snapshot.selectedId,
     tabs = snapshot.tabs.filterNot { it.isPrivate }.map {
+        val selectedState = selectSessionStateForUrl(
+            tabUrl = it.url,
+            latestState = it.latestSessionState?.toString(),
+            latestStateUrl = it.latestSessionStateUrl,
+            serializedState = it.serializedSessionState,
+            serializedStateUrl = it.serializedSessionStateUrl,
+        )
         PersistedTab(
             id = it.id,
             url = it.url,
             title = it.title,
             desktop = it.desktop,
-            sessionState = it.latestSessionState?.toString() ?: it.serializedSessionState,
+            sessionState = selectedState.state,
             lastAccess = it.lastAccess,
+            sessionStateUrl = selectedState.stateUrl,
         )
     },
 )
@@ -171,7 +202,15 @@ internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): Persis
 internal fun snapshotPersistedState(selectedId: Long?, tabs: List<PersistTabCandidate>): PersistedBrowserState = PersistedBrowserState(
     selectedId = selectedId,
     tabs = tabs.filterNot { it.isPrivate }.map {
-        PersistedTab(it.id, it.url, it.title, it.desktop, it.sessionState, it.lastAccess)
+        PersistedTab(
+            id = it.id,
+            url = it.url,
+            title = it.title,
+            desktop = it.desktop,
+            sessionState = it.sessionState,
+            lastAccess = it.lastAccess,
+            sessionStateUrl = it.url.takeIf { _ -> it.sessionState != null },
+        )
     },
 )
 
@@ -191,7 +230,9 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     internal val progressGate = ProgressGate()
     internal var restoreUrlOnOpen = false
     @Volatile internal var latestSessionState: GeckoSession.SessionState? = null
+    @Volatile internal var latestSessionStateUrl: String? = null
     internal var persistedSessionState: String? = null
+    internal var persistedSessionStateUrl: String? = null
     internal var lastAccess = System.currentTimeMillis()
 }
 
@@ -268,13 +309,17 @@ class TabManager(
         val id = persisted?.id ?: ++seq
         seq = maxOf(seq, id)
         val tab = Tab(s, id, private)
-        persisted?.let {
-            tab.url = it.url
-            tab.title = it.title
-            tab.desktop = it.desktop
-            tab.lastAccess = it.lastAccess
+        persisted?.let { saved ->
+            tab.url = saved.url
+            tab.title = saved.title
+            tab.desktop = saved.desktop
+            tab.lastAccess = saved.lastAccess
             tab.restoreUrlOnOpen = true
-            tab.persistedSessionState = it.sessionState
+            val stateUrl = saved.sessionStateUrl ?: saved.url.takeIf { saved.sessionState != null }
+            if (saved.sessionState != null && stateUrl == saved.url) {
+                tab.persistedSessionState = saved.sessionState
+                tab.persistedSessionStateUrl = stateUrl
+            }
         }
         attachDelegates(tab)
         _tabs.value += tab
@@ -289,16 +334,19 @@ class TabManager(
         tab.session.setFocused(selected)
         runtime.webExtensionController.setTabActive(tab.session, selected)
         applyDesktop(tab)
-        tab.persistedSessionState?.let { encoded ->
+        tab.persistedSessionState?.takeIf { tab.persistedSessionStateUrl == tab.url }?.let { encoded ->
             runCatching {
                 GeckoSession.SessionState.fromString(encoded)?.let(tab.session::restoreState)
                     ?: error("Invalid session state")
             }.onFailure {
                 tab.persistedSessionState = null
+                tab.persistedSessionStateUrl = null
                 tab.restoreUrlOnOpen = true
             }
         }
-        if (tab.restoreUrlOnOpen && tab.url.isNotBlank() && tab.persistedSessionState == null) {
+        if (tab.restoreUrlOnOpen && tab.url.isNotBlank() &&
+            (tab.persistedSessionState == null || tab.persistedSessionStateUrl != tab.url)
+        ) {
             tab.session.loadUri(tab.url)
         }
         tab.restoreUrlOnOpen = false
@@ -398,7 +446,9 @@ class TabManager(
                 desktop = it.desktop,
                 lastAccess = it.lastAccess,
                 latestSessionState = it.latestSessionState,
+                latestSessionStateUrl = it.latestSessionStateUrl,
                 serializedSessionState = it.persistedSessionState,
+                serializedSessionStateUrl = it.persistedSessionStateUrl,
                 isPrivate = it.isPrivate,
             )
         },
@@ -447,6 +497,7 @@ class TabManager(
 
             override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
                 tab.latestSessionState = state
+                tab.latestSessionStateUrl = tab.url
                 if (!tab.isPrivate) requestPersist(immediate = false)
             }
         }
@@ -626,7 +677,7 @@ class TabManager(
         fresh.setFocused(wasActive)
         runtime.webExtensionController.setTabActive(fresh, wasActive)
 
-        val latest = tab.latestSessionState
+        val latest = tab.latestSessionState.takeIf { tab.latestSessionStateUrl == tab.url }
         val restoredLatest = latest?.let { state ->
             runCatching {
                 fresh.restoreState(state)
@@ -634,7 +685,7 @@ class TabManager(
             }.getOrDefault(false)
         } == true
         val restoredPersisted = if (!restoredLatest) {
-            tab.persistedSessionState?.let { encoded ->
+            tab.persistedSessionState?.takeIf { tab.persistedSessionStateUrl == tab.url }?.let { encoded ->
                 runCatching {
                     GeckoSession.SessionState.fromString(encoded)?.let {
                         fresh.restoreState(it)
