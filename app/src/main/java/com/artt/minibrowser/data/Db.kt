@@ -99,17 +99,31 @@ internal const val DB_CREATE_TRACE = "DbHolder.create"
 // Application-scope: HistorySink вызывается из TabManager без жизненного цикла,
 // поэтому скоуп живёт здесь (переживает активити, гаснет только с процессом).
 object DbHolder {
-    internal val MIGRATION_1_2 = object : Migration(1, 2) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
+    // JVM holder objects defer these allocations until history/bookmarks actually need them.
+    // Unlike `by lazy`, DbHolder initialization itself does not allocate lazy delegates/lambdas.
+    internal val MIGRATION_1_2: Migration
+        get() = Migrations.oneToTwo
+    internal val MIGRATION_2_3: Migration
+        get() = Migrations.twoToThree
+    val scope: CoroutineScope
+        get() = ScopeHolder.scope
+
+    private object Migrations {
+        val oneToTwo = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
+            }
+        }
+        val twoToThree = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
+            }
         }
     }
-    internal val MIGRATION_2_3 = object : Migration(2, 3) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_history_visitedAt ON history(visitedAt)")
-        }
+
+    private object ScopeHolder {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val lock = Any()
     @Volatile private var appContext: Context? = null
