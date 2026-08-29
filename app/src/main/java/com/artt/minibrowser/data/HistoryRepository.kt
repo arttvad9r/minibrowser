@@ -81,8 +81,15 @@ class HistoryRepository(private val dao: AppDao) {
         val rows = dao.searchHistory(query)
             .filter { isHistoryUrl(it.url) }
             .let(::collapseHistoryNoise)
-        val marks: List<String> = dao.bookmarksMatching(query).map { it.url }
-        return rankSuggestions(rows.map { Scored(it.url, it.title, it.visitedAt) }, marks, query)
+        val bookmarks = dao.bookmarksMatching(query).map {
+            Suggestion(it.title.ifBlank { it.url }, it.url)
+        }
+        val history = rankSuggestions(
+            rows.map { Scored(it.url, it.title, it.visitedAt) },
+            emptyList(),
+            query,
+        )
+        return (bookmarks + history).distinctBy { it.url }.take(8)
     }
 
     // Читаем с запасом: после удаления internal URL и схлопывания быстрых SPA/redirect-переходов
