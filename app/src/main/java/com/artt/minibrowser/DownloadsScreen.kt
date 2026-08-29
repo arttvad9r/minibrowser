@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,8 +58,13 @@ import java.util.Date
 /** Downloads stays in the same Compose navigation layer as Settings/History/Bookmarks. */
 @Composable
 internal fun MotionDownloadsScreen(onBack: () -> Unit) {
-    val downloads by DownloadHistory.items.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        // Keep downloads.json completely off the ordinary browser cold-start path. init() schedules
+        // its bounded restore on IO and the StateFlow updates this screen when that restore lands.
+        DownloadHistory.init(context.applicationContext)
+    }
+    val downloads by DownloadHistory.items.collectAsStateWithLifecycle()
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
     var showClearConfirm by remember { mutableStateOf(false) }
 
