@@ -88,6 +88,7 @@ import com.artt.minibrowser.browser.ActivityRequestCoordinator
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.NavigationController
+import com.artt.minibrowser.browser.OmniboxSuggestionsViewModel
 import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.areRequestedPermissionsSatisfied
 import com.artt.minibrowser.data.BookmarksRepository
@@ -141,6 +142,12 @@ class MainActivity : ComponentActivity() {
             this,
             PageBookmarkViewModel.factory { bookmarksRepo },
         )[PageBookmarkViewModel::class.java]
+    }
+    private val omniboxSuggestionsViewModel by lazy {
+        ViewModelProvider(
+            this,
+            OmniboxSuggestionsViewModel.factory { historyRepo },
+        )[OmniboxSuggestionsViewModel::class.java]
     }
 
     private val externalNavigation = NavigationController()
@@ -267,6 +274,7 @@ class MainActivity : ComponentActivity() {
             val darkTheme = when (prefs.theme) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
             val browserUi by browserViewModel.state.collectAsStateWithLifecycle()
             val pageBookmarkUi by pageBookmarkViewModel.uiState.collectAsStateWithLifecycle()
+            val omniboxSuggestionsUi by omniboxSuggestionsViewModel.uiState.collectAsStateWithLifecycle()
             val screen = browserUi.screen
             val showSwitcher = browserUi.showSwitcher
             val showFind = browserUi.showFind
@@ -373,6 +381,8 @@ class MainActivity : ComponentActivity() {
                                 bookmarked = bookmarked,
                                 iconsDir = iconsDir,
                                 omniboxFocus = omniboxFocus,
+                                suggestions = omniboxSuggestionsUi.suggestions,
+                                onSuggestionQueryChanged = omniboxSuggestionsViewModel::updateQuery,
                                 onNavigate = { uri ->
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
@@ -396,7 +406,6 @@ class MainActivity : ComponentActivity() {
                                 onHistory = { browserViewModel.screen(BrowserScreen.History) },
                                 onShare = onShare,
                                 onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
-                                onSuggest = { q -> historyRepo.suggest(q) },
                                 onToggleAdblock = toggleAdblock,
                                 onRetryAdblock = retryAdblock,
                                 adblockStatus = adblockStatus,
@@ -584,6 +593,8 @@ private fun TopBar(
     bookmarked: Boolean,
     iconsDir: File,
     omniboxFocus: FocusRequester,
+    suggestions: List<Suggestion>,
+    onSuggestionQueryChanged: (String?) -> Unit,
     adblockStatus: ExtensionLoader.Status?,
     onToggleAdblock: (Boolean) -> Unit,
     onRetryAdblock: () -> Unit,
@@ -602,12 +613,10 @@ private fun TopBar(
     onBookmarks: () -> Unit,
     onHistory: () -> Unit,
     onSettings: () -> Unit,
-    onSuggest: suspend (String) -> List<Suggestion>,
     onTranslate: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
-    var suggestions by remember { mutableStateOf(emptyList<Suggestion>()) }
     var menuOpen by remember { mutableStateOf(false) }
     var fieldSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val rawUrl = tab?.url ?: ""
@@ -616,14 +625,9 @@ private fun TopBar(
     val focusManager = LocalFocusManager.current
     LaunchedEffect(focused, text, rawUrl, newTab) {
         val userHasEdited = newTab || text != rawUrl
-        if (focused && text.isNotBlank() && userHasEdited) {
-            // Room's LIKE search is cheap in isolation but typing used to queue one query per key.
-            // LaunchedEffect cancellation makes this a latest-query-only debounce.
-            delay(90)
-            suggestions = onSuggest(text)
-        } else {
-            suggestions = emptyList()
-        }
+        onSuggestionQueryChanged(
+            text.takeIf { focused && it.isNotBlank() && userHasEdited },
+        )
     }
     val navigate: (String) -> Unit = { q ->
         when (val target = com.artt.minibrowser.engine.resolveNavigation(q)) {
