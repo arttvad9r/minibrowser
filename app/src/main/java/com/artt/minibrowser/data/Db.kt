@@ -71,6 +71,9 @@ data class Bookmark(
     @Query("SELECT * FROM bookmarks WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' ORDER BY position LIMIT 50")
     suspend fun bookmarksMatching(q: String): List<Bookmark>
 
+    @Query("SELECT COALESCE(MAX(position), -1) FROM bookmarks")
+    suspend fun maxBookmarkPosition(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertBookmark(b: Bookmark)
 
