@@ -2,6 +2,7 @@ package com.artt.minibrowser.engine
 
 import android.app.Activity
 import android.os.SystemClock
+import android.os.Trace
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -32,6 +33,9 @@ import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.StorageController
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
+
+internal const val TAB_RESTORE_MATERIALIZE_TRACE = "TabManager.restoreTabs"
+internal const val TAB_RESTORE_OPEN_SELECTED_TRACE = "TabManager.openSelected"
 
 internal class ProgressGate(private val intervalMs: Long = 100) {
     private var lastPublishedAt: Long? = null
@@ -331,9 +335,9 @@ class TabManager(
         return tab.session
     }
 
-    private fun createTab(private: Boolean): Tab = createTab(private, null)
+    private fun createTab(private: Boolean): Tab = createTab(private, null, publish = true)
 
-    private fun createTab(private: Boolean, persisted: PersistedTab?): Tab {
+    private fun createTab(private: Boolean, persisted: PersistedTab?, publish: Boolean = true): Tab {
         val s = GeckoSession(sessionSettings(private))
         val id = persisted?.id ?: ++seq
         seq = maxOf(seq, id)
@@ -351,7 +355,7 @@ class TabManager(
             }
         }
         attachDelegates(tab)
-        _tabs.value += tab
+        if (publish) _tabs.value += tab
         return tab
     }
 
@@ -591,14 +595,25 @@ class TabManager(
 
     private fun restore() {
         val saved = TabStore.loadState(storeDir)
-        saved.tabs.forEach { createTab(private = false, persisted = it) }
-        if (_tabs.value.isEmpty()) {
+        Trace.beginSection(TAB_RESTORE_MATERIALIZE_TRACE)
+        val restoredTabs = try {
+            saved.tabs.map { createTab(private = false, persisted = it, publish = false) }
+        } finally {
+            Trace.endSection()
+        }
+        _tabs.value = restoredTabs
+        if (restoredTabs.isEmpty()) {
             newTab(null)
         } else {
-            val selected = saved.selectedId?.takeIf { id -> _tabs.value.any { it.id == id } }
-                ?: _tabs.value.maxByOrNull { it.lastAccess }!!.id
+            val selected = saved.selectedId?.takeIf { id -> restoredTabs.any { it.id == id } }
+                ?: restoredTabs.maxByOrNull { it.lastAccess }!!.id
             currentId.value = selected
-            _tabs.value.first { it.id == selected }.let(::openTab)
+            Trace.beginSection(TAB_RESTORE_OPEN_SELECTED_TRACE)
+            try {
+                restoredTabs.first { it.id == selected }.let(::openTab)
+            } finally {
+                Trace.endSection()
+            }
         }
     }
 
