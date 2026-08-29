@@ -1,8 +1,8 @@
 package com.artt.minibrowser.engine
 
 import android.Manifest
-import android.app.AlertDialog
 import android.app.Activity
+import android.app.AlertDialog
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
@@ -46,6 +46,10 @@ class GeckoPermissionController(
         permissions: Array<String>?,
         callback: GeckoSession.PermissionDelegate.Callback,
     ) {
+        if (!canShowUi()) {
+            callback.reject()
+            return
+        }
         val supported = setOf(
             Manifest.permission.CAMERA,
             Manifest.permission.RECORD_AUDIO,
@@ -64,7 +68,7 @@ class GeckoPermissionController(
             return
         }
         requestPermissions?.invoke(missing) { granted ->
-            if (granted) callback.grant() else callback.reject()
+            if (granted && canShowUi()) callback.grant() else callback.reject()
         } ?: callback.reject()
     }
 
@@ -95,15 +99,23 @@ class GeckoPermissionController(
             PermissionAction.ALLOW, PermissionAction.DENY -> ""
         }
         activity.runOnUiThread {
-            val dialog = AlertDialog.Builder(activity)
-                .setTitle(host)
-                .setMessage(message)
-                .setNegativeButton("Запретить") { _, _ -> result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
-                .setPositiveButton("Разрешить") { _, _ -> result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) }
-                .setOnCancelListener { result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
-                .create()
-            dialog.setOnShowListener { perm.notifyShown() }
-            dialog.show()
+            if (!canShowUi()) {
+                result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                return@runOnUiThread
+            }
+            runCatching {
+                val dialog = AlertDialog.Builder(activity)
+                    .setTitle(host)
+                    .setMessage(message)
+                    .setNegativeButton("Запретить") { _, _ -> result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
+                    .setPositiveButton("Разрешить") { _, _ -> result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) }
+                    .setOnCancelListener { result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
+                    .create()
+                dialog.setOnShowListener { perm.notifyShown() }
+                dialog.show()
+            }.onFailure {
+                runCatching { result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
+            }
         }
         return result
     }
@@ -115,6 +127,10 @@ class GeckoPermissionController(
         audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     ) {
+        if (!canShowUi()) {
+            callback.reject()
+            return
+        }
         val camera = video.orEmpty().firstOrNull { it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_CAMERA }
         val microphone = audio.orEmpty().firstOrNull { it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_MICROPHONE }
         val unsupported = (video.orEmpty().asList() + audio.orEmpty().asList()).any {
@@ -131,13 +147,21 @@ class GeckoPermissionController(
             if (microphone != null) add("микрофону")
         }.joinToString(" и ")
         activity.runOnUiThread {
-            AlertDialog.Builder(activity)
-                .setTitle(host)
-                .setMessage("Разрешить доступ к $requested?")
-                .setNegativeButton("Запретить") { _, _ -> callback.reject() }
-                .setPositiveButton("Разрешить") { _, _ -> requestAndroidMediaPermissions(camera, microphone, callback) }
-                .setOnCancelListener { callback.reject() }
-                .show()
+            if (!canShowUi()) {
+                callback.reject()
+                return@runOnUiThread
+            }
+            runCatching {
+                AlertDialog.Builder(activity)
+                    .setTitle(host)
+                    .setMessage("Разрешить доступ к $requested?")
+                    .setNegativeButton("Запретить") { _, _ -> callback.reject() }
+                    .setPositiveButton("Разрешить") { _, _ -> requestAndroidMediaPermissions(camera, microphone, callback) }
+                    .setOnCancelListener { callback.reject() }
+                    .show()
+            }.onFailure {
+                runCatching { callback.reject() }
+            }
         }
     }
 
@@ -146,6 +170,10 @@ class GeckoPermissionController(
         microphone: GeckoSession.PermissionDelegate.MediaSource?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     ) {
+        if (!canShowUi()) {
+            callback.reject()
+            return
+        }
         val needed = buildList {
             if (camera != null) add(Manifest.permission.CAMERA)
             if (microphone != null) add(Manifest.permission.RECORD_AUDIO)
@@ -156,13 +184,14 @@ class GeckoPermissionController(
             callback.grant(camera, microphone)
         } else {
             requestPermissions?.invoke(needed) { granted ->
-                if (granted) callback.grant(camera, microphone) else callback.reject()
+                if (granted && canShowUi()) callback.grant(camera, microphone) else callback.reject()
             } ?: callback.reject()
         }
     }
 
+    private fun canShowUi(): Boolean = !activity.isFinishing && !activity.isDestroyed
+
     private fun hostOfPermission(uri: String?): String = runCatching {
         android.net.Uri.parse(uri.orEmpty()).host
     }.getOrNull().orEmpty().ifBlank { "Сайт" }
-
 }
