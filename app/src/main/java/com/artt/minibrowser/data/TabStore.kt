@@ -32,6 +32,7 @@ object TabStore {
     private const val FILE_NAME = "open_tabs.json"
     private val json = Json { ignoreUnknownKeys = true }
     private val writeLock = Any()
+    private val newestRevisionByTarget = mutableMapOf<String, Long>()
 
     fun save(dir: File, urls: List<String>) {
         saveState(dir, PersistedBrowserState(
@@ -45,6 +46,29 @@ object TabStore {
      * a synced temp file is published with atomic move when supported and replace-move otherwise.
      */
     fun saveState(dir: File, state: PersistedBrowserState) = synchronized(writeLock) {
+        writeStateLocked(dir, state)
+    }
+
+    /**
+     * Writes a snapshot only if it is not older than the newest snapshot already published for
+     * this store in the current process. This is the clear/shutdown barrier: a persist coroutine
+     * that captured old tabs before a destructive action cannot restore them after the newer empty
+     * snapshot has been committed.
+     */
+    fun saveStateVersioned(dir: File, state: PersistedBrowserState, revision: Long): Boolean =
+        synchronized(writeLock) {
+            val key = File(dir, FILE_NAME).absolutePath
+            val newest = newestRevisionByTarget[key]
+            if (newest != null && revision < newest) {
+                false
+            } else {
+                writeStateLocked(dir, state)
+                newestRevisionByTarget[key] = revision
+                true
+            }
+        }
+
+    private fun writeStateLocked(dir: File, state: PersistedBrowserState) {
         dir.mkdirs()
         val target = File(dir, FILE_NAME)
         val temp = File(dir, "$FILE_NAME.tmp")
