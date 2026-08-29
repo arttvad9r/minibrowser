@@ -243,6 +243,7 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         showClearDialog = false
+                        TabPreviewStore.clear()
                         onClearData(withBookmarks)
                     },
                 ) {
