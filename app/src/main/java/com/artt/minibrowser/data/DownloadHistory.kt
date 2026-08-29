@@ -1,9 +1,14 @@
 package com.artt.minibrowser.data
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -62,13 +67,27 @@ internal fun writeTextAtomically(target: File, value: String) {
     }
 }
 
-/** Small bounded app-owned history for files downloaded by Minibrowser only. */
+/**
+ * Small bounded app-owned history for files downloaded by Minibrowser only.
+ *
+ * UI-visible state changes synchronously, but JSON serialization + fsync run on one IO writer.
+ * Download callbacks are often delivered on the Android UI thread, so doing a full atomic fsync in
+ * start/complete/fail caused avoidable frame stalls exactly when a download began or finished.
+ */
 object DownloadHistory {
     private const val MAX_ITEMS = 200
     private val lock = Any()
     private val _items = MutableStateFlow<List<BrowserDownload>>(emptyList())
     val items: StateFlow<List<BrowserDownload>> = _items.asStateFlow()
     private var storeFile: File? = null
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val persistRequests = Channel<List<BrowserDownload>>(Channel.CONFLATED)
+
+    init {
+        ioScope.launch {
+            for (snapshot in persistRequests) persistSnapshot(snapshot)
+        }
+    }
 
     fun init(context: Context) {
         synchronized(lock) {
@@ -86,8 +105,8 @@ object DownloadHistory {
                 } else sanitized
             }.take(MAX_ITEMS)
             _items.value = loaded
-            // Rewrites legacy entries as well, removing query/fragment secrets from disk.
-            persistLocked()
+            // Rewrite legacy entries asynchronously, removing query/fragment secrets from disk.
+            schedulePersistLocked()
         }
     }
 
@@ -102,7 +121,7 @@ object DownloadHistory {
             startedAt = System.currentTimeMillis(),
         )
         _items.value = (listOf(item) + _items.value).take(MAX_ITEMS)
-        persistLocked()
+        schedulePersistLocked()
         id
     }
 
@@ -131,15 +150,41 @@ object DownloadHistory {
     fun clear() {
         synchronized(lock) {
             _items.value = emptyList()
-            persistLocked()
+            schedulePersistLocked()
         }
     }
 
     private fun update(id: String, transform: (BrowserDownload) -> BrowserDownload) {
         synchronized(lock) {
             _items.value = _items.value.map { if (it.id == id) transform(it) else it }.take(MAX_ITEMS)
-            persistLocked()
+            schedulePersistLocked()
         }
+    }
+
+    private fun schedulePersistLocked() {
+        persistRequests.trySend(_items.value)
+    }
+
+    private fun persistSnapshot(snapshot: List<BrowserDownload>) {
+        val file = synchronized(lock) { storeFile } ?: return
+        val array = JSONArray()
+        snapshot.take(MAX_ITEMS).forEach { item ->
+            array.put(
+                JSONObject().apply {
+                    put("id", item.id)
+                    put("name", item.name)
+                    put("sourceUrl", item.sourceUrl)
+                    put("mime", item.mime)
+                    put("status", item.status.name)
+                    put("startedAt", item.startedAt)
+                    item.finishedAt?.let { put("finishedAt", it) }
+                    put("bytes", item.bytes)
+                    item.location?.let { put("location", it) }
+                    item.error?.let { put("error", it) }
+                },
+            )
+        }
+        runCatching { writeTextAtomically(file, array.toString()) }
     }
 
     private fun loadLocked(): List<BrowserDownload> {
@@ -168,27 +213,5 @@ object DownloadHistory {
                 }
             }
         }.getOrDefault(emptyList())
-    }
-
-    private fun persistLocked() {
-        val file = storeFile ?: return
-        val array = JSONArray()
-        _items.value.take(MAX_ITEMS).forEach { item ->
-            array.put(
-                JSONObject().apply {
-                    put("id", item.id)
-                    put("name", item.name)
-                    put("sourceUrl", item.sourceUrl)
-                    put("mime", item.mime)
-                    put("status", item.status.name)
-                    put("startedAt", item.startedAt)
-                    item.finishedAt?.let { put("finishedAt", it) }
-                    put("bytes", item.bytes)
-                    item.location?.let { put("location", it) }
-                    item.error?.let { put("error", it) }
-                },
-            )
-        }
-        runCatching { writeTextAtomically(file, array.toString()) }
     }
 }
