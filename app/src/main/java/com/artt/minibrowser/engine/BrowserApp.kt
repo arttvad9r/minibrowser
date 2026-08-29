@@ -50,6 +50,9 @@ class BrowserApp : Application() {
             this,
             GeckoRuntimeSettings.Builder()
                 .aboutConfigEnabled(BuildConfig.DEBUG)
+                // GeckoView logging is enabled by default. Keep it for debug builds, but avoid the
+                // formatting/IPC/logcat overhead in the release build used on the phone.
+                .debugLogging(BuildConfig.DEBUG)
                 .contentBlocking(contentBlocking)
                 .setLnaBlocking(true)
                 .build()
