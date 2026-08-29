@@ -31,8 +31,8 @@ internal fun webHistoryEntries(entries: List<HistoryEntry>): List<HistoryEntry> 
 private fun historyHost(url: String): String =
     runCatching { URI(url).host.orEmpty() }
         .getOrDefault("")
-        .removePrefix("www.")
         .lowercase()
+        .removePrefix("www.")
 
 private fun historyDisplayKey(entry: HistoryEntry): String {
     val title = entry.title
