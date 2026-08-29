@@ -6,7 +6,7 @@ class BookmarksRepository(private val dao: AppDao) {
     suspend fun all(): List<Bookmark> = dao.bookmarks()
     suspend fun add(url: String, title: String) {
         val host = runCatching { URI(url).host ?: "" }.getOrDefault("")
-        val max = dao.bookmarks().maxOfOrNull { it.position } ?: -1
+        val max = dao.maxBookmarkPosition()
         dao.upsertBookmark(Bookmark(url, title.ifBlank { host }, host, max + 1))
     }
     suspend fun remove(url: String) = dao.deleteBookmark(url)
