@@ -14,6 +14,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Bounded, privacy-preserving favicon fetcher.
@@ -31,6 +32,7 @@ object FaviconFetcher {
     private val scope = kotlinx.coroutines.CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = ConcurrentHashMap<String, Deferred<File>>()
     private val negative = ConcurrentHashMap<String, Long>()
+    private val generation = AtomicLong(0L)
 
     fun cacheFile(key: String, iconsDir: File): File {
         val md5 = MessageDigest.getInstance("MD5").digest(key.lowercase().trim().toByteArray())
@@ -44,23 +46,47 @@ object FaviconFetcher {
         val dst = cacheFile(origin, iconsDir)
         if (dst.exists()) return dst
         if (negative[origin]?.let { it > System.currentTimeMillis() } == true) return dst
+        val fetchGeneration = generation.get()
         val deferred = inFlight.computeIfAbsent(origin) {
-            scope.async { fetchOnce(origin, dst) }
+            scope.async { fetchOnce(origin, dst, fetchGeneration) }
         }
         return try {
             deferred.await().also {
-                if (!it.exists()) negative[origin] = System.currentTimeMillis() + NEGATIVE_TTL_MS
+                if (fetchGeneration == generation.get() && !it.exists()) {
+                    negative[origin] = System.currentTimeMillis() + NEGATIVE_TTL_MS
+                }
             }
         } finally {
             inFlight.remove(origin, deferred)
         }
     }
 
-    private suspend fun fetchOnce(origin: String, dst: File): File = withContext(Dispatchers.IO) {
+    /**
+     * Invalidate memory-side fetch state before deleting disk files. A fetch that was already in
+     * progress carries the old generation and is not allowed to publish its temporary file after
+     * this call returns.
+     */
+    fun clear(iconsDir: File) {
+        generation.incrementAndGet()
+        inFlight.values.forEach { it.cancel() }
+        inFlight.clear()
+        negative.clear()
+        iconsDir.deleteRecursively()
+    }
+
+    private suspend fun fetchOnce(
+        origin: String,
+        dst: File,
+        fetchGeneration: Long,
+    ): File = withContext(Dispatchers.IO) {
         dst.parentFile?.mkdirs()
         val temp = File("${dst.path}.tmp")
         temp.delete()
         if (downloadCandidate("$origin/favicon.ico", temp) != null) {
+            if (fetchGeneration != generation.get()) {
+                temp.delete()
+                return@withContext dst
+            }
             runCatching {
                 Files.move(
                     temp.toPath(),
