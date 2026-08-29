@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -57,6 +59,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -263,7 +267,7 @@ fun ToggleRow(
         modifier
             .fillMaxWidth()
             .clip(Radius.small)
-            .clickable { onChecked(!checked) }
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChecked)
             .animateContentSize(animationSpec = standardSpatialSpring())
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -283,7 +287,7 @@ fun ToggleRow(
                 checkedTrackColor = MaterialTheme.colorScheme.primary,
                 checkedThumbColor = MaterialTheme.colorScheme.surface,
             ),
-            modifier = Modifier.scale(0.9f),
+            modifier = Modifier.scale(0.9f).clearAndSetSemantics { },
         )
     }
 }
@@ -343,8 +347,7 @@ fun SettingsRow(
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .heightIn(min = 54.dp)
             .animateContentSize(animationSpec = standardSpatialSpring())
-            .padding(horizontal = 16.dp, vertical = 9.dp)
-            .semantics { contentDescription = title },
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -367,7 +370,7 @@ fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .height(48.dp)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
