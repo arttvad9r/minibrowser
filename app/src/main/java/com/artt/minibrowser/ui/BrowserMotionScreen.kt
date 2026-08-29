@@ -20,11 +20,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 
 /**
- * Shared full-screen destination container for Settings/History/Bookmarks.
+ * Full-screen app destination over the browser.
  *
- * Most destinations use only a short opacity transition. A destination that is opened from a
- * bottom-sheet action can opt into a small vertical travel so its motion follows the action's
- * physical origin without moving the underlying GeckoView.
+ * The opaque destination background is never animated. Only the destination content moves/fades,
+ * so a live GeckoView is not blended through a translucent Compose layer during navigation.
  */
 @Composable
 fun BrowserMotionScreen(
@@ -35,14 +34,14 @@ fun BrowserMotionScreen(
     var visible by remember { mutableStateOf(false) }
     var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
     val density = LocalDensity.current
-    val travelPx = if (fromBottom) with(density) { 28.dp.toPx() } else 0f
+    val travelPx = if (fromBottom) with(density) { 20.dp.toPx() } else 0f
 
     LaunchedEffect(Unit) { visible = true }
 
     val reveal by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = tween(MotionTokens.Quick),
-        label = "browserScreenReveal",
+        label = "browserScreenContentReveal",
     )
 
     LaunchedEffect(pendingExit) {
@@ -63,12 +62,17 @@ fun BrowserMotionScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .graphicsLayer {
-                alpha = reveal
-                translationY = (1f - reveal) * travelPx
-            }
             .background(MaterialTheme.colorScheme.background),
     ) {
-        content(::requestExit)
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = reveal
+                    translationY = (1f - reveal) * travelPx
+                },
+        ) {
+            content(::requestExit)
+        }
     }
 }
