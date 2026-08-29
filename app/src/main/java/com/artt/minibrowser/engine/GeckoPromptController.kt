@@ -49,10 +49,16 @@ class GeckoPromptController(
 
     private var pendingFilePrompt: GeckoSession.PromptDelegate.FilePrompt? = null
     private var pendingFileResult: GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = null
-    private val directFileLauncher = (activity as? ComponentActivity)?.registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { result ->
-        handleFilePickerResult(result.resultCode, result.data)
+    // MainActivity supplies a serialized picker coordinator. Register a direct launcher only for
+    // standalone/fallback usage; otherwise two independent picker paths could misroute results.
+    private val directFileLauncher = if (pickFiles == null) {
+        (activity as? ComponentActivity)?.registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult(),
+        ) { result ->
+            handleFilePickerResult(result.resultCode, result.data)
+        }
+    } else {
+        null
     }
 
     private fun bindPromptDialog(
@@ -445,6 +451,7 @@ class GeckoPromptController(
         prompt: GeckoSession.PromptDelegate.FilePrompt,
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
         val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+        val guard = PromptGuard(prompt, result)
         if (BuildConfig.DEBUG) {
             Log.d(
                 "MinibrowserFiles",
@@ -452,15 +459,26 @@ class GeckoPromptController(
             )
         }
 
-        if (launchDirectFilePicker(prompt, result)) return result
-
-        val guard = PromptGuard(prompt, result)
-        pickFiles?.invoke(prompt.type, prompt.mimeTypes ?: emptyArray()) { uris ->
-            activity.runOnUiThread {
-                if (uris.isEmpty()) guard.complete { prompt.dismiss() }
-                else guard.complete { prompt.confirm(activity.applicationContext, uris) }
+        // Production supplies MainActivity's ActivityRequestCoordinator. It must be the single
+        // owner of ActivityResult launches so two nearby <input type=file> prompts cannot steal
+        // each other's result.
+        val coordinatedPicker = pickFiles
+        if (coordinatedPicker != null) {
+            runCatching {
+                coordinatedPicker(prompt.type, prompt.mimeTypes ?: emptyArray()) { uris ->
+                    activity.runOnUiThread {
+                        if (uris.isEmpty()) guard.complete { prompt.dismiss() }
+                        else guard.complete { prompt.confirm(activity.applicationContext, uris) }
+                    }
+                }
+            }.onFailure {
+                guard.complete { prompt.dismiss() }
             }
-        } ?: guard.complete { prompt.dismiss() }
+            return result
+        }
+
+        if (launchDirectFilePicker(prompt, result)) return result
+        guard.complete { prompt.dismiss() }
         return result
     }
 
@@ -469,7 +487,9 @@ class GeckoPromptController(
         result: GeckoResult<GeckoSession.PromptDelegate.PromptResponse>,
     ): Boolean {
         val launcher = directFileLauncher ?: return false
-        clearPendingFilePrompt(dismiss = true)
+        val pending = pendingFilePrompt
+        if (pending != null && !pending.isComplete) return false
+        if (pending != null) clearPendingFilePrompt(dismiss = false)
 
         val target = buildFilePickerIntent(prompt)
         pendingFilePrompt = prompt
