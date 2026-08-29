@@ -2,13 +2,8 @@
 
 package com.artt.minibrowser.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,7 +55,7 @@ fun CompactChoiceSheet(
     }
 }
 
-/** 48dp touch target without the oversized visual gaps of a half-expanded sheet. */
+/** 48dp touch target; the trailing slot is fixed so selection never causes layout or scale motion. */
 @Composable
 fun CompactChoiceRow(
     title: String,
@@ -76,14 +71,10 @@ fun CompactChoiceRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        AnimatedVisibility(
-            visible = selected,
-            enter = fadeIn(tween(MotionTokens.Quick)) +
-                scaleIn(tween(MotionTokens.Standard), initialScale = 0.82f),
-            exit = fadeOut(tween(MotionTokens.Quick)) +
-                scaleOut(tween(MotionTokens.Quick), targetScale = 0.82f),
-        ) {
-            Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
+        Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+            if (selected) {
+                Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
+            }
         }
     }
 }
