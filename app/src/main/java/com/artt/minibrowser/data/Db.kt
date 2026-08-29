@@ -11,14 +11,16 @@ import kotlinx.coroutines.SupervisorJob
 data class Scored(val url: String, val title: String, val visitedAt: Long)
 data class Suggestion(val label: String, val url: String)
 
-fun rankSuggestions(history: List<Scored>, bookmarks: List<String>, q: String): List<Suggestion> {
+fun rankSuggestions(history: List<Scored>, q: String): List<Suggestion> {
     val needle = q.trim()
-    val matched = history.filter { needle.isEmpty() ||
-        it.url.contains(needle, true) || it.title.contains(needle, true) }
+    return history
+        .filter {
+            needle.isEmpty() || it.url.contains(needle, true) || it.title.contains(needle, true)
+        }
         .sortedByDescending { it.visitedAt }
-    val bm = bookmarks.filter { needle.isEmpty() || it.contains(needle, true) }
-    return (bm.map { Suggestion(it, it) } + matched.take(8).map { Suggestion(it.title.ifEmpty { it.url }, it.url) })
-        .distinctBy { it.url }.take(8)
+        .take(8)
+        .map { Suggestion(it.title.ifEmpty { it.url }, it.url) }
+        .distinctBy { it.url }
 }
 
 @Entity(
