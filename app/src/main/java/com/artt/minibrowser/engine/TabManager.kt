@@ -57,6 +57,13 @@ internal fun closeIfOpen(session: GeckoSession) {
     }
 }
 
+internal fun shouldCreateBlankTabAfterClear(
+    requestGeneration: Long,
+    currentGeneration: Long,
+    hasTabs: Boolean,
+    isClosed: Boolean,
+): Boolean = !isClosed && requestGeneration == currentGeneration && !hasTabs
+
 internal enum class PersistSignal { Dirty, Immediate }
 
 internal fun mergePersistSignal(current: PersistSignal, next: PersistSignal): PersistSignal =
@@ -269,6 +276,7 @@ class TabManager(
     private val persistScope = CoroutineScope(persistJob + Dispatchers.IO)
     private val persistRequests = PersistSignalQueue()
     private val persistRevision = AtomicLong(0L)
+    private val clearGeneration = AtomicLong(0L)
     private val lifecycleOwner = context as? LifecycleOwner
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onDestroy(owner: LifecycleOwner) {
@@ -413,6 +421,7 @@ class TabManager(
 
     suspend fun clearWebData(): GeckoResult<Void> {
         if (closed) return GeckoResult.fromValue<Void>(null)
+        val clearRequest = clearGeneration.incrementAndGet()
         _tabs.value.forEach { tab ->
             runtime.webExtensionController.setTabActive(tab.session, false)
             closeIfOpen(tab.session)
@@ -428,11 +437,22 @@ class TabManager(
             TabStore.saveStateVersioned(storeDir, PersistedBrowserState(), clearRevision)
         }
 
+        val restoreBlankTab = {
+            if (shouldCreateBlankTabAfterClear(
+                    requestGeneration = clearRequest,
+                    currentGeneration = clearGeneration.get(),
+                    hasTabs = _tabs.value.isNotEmpty(),
+                    isClosed = closed,
+                )
+            ) {
+                newTab(null)
+            }
+        }
         return runtime.storageController.clearData(StorageController.ClearFlags.ALL).accept(
-            { if (!closed) newTab(null) },
+            { restoreBlankTab() },
             { error ->
                 Log.e("MinibrowserTabs", "Failed to clear web data", error)
-                if (!closed) newTab(null)
+                restoreBlankTab()
             },
         )
     }
