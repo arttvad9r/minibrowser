@@ -29,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +41,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.artt.minibrowser.browser.DownloadsUiState
+import com.artt.minibrowser.browser.DownloadsViewModel
 import com.artt.minibrowser.data.BrowserDownload
 import com.artt.minibrowser.data.DownloadHistory
 import com.artt.minibrowser.data.DownloadStatus
@@ -59,12 +61,33 @@ import java.util.Date
 @Composable
 internal fun MotionDownloadsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        // Keep downloads.json completely off the ordinary browser cold-start path. init() schedules
-        // its bounded restore on IO and the StateFlow updates this screen when that restore lands.
-        DownloadHistory.init(context.applicationContext)
+    val applicationContext = context.applicationContext
+    val factory = remember(applicationContext) {
+        DownloadsViewModel.factory(
+            downloads = DownloadHistory.items,
+            initialize = { DownloadHistory.init(applicationContext) },
+            clearHistory = DownloadHistory::clear,
+        )
     }
-    val downloads by DownloadHistory.items.collectAsStateWithLifecycle()
+    val downloadsViewModel: DownloadsViewModel = viewModel(factory = factory)
+    val state by downloadsViewModel.uiState.collectAsStateWithLifecycle()
+
+    DownloadsScreen(
+        state = state,
+        onBack = onBack,
+        onClear = downloadsViewModel::clear,
+        onOpen = { item -> openDownload(context, item) },
+    )
+}
+
+@Composable
+private fun DownloadsScreen(
+    state: DownloadsUiState,
+    onBack: () -> Unit,
+    onClear: () -> Unit,
+    onOpen: (BrowserDownload) -> Unit,
+) {
+    val downloads = state.downloads
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
     var showClearConfirm by remember { mutableStateOf(false) }
 
@@ -102,7 +125,7 @@ internal fun MotionDownloadsScreen(onBack: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(downloads, key = { it.id }) { item ->
-                        DownloadCard(item, dateFormat) { openDownload(context, item) }
+                        DownloadCard(item, dateFormat) { onOpen(item) }
                     }
                 }
             }
@@ -118,7 +141,7 @@ internal fun MotionDownloadsScreen(onBack: () -> Unit) {
                 TextButton(
                     onClick = {
                         showClearConfirm = false
-                        DownloadHistory.clear()
+                        onClear()
                     },
                 ) { Text("Очистить") }
             },
