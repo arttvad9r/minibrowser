@@ -36,10 +36,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.artt.minibrowser.browser.BookmarksOperation
+import com.artt.minibrowser.browser.BookmarksUiState
+import com.artt.minibrowser.browser.BookmarksViewModel
 import com.artt.minibrowser.browser.HistoryOperation
 import com.artt.minibrowser.browser.HistoryUiState
 import com.artt.minibrowser.browser.HistoryViewModel
 import com.artt.minibrowser.data.Bookmark
+import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.engine.Tab
@@ -199,15 +203,42 @@ private fun HistoryScreen(
     }
 }
 
-/** Bookmarks destination with the same transition model as History and Settings. */
+/** Bookmarks destination. Repository access and mutations are owned by the destination ViewModel. */
 @Composable
 internal fun MotionBookmarksScreen(
-    bookmarks: List<Bookmark>,
+    repo: BookmarksRepository,
+    iconsDir: File,
+    onBack: () -> Unit,
+    onOpen: (String) -> Unit,
+) {
+    val factory = remember(repo) { BookmarksViewModel.factory(repo) }
+    val bookmarksViewModel: BookmarksViewModel = viewModel(factory = factory)
+    val state by bookmarksViewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(bookmarksViewModel) { bookmarksViewModel.refresh() }
+
+    BookmarksScreen(
+        state = state,
+        iconsDir = iconsDir,
+        onBack = onBack,
+        onOpen = onOpen,
+        onRename = bookmarksViewModel::rename,
+        onDelete = bookmarksViewModel::delete,
+        onRetryLoad = bookmarksViewModel::retryLoad,
+        onDismissError = bookmarksViewModel::dismissError,
+    )
+}
+
+@Composable
+private fun BookmarksScreen(
+    state: BookmarksUiState,
     iconsDir: File,
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onRetryLoad: () -> Unit,
+    onDismissError: () -> Unit,
 ) {
     var selected by remember { mutableStateOf<Bookmark?>(null) }
 
@@ -223,45 +254,81 @@ internal fun MotionBookmarksScreen(
                 Text("Закладки", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
             }
 
-            if (bookmarks.isEmpty()) {
-                EmptyState(AppIcons.Star, "Закладок пока нет", "Сохранённые страницы появятся здесь.")
-            } else {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(bookmarks, key = { it.url }) { bookmark ->
+            when {
+                state.isLoading && state.bookmarks.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                state.error == BookmarksOperation.Load && state.bookmarks.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            EmptyState(AppIcons.Star, "Не удалось загрузить закладки", "Повторите попытку.")
+                            TextButton(onClick = onRetryLoad) { Text("Повторить") }
+                        }
+                    }
+                }
+                state.bookmarks.isEmpty() -> {
+                    EmptyState(AppIcons.Star, "Закладок пока нет", "Сохранённые страницы появятся здесь.")
+                }
+                else -> {
+                    val mutationError = state.error?.takeIf { it != BookmarksOperation.Load }
+                    if (mutationError != null) {
+                        val message = when (mutationError) {
+                            BookmarksOperation.Rename -> "Не удалось переименовать закладку"
+                            BookmarksOperation.Delete -> "Не удалось удалить закладку"
+                            BookmarksOperation.Load -> error("handled above")
+                        }
                         Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { requestExit { onOpen(bookmark.url) } }
-                                .padding(horizontal = 20.dp, vertical = 6.dp),
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Favicon(bookmark.url, iconsDir, 40.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    bookmark.title.ifBlank { bookmark.host },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    hostOf(bookmark.url).ifBlank { bookmark.url },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            IconButton(
-                                onClick = { selected = bookmark },
-                                modifier = Modifier.size(40.dp),
+                            Text(
+                                message,
+                                Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            TextButton(onClick = onDismissError) { Text("Скрыть") }
+                        }
+                    }
+                    LazyColumn(Modifier.fillMaxSize()) {
+                        items(state.bookmarks, key = { it.url }) { bookmark ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { requestExit { onOpen(bookmark.url) } }
+                                    .padding(horizontal = 20.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    Icons.Filled.MoreVert,
-                                    "Действия",
-                                    Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Favicon(bookmark.url, iconsDir, 40.dp)
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        bookmark.title.ifBlank { bookmark.host },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                    Text(
+                                        hostOf(bookmark.url).ifBlank { bookmark.url },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { selected = bookmark },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.MoreVert,
+                                        "Действия",
+                                        Modifier.size(20.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
