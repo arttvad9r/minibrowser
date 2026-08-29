@@ -39,12 +39,14 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +68,7 @@ import com.artt.minibrowser.engine.FaviconFetcher
 import com.artt.minibrowser.engine.decodeSampledFavicon
 import com.artt.minibrowser.engine.faviconOrigin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URI
@@ -398,14 +401,39 @@ fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Bottom sheet: единая поверхность и системная Material-анимация появления/закрытия. */
+/**
+ * Bottom sheet with native Material motion.
+ *
+ * Actions originating inside the sheet receive [dismissThen]: it animates SheetState to Hidden,
+ * removes the sheet from composition through [onDismissRequest], and only then runs the action.
+ * This prevents navigation/state changes from cutting the closing animation off in one frame.
+ */
 @Composable
 fun BrowserBottomSheet(
     onDismissRequest: () -> Unit,
-    content: @Composable () -> Unit,
+    content: @Composable (dismissThen: (after: () -> Unit) -> Unit) -> Unit,
 ) {
+    val state = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
+    var dismissing by remember { mutableStateOf(false) }
+
+    val dismissThen: (after: () -> Unit) -> Unit = { after ->
+        if (!dismissing) {
+            dismissing = true
+            scope.launch {
+                state.hide()
+                if (!state.isVisible) {
+                    onDismissRequest()
+                    after()
+                }
+                dismissing = false
+            }
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
+        sheetState = state,
         containerColor = MaterialTheme.colorScheme.surface,
         shape = Radius.sheet,
     ) {
@@ -414,7 +442,9 @@ fun BrowserBottomSheet(
                 .imePadding()
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 16.dp),
-        ) { content() }
+        ) {
+            content(dismissThen)
+        }
     }
 }
 
@@ -429,7 +459,7 @@ fun BookmarkActionsSheet(
 ) {
     var renaming by remember { mutableStateOf(false) }
     var text by remember(bookmark.url) { mutableStateOf(bookmark.title) }
-    BrowserBottomSheet(onDismissRequest = onDismiss) {
+    BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
         Column {
             if (renaming) {
                 Text("Переименовать", style = MaterialTheme.typography.titleMedium)
@@ -447,9 +477,9 @@ fun BookmarkActionsSheet(
                     TextButton(onClick = { onRename(text.trim().ifBlank { bookmark.title }) }) { Text("ОК") }
                 }
             } else {
-                SheetRow(Icons.Filled.Search, "Открыть", onClick = { onOpen(); onDismiss() })
+                SheetRow(Icons.Filled.Search, "Открыть", onClick = { dismissThen(onOpen) })
                 SheetRow(Icons.Filled.Edit, "Переименовать", onClick = { renaming = true })
-                SheetRow(Icons.Filled.Delete, "Удалить", onClick = { onDelete(); onDismiss() })
+                SheetRow(Icons.Filled.Delete, "Удалить", onClick = { dismissThen(onDelete) })
             }
         }
     }
