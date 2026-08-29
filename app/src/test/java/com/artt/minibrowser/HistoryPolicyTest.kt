@@ -42,6 +42,17 @@ class HistoryPolicyTest {
         assertEquals(listOf(rows[0], rows[2]), collapseHistoryNoise(rows, windowMs = 15_000))
     }
 
+    @Test fun sortsUnorderedInputBeforeCollapsing() {
+        val newest = HistoryEntry("https://example.com/a", "Page", 120_000, 1)
+        val middle = HistoryEntry("https://other.example/b", "Other", 110_000, 1)
+        val oldest = HistoryEntry("https://example.com/c", "Page", 100_000, 1)
+
+        assertEquals(
+            listOf(newest, middle, oldest),
+            collapseHistoryNoise(listOf(oldest, newest, middle)),
+        )
+    }
+
     @Test fun keepsDifferentPagesAndLaterRevisits() {
         val rows = listOf(
             HistoryEntry("https://example.com/a", "Страница A", 500_000, 1),
