@@ -9,6 +9,9 @@ import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 internal const val HISTORY_SCREEN_LIMIT = 200
@@ -22,7 +25,7 @@ internal sealed interface HistoryUiState {
     data class Error(val operation: HistoryOperation) : HistoryUiState
 }
 
-class HistoryViewModel : ViewModel {
+internal class HistoryViewModel : ViewModel {
     private val loadEntries: suspend () -> List<HistoryEntry>
     private val clearEntries: suspend () -> Unit
 
@@ -40,8 +43,8 @@ class HistoryViewModel : ViewModel {
         this.clearEntries = clearEntries
     }
 
-    private val _uiState = kotlinx.coroutines.flow.MutableStateFlow<HistoryUiState>(HistoryUiState.Loading)
-    val uiState = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow<HistoryUiState>(HistoryUiState.Loading)
+    val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
 
     fun refresh() {
         viewModelScope.launch {
