@@ -12,16 +12,40 @@ import kotlinx.coroutines.SupervisorJob
 data class Scored(val url: String, val title: String, val visitedAt: Long)
 data class Suggestion(val label: String, val url: String)
 
-fun rankSuggestions(history: List<Scored>, q: String): List<Suggestion> {
-    val needle = q.trim()
-    return history
-        .filter {
-            needle.isEmpty() || it.url.contains(needle, true) || it.title.contains(needle, true)
+private fun suggestionsDescending(history: List<Scored>): List<Scored> {
+    for (index in 1 until history.size) {
+        if (history[index - 1].visitedAt < history[index].visitedAt) {
+            return history.sortedByDescending { it.visitedAt }
         }
-        .sortedByDescending { it.visitedAt }
-        .take(8)
-        .map { Suggestion(it.title.ifEmpty { it.url }, it.url) }
-        .distinctBy { it.url }
+    }
+    return history
+}
+
+fun rankSuggestions(history: List<Scored>, q: String): List<Suggestion> {
+    if (history.isEmpty()) return emptyList()
+    val needle = q.trim()
+    val sorted = suggestionsDescending(history)
+    val result = ArrayList<Suggestion>(minOf(8, sorted.size))
+    val seenUrls = HashSet<String>()
+    var matched = 0
+
+    for (entry in sorted) {
+        if (needle.isNotEmpty() &&
+            !entry.url.contains(needle, ignoreCase = true) &&
+            !entry.title.contains(needle, ignoreCase = true)
+        ) {
+            continue
+        }
+
+        // Preserve the old filter -> sort -> take(8) -> distinctBy ordering exactly: duplicate
+        // URLs still consume a slot in the top-eight matched window even though only one is shown.
+        matched++
+        if (seenUrls.add(entry.url)) {
+            result += Suggestion(entry.title.ifEmpty { entry.url }, entry.url)
+        }
+        if (matched == 8) break
+    }
+    return result
 }
 
 @Entity(
