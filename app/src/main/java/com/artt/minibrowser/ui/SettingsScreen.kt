@@ -2,7 +2,6 @@ package com.artt.minibrowser.ui
 
 // Настройки: компактные группы; большие списки выбора вынесены в bottom sheet.
 
-import android.content.Intent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -38,14 +37,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.artt.minibrowser.DownloadsActivity
+import com.artt.minibrowser.MotionDownloadsScreen
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
@@ -79,7 +77,7 @@ fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
-    val context = LocalContext.current
+    var showDownloads by remember { mutableStateOf(false) }
 
     BrowserMotionScreen(onBack = onBack, fromBottom = true) { requestExit ->
         Column(Modifier.fillMaxSize()) {
@@ -154,7 +152,7 @@ fun SettingsScreen(
                     SettingsRow(
                         "Загрузки",
                         subtitle = "История файлов, скачанных через Minibrowser",
-                        onClick = { context.startActivity(Intent(context, DownloadsActivity::class.java)) },
+                        onClick = { showDownloads = true },
                         trailing = { PickerChevron() },
                     )
                 }
@@ -254,6 +252,10 @@ fun SettingsScreen(
                 TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
             },
         )
+    }
+
+    if (showDownloads) {
+        MotionDownloadsScreen(onBack = { showDownloads = false })
     }
 }
 
