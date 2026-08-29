@@ -14,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 internal const val TARGET_PACKAGE = "com.artt.minibrowser"
+private const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
 private const val TAB_STORE_LOAD_TRACE = "TabStore.loadState"
 
 @RunWith(AndroidJUnit4::class)
@@ -39,6 +40,11 @@ class StartupBenchmark {
             packageName = TARGET_PACKAGE,
             metrics = listOf(
                 StartupTimingMetric(),
+                TraceSectionMetric(
+                    sectionName = GECKO_RUNTIME_CREATE_TRACE,
+                    mode = TraceSectionMetric.Mode.First,
+                    label = "geckoRuntimeCreate",
+                ),
                 TraceSectionMetric(
                     sectionName = TAB_STORE_LOAD_TRACE,
                     mode = TraceSectionMetric.Mode.First,
