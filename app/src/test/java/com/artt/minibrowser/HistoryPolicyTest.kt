@@ -92,4 +92,14 @@ class HistoryPolicyTest {
             distinctRecentSites(listOf(driveNewest, driveOlder, google, youtube), 3),
         )
     }
+
+    @Test fun startPageTreatsWwwPrefixCaseInsensitively() {
+        val newest = HistoryEntry("https://WWW.Example.com/new", "New", 500_000, 1)
+        val older = HistoryEntry("https://www.example.com/old", "Old", 490_000, 1)
+
+        assertEquals(
+            listOf(newest),
+            distinctRecentSites(listOf(newest, older), 8),
+        )
+    }
 }
