@@ -456,7 +456,7 @@ class MainActivity : ComponentActivity() {
                                         scope.launch {
                                             historyRepo.clear()
                                             if (withBookmarks) bookmarksRepo.clearAll()
-                                            iconsDir.deleteRecursively()
+                                            com.artt.minibrowser.ui.clearFaviconCaches(iconsDir)
                                             tabManager.clearWebData()
                                             bmReload++
                                             recentReload++
@@ -834,7 +834,7 @@ private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Favicon(hostOf(s.url), iconsDir, 24.dp)
+        Favicon(s.url, iconsDir, 24.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
