@@ -882,7 +882,7 @@ private fun MenuSheet(
     onToggleDesktop: () -> Unit,
 ) {
     val httpPage = tab?.url?.startsWith("http") == true
-    BrowserBottomSheet(onDismissRequest = onDismiss) {
+    BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
         Row(
             Modifier
                 .fillMaxWidth()
@@ -896,45 +896,45 @@ private fun MenuSheet(
                 "Назад",
                 tab?.canGoBack == true,
                 Modifier.weight(1f),
-            ) { onDismiss(); onBack() }
+            ) { dismissThen(onBack) }
             MenuNavigationAction(
                 Icons.AutoMirrored.Filled.ArrowForward,
                 "Вперёд",
                 tab?.canGoForward == true,
                 Modifier.weight(1f),
-            ) { onDismiss(); onForward() }
+            ) { dismissThen(onForward) }
             MenuNavigationAction(
                 Icons.Filled.Refresh,
                 "Обновить",
                 httpPage,
                 Modifier.weight(1f),
-            ) { onDismiss(); onReload() }
+            ) { dismissThen(onReload) }
             MenuNavigationAction(
                 if (bookmarked) Icons.Filled.Star else AppIcons.Star,
                 if (bookmarked) "Убрать из закладок" else "В закладки",
                 httpPage,
                 Modifier.weight(1f),
-            ) { onDismiss(); onToggleBookmark() }
+            ) { dismissThen(onToggleBookmark) }
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            QuickAction(Icons.Filled.Add, "Новая\nвкладка", { onDismiss(); onNewTab() })
-            QuickAction(AppIcons.Incognito, "Приватная\nвкладка", { onDismiss(); onNewPrivateTab() })
-            QuickAction(AppIcons.Star, "Закладки", { onDismiss(); onBookmarks() })
-            QuickAction(AppIcons.History, "История", { onDismiss(); onHistory() })
+            QuickAction(Icons.Filled.Add, "Новая\nвкладка", { dismissThen(onNewTab) })
+            QuickAction(AppIcons.Incognito, "Приватная\nвкладка", { dismissThen(onNewPrivateTab) })
+            QuickAction(AppIcons.Star, "Закладки", { dismissThen(onBookmarks) })
+            QuickAction(AppIcons.History, "История", { dismissThen(onHistory) })
         }
         MenuDivider()
-        SheetRow(Icons.Filled.Search, "Найти на странице", enabled = httpPage, onClick = { onDismiss(); onFind() })
+        SheetRow(Icons.Filled.Search, "Найти на странице", enabled = httpPage, onClick = { dismissThen(onFind) })
         tab?.takeIf { httpPage }?.let { currentTab ->
             ToggleRow(
                 AppIcons.Desktop,
                 "Версия для ПК",
                 currentTab.desktop,
-                onChecked = { onDismiss(); onToggleDesktop() },
+                onChecked = { dismissThen(onToggleDesktop) },
             )
         }
-        SheetRow(Icons.Filled.Share, "Поделиться", enabled = httpPage, onClick = { onDismiss(); onShare() })
-        SheetRow(AppIcons.Globe, "Перевести страницу", enabled = httpPage, onClick = { onDismiss(); onTranslate() })
+        SheetRow(Icons.Filled.Share, "Поделиться", enabled = httpPage, onClick = { dismissThen(onShare) })
+        SheetRow(AppIcons.Globe, "Перевести страницу", enabled = httpPage, onClick = { dismissThen(onTranslate) })
         MenuDivider()
         when (adblockStatus) {
             null, ExtensionLoader.Status.Installing ->
@@ -949,14 +949,14 @@ private fun MenuSheet(
                     AppIcons.Shield,
                     "Блокировка рекламы",
                     trailing = { Text("Ошибка · повторить", color = MaterialTheme.colorScheme.error) },
-                    onClick = { onDismiss(); onRetryAdblock() },
+                    onClick = { dismissThen(onRetryAdblock) },
                 )
             ExtensionLoader.Status.Enabled ->
                 ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
             ExtensionLoader.Status.Disabled ->
                 ToggleRow(AppIcons.Shield, "Блокировка рекламы", false, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
         }
-        SheetRow(Icons.Filled.Settings, "Настройки", onClick = { onDismiss(); onSettings() })
+        SheetRow(Icons.Filled.Settings, "Настройки", onClick = { dismissThen(onSettings) })
     }
 }
 
