@@ -31,8 +31,6 @@ class InteractionBenchmark {
             setupBlock = {
                 pressHome()
                 startActivityAndWait()
-                val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-                repeat(4) { clickDescription(device, "Новая вкладка") }
             },
         ) {
             val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
