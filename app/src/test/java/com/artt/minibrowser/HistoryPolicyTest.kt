@@ -33,6 +33,15 @@ class HistoryPolicyTest {
         assertEquals(listOf(rows[0], rows[2]), result)
     }
 
+    @Test fun comparesNoiseWindowWithLastRetainedEntry() {
+        val rows = listOf(
+            HistoryEntry("https://example.com/a", "Same page", 120_000, 1),
+            HistoryEntry("https://example.com/b", "Same page", 110_000, 1),
+            HistoryEntry("https://example.com/c", "Same page", 100_000, 1),
+        )
+        assertEquals(listOf(rows[0], rows[2]), collapseHistoryNoise(rows, windowMs = 15_000))
+    }
+
     @Test fun keepsDifferentPagesAndLaterRevisits() {
         val rows = listOf(
             HistoryEntry("https://example.com/a", "Страница A", 500_000, 1),
