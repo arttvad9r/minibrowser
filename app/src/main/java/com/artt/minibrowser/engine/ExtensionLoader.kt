@@ -102,23 +102,24 @@ object ExtensionLoader {
     private fun reconcileInstalled(
         controller: WebExtensionController,
         id: String,
-        generation: Long = latestDesired(id)?.generation ?: return,
+        generation: Long? = null,
     ) {
-        if (!isCurrent(id, generation)) return
+        val targetGeneration = generation ?: latestDesired(id)?.generation ?: return
+        if (!isCurrent(id, targetGeneration)) return
         controller.list().accept(
             { list ->
-                if (!isCurrent(id, generation)) return@accept
+                if (!isCurrent(id, targetGeneration)) return@accept
                 val extension = list?.firstOrNull { it.id == id }
                 when {
-                    extension != null -> applyExtensionPolicy(controller, extension, id, generation)
-                    isInstallActive(id) -> setStateIfCurrent(id, generation, Status.Installing)
-                    else -> setStateIfCurrent(id, generation, Status.Error, "$id is not installed")
+                    extension != null -> applyExtensionPolicy(controller, extension, id, targetGeneration)
+                    isInstallActive(id) -> setStateIfCurrent(id, targetGeneration, Status.Installing)
+                    else -> setStateIfCurrent(id, targetGeneration, Status.Error, "$id is not installed")
                 }
             },
             { error ->
                 setStateIfCurrent(
                     id,
-                    generation,
+                    targetGeneration,
                     Status.Error,
                     error?.message ?: "$id extension list failed",
                 )
