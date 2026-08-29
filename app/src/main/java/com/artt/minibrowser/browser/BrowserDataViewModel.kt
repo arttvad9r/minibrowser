@@ -24,8 +24,19 @@ internal class BrowserDataViewModel : ViewModel {
     private val clearFaviconCaches: () -> Unit
     private val clearWebData: suspend () -> Unit
 
-    private val _uiState = MutableStateFlow(BrowserDataUiState())
-    val uiState = _uiState.asStateFlow()
+    constructor(
+        clearTabPreviews: () -> Unit,
+        clearHistory: suspend () -> Unit,
+        clearBookmarks: suspend () -> Unit,
+        clearFaviconCaches: () -> Unit,
+        clearWebData: suspend () -> Unit,
+    ) : super() {
+        this.clearTabPreviews = clearTabPreviews
+        this.clearHistory = clearHistory
+        this.clearBookmarks = clearBookmarks
+        this.clearFaviconCaches = clearFaviconCaches
+        this.clearWebData = clearWebData
+    }
 
     internal constructor(
         clearTabPreviews: () -> Unit,
@@ -41,6 +52,9 @@ internal class BrowserDataViewModel : ViewModel {
         this.clearFaviconCaches = clearFaviconCaches
         this.clearWebData = clearWebData
     }
+
+    private val _uiState = MutableStateFlow(BrowserDataUiState())
+    val uiState = _uiState.asStateFlow()
 
     fun clear(withBookmarks: Boolean) {
         if (_uiState.value.isClearing) return
@@ -82,7 +96,6 @@ internal class BrowserDataViewModel : ViewModel {
                     clearBookmarks = clearBookmarks,
                     clearFaviconCaches = clearFaviconCaches,
                     clearWebData = clearWebData,
-                    viewModelScope = viewModelScope,
                 )
             }
         }
