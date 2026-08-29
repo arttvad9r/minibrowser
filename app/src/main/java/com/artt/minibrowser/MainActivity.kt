@@ -88,6 +88,7 @@ import com.artt.minibrowser.browser.ActivityRequestCoordinator
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.NavigationController
+import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.areRequestedPermissionsSatisfied
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
@@ -135,6 +136,12 @@ class MainActivity : ComponentActivity() {
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private lateinit var tabManager: TabManager
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
+    private val pageBookmarkViewModel by lazy {
+        ViewModelProvider(
+            this,
+            PageBookmarkViewModel.factory { bookmarksRepo },
+        )[PageBookmarkViewModel::class.java]
+    }
 
     private val externalNavigation = NavigationController()
     private val permissionRequests = ActivityRequestCoordinator<Boolean>()
@@ -259,6 +266,7 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             val darkTheme = when (prefs.theme) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
             val browserUi by browserViewModel.state.collectAsStateWithLifecycle()
+            val pageBookmarkUi by pageBookmarkViewModel.uiState.collectAsStateWithLifecycle()
             val screen = browserUi.screen
             val showSwitcher = browserUi.showSwitcher
             val showFind = browserUi.showFind
@@ -290,13 +298,12 @@ class MainActivity : ComponentActivity() {
                 externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
             }
 
-            var bookmarked by remember { mutableStateOf(false) }
             LaunchedEffect(screen, currentTab?.url) {
                 if (screen == BrowserScreen.Browser) {
-                    val u = currentTab?.url
-                    bookmarked = !u.isNullOrBlank() && u.startsWith("http") && bookmarksRepo.isBookmarked(u)
+                    pageBookmarkViewModel.sync(currentTab?.url)
                 }
             }
+            val bookmarked = pageBookmarkUi.url == currentTab?.url && pageBookmarkUi.isBookmarked
             val showStart = screen == BrowserScreen.Browser &&
                 (currentTab?.url.isNullOrBlank() || currentTab.url == "about:blank")
 
@@ -383,11 +390,7 @@ class MainActivity : ComponentActivity() {
                                 onFind = { browserViewModel.showFind(true) },
                                 onToggleBookmark = {
                                     val t = currentTab ?: return@TopBar
-                                    scope.launch {
-                                        if (bookmarked) bookmarksRepo.remove(t.url)
-                                        else bookmarksRepo.add(t.url, t.title)
-                                        bookmarked = !bookmarked
-                                    }
+                                    pageBookmarkViewModel.toggle(t.url, t.title)
                                 },
                                 onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
                                 onHistory = { browserViewModel.screen(BrowserScreen.History) },
