@@ -662,7 +662,7 @@ private fun TopBar(
                         }
                     },
                     modifier = Modifier
-                        .size(32.dp)
+                        .size(48.dp)
                         .semantics {
                             contentDescription = when {
                                 !leadingIsSearch -> "Информация о сайте"
@@ -752,7 +752,7 @@ private fun TopBar(
                 val density = LocalDensity.current
                 val offsetY = with(density) { 8.dp.roundToPx() }
                 val suggestionsWidth = with(density) {
-                    (fieldSize.width + 48.dp.roundToPx() + 46.dp.roundToPx() + 48.dp.roundToPx() + 8.dp.roundToPx()).toDp()
+                    (fieldSize.width + 48.dp.roundToPx() + 48.dp.roundToPx() + 48.dp.roundToPx() + 8.dp.roundToPx()).toDp()
                 }
                 val suggestionsHeight = (suggestions.size * 56 + 8).coerceAtMost(176).dp
                 Popup(
@@ -789,7 +789,7 @@ private fun TopBar(
         }
         Box(
             Modifier
-                .size(46.dp)
+                .size(48.dp)
                 .clip(Radius.button)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable { focusManager.clearFocus(force = true); onSwitcher() }
