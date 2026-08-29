@@ -17,7 +17,7 @@ android {
     defaultConfig {
         applicationId = "com.artt.minibrowser"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 1
         versionName = "0.1"
