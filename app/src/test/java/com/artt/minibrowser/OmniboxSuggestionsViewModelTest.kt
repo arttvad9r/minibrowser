@@ -7,6 +7,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -66,11 +67,19 @@ class OmniboxSuggestionsViewModelTest {
 
     @Test
     fun newQueryCancelsPreviousSearch() {
-        val first = CompletableDeferred<List<Suggestion>>()
+        var firstCancelled = false
         val secondResult = listOf(Suggestion("Second", "https://second.example"))
         val viewModel = omniboxViewModel(
             searchSuggestions = { query ->
-                if (query == "first") first.await() else secondResult
+                if (query == "first") {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        firstCancelled = true
+                    }
+                } else {
+                    secondResult
+                }
             },
         )
 
@@ -81,19 +90,27 @@ class OmniboxSuggestionsViewModelTest {
             OmniboxSuggestionsUiState(query = "second", suggestions = secondResult),
             viewModel.uiState.value,
         )
-        assertTrue(first.isCancelled)
+        assertTrue(firstCancelled)
     }
 
     @Test
     fun clearingQueryCancelsPendingSearchAndClearsResults() {
-        val pending = CompletableDeferred<List<Suggestion>>()
-        val viewModel = omniboxViewModel(searchSuggestions = { pending.await() })
+        var pendingCancelled = false
+        val viewModel = omniboxViewModel(
+            searchSuggestions = {
+                try {
+                    awaitCancellation()
+                } finally {
+                    pendingCancelled = true
+                }
+            },
+        )
 
         viewModel.updateQuery("exa")
         viewModel.updateQuery(null)
 
         assertEquals(OmniboxSuggestionsUiState(), viewModel.uiState.value)
-        assertTrue(pending.isCancelled)
+        assertTrue(pendingCancelled)
     }
 
     @Test
