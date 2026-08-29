@@ -88,7 +88,7 @@ internal fun isValidWebUri(value: String): Boolean = runCatching {
 
 fun isAllowedWebUri(value: String): Boolean = isValidWebUri(value)
 
-fun resolveNavigation(input: String, engine: SearchEngine): NavigationTarget {
+fun resolveNavigation(input: String): NavigationTarget {
     val value = input.trim()
     if (value.isEmpty()) return NavigationTarget.Internal("about:blank")
     if (isAllowedWebUri(value)) return NavigationTarget.Web(value)
@@ -106,7 +106,7 @@ fun resolveNavigation(input: String, engine: SearchEngine): NavigationTarget {
     return NavigationTarget.Search(value)
 }
 
-fun buildLoadUri(input: String, engine: SearchEngine): String = when (val target = resolveNavigation(input, engine)) {
+fun buildLoadUri(input: String, engine: SearchEngine): String = when (val target = resolveNavigation(input)) {
     is NavigationTarget.Web -> target.uri
     is NavigationTarget.Internal -> target.uri
     is NavigationTarget.Search -> engine.template.replace("%s", java.net.URLEncoder.encode(target.query, "UTF-8"))
