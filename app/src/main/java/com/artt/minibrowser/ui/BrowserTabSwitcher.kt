@@ -168,7 +168,12 @@ fun BrowserTabSwitcher(
     }
     val heroPreview = heroId?.let(TabPreviewStore::get)?.takeUnless { it.isRecycled }
     val heroTarget = heroId?.let(cardBounds::get)
-    val hasHero = heroPreview != null && heroTarget != null && rootBounds.width > 1f && rootBounds.height > 1f
+    val hero = if (heroPreview != null && heroTarget != null && rootBounds.width > 1f && rootBounds.height > 1f) {
+        heroPreview to heroTarget
+    } else {
+        null
+    }
+    val hasHero = hero != null
     val chromeProgress = if (hasHero) {
         ((transitionProgress - 0.18f) / 0.82f).coerceIn(0f, 1f)
     } else {
@@ -277,8 +282,7 @@ fun BrowserTabSwitcher(
             }
         }
 
-        if (hasHero) {
-            val target = heroTarget!!
+        hero?.let { (preview, target) ->
             val root = rootBounds
             val targetScaleX = (target.width / root.width).coerceAtLeast(0.01f)
             val targetScaleY = (target.height / root.height).coerceAtLeast(0.01f)
@@ -288,7 +292,7 @@ fun BrowserTabSwitcher(
             val heroAlpha = if (p < 0.82f) 1f else ((1f - p) / 0.18f).coerceIn(0f, 1f)
 
             Image(
-                bitmap = heroPreview!!.asImageBitmap(),
+                bitmap = preview.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alignment = Alignment.TopCenter,
