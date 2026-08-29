@@ -2,10 +2,11 @@ name: Android
 
 on:
   push:
+    branches: [master]
   pull_request:
 
 concurrency:
-  group: android-${{ github.workflow }}-${{ github.ref }}
+  group: android-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
