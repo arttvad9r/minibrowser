@@ -32,6 +32,7 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.StorageController
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 internal class ProgressGate(private val intervalMs: Long = 100) {
     private var lastPublishedAt: Long? = null
@@ -267,6 +268,7 @@ class TabManager(
     private val persistJob = SupervisorJob()
     private val persistScope = CoroutineScope(persistJob + Dispatchers.IO)
     private val persistRequests = PersistSignalQueue()
+    private val persistRevision = AtomicLong(0L)
     private val lifecycleOwner = context as? LifecycleOwner
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onDestroy(owner: LifecycleOwner) {
@@ -283,9 +285,12 @@ class TabManager(
         persistScope.launch {
             while (true) {
                 persistRequests.nextForWrite()
-                val snapshot = withContext(Dispatchers.Main.immediate) { capturePersistenceSnapshot() }
-                runCatching { TabStore.saveState(storeDir, serializePersistenceSnapshot(snapshot)) }
-                    .onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
+                val (revision, snapshot) = withContext(Dispatchers.Main.immediate) {
+                    persistRevision.get() to capturePersistenceSnapshot()
+                }
+                runCatching {
+                    TabStore.saveStateVersioned(storeDir, serializePersistenceSnapshot(snapshot), revision)
+                }.onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
             }
         }
         restore()
@@ -406,7 +411,7 @@ class TabManager(
         }
     }
 
-    fun clearWebData(): GeckoResult<Void> {
+    suspend fun clearWebData(): GeckoResult<Void> {
         if (closed) return GeckoResult.fromValue<Void>(null)
         _tabs.value.forEach { tab ->
             runtime.webExtensionController.setTabActive(tab.session, false)
@@ -414,6 +419,15 @@ class TabManager(
         }
         _tabs.value = emptyList()
         currentId.value = null
+
+        // Any callbacks emitted while the old sessions were closing have already advanced the
+        // revision. The clear barrier is therefore newer than every snapshot that can still
+        // contain those tabs, and it is fsynced before Gecko's asynchronous storage clear starts.
+        val clearRevision = persistRevision.incrementAndGet()
+        withContext(Dispatchers.IO) {
+            TabStore.saveStateVersioned(storeDir, PersistedBrowserState(), clearRevision)
+        }
+
         return runtime.storageController.clearData(StorageController.ClearFlags.ALL).accept(
             { if (!closed) newTab(null) },
             { error ->
@@ -430,19 +444,24 @@ class TabManager(
     fun close() {
         if (closed) return
         val finalSnapshot = capturePersistenceSnapshot()
-        runCatching { TabStore.saveState(storeDir, serializePersistenceSnapshot(finalSnapshot)) }
-            .onFailure { Log.e("MinibrowserTabs", "Failed to persist final tab metadata", it) }
+        val finalRevision = persistRevision.incrementAndGet()
         closed = true
+        persistJob.cancel()
+        runCatching {
+            TabStore.saveStateVersioned(storeDir, serializePersistenceSnapshot(finalSnapshot), finalRevision)
+        }.onFailure { Log.e("MinibrowserTabs", "Failed to persist final tab metadata", it) }
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
         _tabs.value.forEach { tab ->
             runCatching { runtime.webExtensionController.setTabActive(tab.session, false) }
             closeIfOpen(tab.session)
         }
-        persistJob.cancel()
     }
 
     private fun requestPersist(immediate: Boolean) {
-        if (!closed) persistRequests.send(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
+        if (!closed) {
+            persistRevision.incrementAndGet()
+            persistRequests.send(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
+        }
     }
 
     private fun capturePersistenceSnapshot(): PersistenceSnapshot = PersistenceSnapshot(
@@ -604,7 +623,7 @@ class TabManager(
             override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
                 val controller = downloadController
                 if (controller != null) {
-                    controller.handle(response)
+                    controller.handle(response, tab.isPrivate)
                 } else {
                     runCatching { response.body?.close() }
                 }
