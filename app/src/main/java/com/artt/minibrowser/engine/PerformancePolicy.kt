@@ -28,7 +28,10 @@ internal fun performancePolicyFor(
         lowRamDevice || totalMemoryBytes < 4L * GIB -> 3
         totalMemoryBytes < 6L * GIB -> 4
         totalMemoryBytes < 10L * GIB -> 6
-        else -> 8
+        // On 12 GB-class phones inactive GeckoSessions are already heavily throttled. Keeping a
+        // dozen recent tabs warm avoids restore churn for normal 10-15 tab usage while still putting
+        // a hard bound on resident sessions.
+        else -> 12
     }
     val previewBytes = when {
         lowRamDevice || totalMemoryBytes < 4L * GIB -> 4L * 1024L * 1024L
