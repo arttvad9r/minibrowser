@@ -68,4 +68,4 @@ jobs:
           emulator-options: >-
             -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
             -camera-back none -camera-front none -no-snapshot -no-metrics
-          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+          script: ./gradlew :app:connectedDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
