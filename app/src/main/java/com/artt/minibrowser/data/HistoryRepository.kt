@@ -86,7 +86,6 @@ class HistoryRepository(private val dao: AppDao) {
         }
         val history = rankSuggestions(
             rows.map { Scored(it.url, it.title, it.visitedAt) },
-            emptyList(),
             query,
         )
         return (bookmarks + history).distinctBy { it.url }.take(8)
