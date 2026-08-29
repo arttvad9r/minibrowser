@@ -18,12 +18,14 @@ import java.util.concurrent.ConcurrentHashMap
  * Bounded, privacy-preserving favicon fetcher.
  *
  * Fetch only the conventional same-origin /favicon.ico. Third-party favicon proxy services are
- * intentionally avoided because querying them reveals the user's visited hostname. Cache v3 also
- * invalidates older files that may have been fetched through such proxies.
+ * intentionally avoided because querying them reveals the user's visited hostname. Redirects are
+ * followed manually and only when they remain on the exact same origin. Cache v3 also invalidates
+ * older files that may have been fetched through such proxies.
  */
 object FaviconFetcher {
     private const val CACHE_VERSION = "v3"
     private const val MAX_BYTES = 1024 * 1024
+    private const val MAX_REDIRECTS = 3
     private const val NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000L
     private val scope = kotlinx.coroutines.CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = ConcurrentHashMap<String, Deferred<File>>()
@@ -77,48 +79,79 @@ object FaviconFetcher {
     }
 
     private fun downloadCandidate(url: String, dst: File): Pair<Int, Int>? {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 4000
-        conn.readTimeout = 4000
-        conn.instanceFollowRedirects = true
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) Minibrowser")
-        return try {
-            if (conn.responseCode !in 200..299 || conn.contentLengthLong > MAX_BYTES) return null
-            val type = conn.contentType.orEmpty().lowercase()
-            if (type.isNotBlank() && !type.startsWith("image/") && type != "application/octet-stream") {
-                return null
-            }
+        var current = runCatching { URL(url) }.getOrNull() ?: return null
+        var redirects = 0
 
-            conn.inputStream.use { input ->
-                dst.outputStream().use { output ->
-                    val buffer = ByteArray(8192)
-                    var total = 0
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        total += read
-                        if (total > MAX_BYTES) return null
-                        output.write(buffer, 0, read)
+        while (true) {
+            val conn = current.openConnection() as? HttpURLConnection ?: return null
+            conn.connectTimeout = 4000
+            conn.readTimeout = 4000
+            conn.instanceFollowRedirects = false
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) Minibrowser")
+
+            try {
+                val responseCode = conn.responseCode
+                if (responseCode.isHttpRedirect()) {
+                    if (redirects >= MAX_REDIRECTS) return null
+                    current = sameOriginFaviconRedirect(current, conn.getHeaderField("Location")) ?: return null
+                    redirects++
+                    continue
+                }
+                if (responseCode !in 200..299 || conn.contentLengthLong > MAX_BYTES) return null
+
+                val type = conn.contentType.orEmpty().lowercase()
+                if (type.isNotBlank() && !type.startsWith("image/") && type != "application/octet-stream") {
+                    return null
+                }
+
+                conn.inputStream.use { input ->
+                    dst.outputStream().use { output ->
+                        val buffer = ByteArray(8192)
+                        var total = 0
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            total += read
+                            if (total > MAX_BYTES) return null
+                            output.write(buffer, 0, read)
+                        }
                     }
                 }
-            }
 
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(dst.path, bounds)
-            if (!isValidFaviconDimensions(bounds.outWidth, bounds.outHeight)) {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(dst.path, bounds)
+                if (!isValidFaviconDimensions(bounds.outWidth, bounds.outHeight)) {
+                    dst.delete()
+                    return null
+                }
+                return bounds.outWidth to bounds.outHeight
+            } catch (_: Throwable) {
                 dst.delete()
-                null
-            } else {
-                bounds.outWidth to bounds.outHeight
+                return null
+            } finally {
+                conn.disconnect()
             }
-        } catch (_: Throwable) {
-            dst.delete()
-            null
-        } finally {
-            conn.disconnect()
         }
     }
 }
+
+private fun Int.isHttpRedirect(): Boolean =
+    this == HttpURLConnection.HTTP_MOVED_PERM ||
+        this == HttpURLConnection.HTTP_MOVED_TEMP ||
+        this == HttpURLConnection.HTTP_SEE_OTHER ||
+        this == 307 || this == 308
+
+internal fun sameOriginFaviconRedirect(current: URL, location: String?): URL? {
+    if (location.isNullOrBlank()) return null
+    val next = runCatching { URL(current, location) }.getOrNull() ?: return null
+    if (!current.protocol.equals(next.protocol, ignoreCase = true)) return null
+    if (!current.host.equals(next.host, ignoreCase = true)) return null
+    if (effectivePort(current) != effectivePort(next)) return null
+    if (!next.userInfo.isNullOrBlank()) return null
+    return next
+}
+
+private fun effectivePort(url: URL): Int = if (url.port >= 0) url.port else url.defaultPort
 
 internal const val FAVICON_MAX_DIMENSION = 4096
 internal const val FAVICON_MAX_PIXELS = 16_000_000L
