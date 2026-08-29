@@ -37,6 +37,23 @@ internal fun writeLegacyDownload(file: File, input: InputStream): Long {
 }
 
 /**
+ * Atomically reserves a unique public-Downloads filename. Checking exists() before opening is not
+ * sufficient: two simultaneous downloads can otherwise select the same path and truncate each
+ * other. createNewFile() is the reservation step; writeLegacyDownload() then owns that file.
+ */
+internal fun reserveUniqueDownloadFile(dir: File, name: String): File {
+    val dot = name.lastIndexOf('.')
+    val stem = if (dot > 0) name.substring(0, dot) else name
+    val extension = if (dot > 0) name.substring(dot) else ""
+    var index = 0
+    while (true) {
+        val candidate = if (index == 0) File(dir, name) else File(dir, "$stem ($index)$extension")
+        if (candidate.createNewFile()) return candidate
+        index++
+    }
+}
+
+/**
  * Download transfers can outlive an Activity (for example during recreation). Keep only the
  * application context in this process-level scope; the Activity-owned controller is used solely
  * for confirmation dialogs and runtime permission requests before the transfer starts.
@@ -117,24 +134,10 @@ private object DownloadIo {
     ): SavedDownload {
         val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         if (!dir.exists() && !dir.mkdirs()) error("Unable to create Downloads directory")
-        val file = uniqueFile(dir, name)
+        val file = reserveUniqueDownloadFile(dir, name)
         val bytes = writeLegacyDownload(file, input)
         MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf(mime), null)
         return SavedDownload(Uri.fromFile(file).toString(), bytes)
-    }
-
-    private fun uniqueFile(dir: File, name: String): File {
-        val initial = File(dir, name)
-        if (!initial.exists()) return initial
-        val dot = name.lastIndexOf('.')
-        val stem = if (dot > 0) name.substring(0, dot) else name
-        val extension = if (dot > 0) name.substring(dot) else ""
-        var index = 1
-        while (true) {
-            val candidate = File(dir, "$stem ($index)$extension")
-            if (!candidate.exists()) return candidate
-            index++
-        }
     }
 }
 
