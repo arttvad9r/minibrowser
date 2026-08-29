@@ -117,31 +117,20 @@ fun SettingsScreen(
                         trailing = { PickerChevron() },
                     )
                     HorizontalDividerThin()
-                    when (votStatus) {
-                        null, ExtensionLoader.Status.Installing ->
-                            SettingsRow("Перевод видео", subtitle = "Запуск…")
-                        ExtensionLoader.Status.Enabled ->
-                            ToggleRow(
-                                AppIcons.Globe,
-                                "Перевод видео",
-                                votEnabled,
-                                onVot,
-                                subtitle = "VOT · перевод видео с поддерживаемых сайтов",
-                            )
-                        ExtensionLoader.Status.Disabled ->
-                            ToggleRow(
-                                AppIcons.Globe,
-                                "Перевод видео",
-                                false,
-                                onVot,
-                                subtitle = "VOT · перевод видео с поддерживаемых сайтов",
-                            )
-                        ExtensionLoader.Status.Error ->
-                            SettingsRow(
-                                "Перевод видео",
-                                subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
-                                onClick = onRetryVot,
-                            )
+                    if (votStatus == ExtensionLoader.Status.Error) {
+                        SettingsRow(
+                            "Перевод видео",
+                            subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
+                            onClick = onRetryVot,
+                        )
+                    } else {
+                        ToggleRow(
+                            AppIcons.Globe,
+                            "Перевод видео",
+                            votEnabled,
+                            onVot,
+                            subtitle = "VOT · перевод видео с поддерживаемых сайтов",
+                        )
                     }
                 }
 
@@ -157,31 +146,20 @@ fun SettingsScreen(
 
                 GroupLabel("Конфиденциальность")
                 SettingsGroup {
-                    when (adblockStatus) {
-                        null, ExtensionLoader.Status.Installing ->
-                            SettingsRow("Блокировка рекламы", subtitle = "Запуск…")
-                        ExtensionLoader.Status.Error ->
-                            SettingsRow(
-                                "Блокировка рекламы",
-                                subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
-                                onClick = onRetryAdblock,
-                            )
-                        ExtensionLoader.Status.Enabled ->
-                            ToggleRow(
-                                AppIcons.Shield,
-                                "Блокировка рекламы",
-                                true,
-                                onAdblock,
-                                subtitle = "Блокирует рекламу и трекеры",
-                            )
-                        ExtensionLoader.Status.Disabled ->
-                            ToggleRow(
-                                AppIcons.Shield,
-                                "Блокировка рекламы",
-                                false,
-                                onAdblock,
-                                subtitle = "Блокирует рекламу и трекеры",
-                            )
+                    if (adblockStatus == ExtensionLoader.Status.Error) {
+                        SettingsRow(
+                            "Блокировка рекламы",
+                            subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
+                            onClick = onRetryAdblock,
+                        )
+                    } else {
+                        ToggleRow(
+                            AppIcons.Shield,
+                            "Блокировка рекламы",
+                            prefs.adblockEnabled,
+                            onAdblock,
+                            subtitle = "Блокирует рекламу и трекеры",
+                        )
                     }
                     HorizontalDividerThin()
                     SettingsRow(
