@@ -39,7 +39,7 @@ data class Bookmark(
     @Query("SELECT * FROM history ORDER BY visitedAt DESC LIMIT :limit")
     suspend fun recentHistory(limit: Int): List<HistoryEntry>
 
-    @Query("SELECT * FROM history WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' LIMIT 50")
+    @Query("SELECT * FROM history WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' ORDER BY visitedAt DESC LIMIT 50")
     suspend fun searchHistory(q: String): List<HistoryEntry>
 
     @Query("SELECT * FROM history WHERE url = :url")
