@@ -83,18 +83,17 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
 import com.artt.minibrowser.browser.ActivityRequestCoordinator
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.OmniboxSuggestionsViewModel
 import com.artt.minibrowser.browser.PageBookmarkViewModel
+import com.artt.minibrowser.browser.SettingsViewModel
 import com.artt.minibrowser.browser.areRequestedPermissionsSatisfied
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
-import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.Engine
@@ -124,7 +123,6 @@ import com.artt.minibrowser.ui.TabPreviewStore
 import com.artt.minibrowser.ui.ToggleRow
 import com.artt.minibrowser.ui.hostOf
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
@@ -137,6 +135,12 @@ class MainActivity : ComponentActivity() {
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private lateinit var tabManager: TabManager
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
+    private val settingsViewModel by lazy {
+        ViewModelProvider(
+            this,
+            SettingsViewModel.factory(settingsRepo, Engine.runtime),
+        )[SettingsViewModel::class.java]
+    }
     private val pageBookmarkViewModel by lazy {
         ViewModelProvider(
             this,
@@ -259,17 +263,12 @@ class MainActivity : ComponentActivity() {
             },
         )
         val iconsDir = File(filesDir, "icons")
-        // Расширения ставятся один раз за процесс; тумблер применяется сразу после первого чтения настроек.
-        lifecycleScope.launch {
-            val prefs = settingsRepo.prefs.first()
-            ExtensionLoader.installAll(Engine.runtime, prefs.adblockEnabled, prefs.votEnabled)
-        }
 
         setContent {
-            val prefs by settingsRepo.prefs.collectAsStateWithLifecycle(Prefs())
-            val extensionStates by ExtensionLoader.state.collectAsStateWithLifecycle()
-            val adblockStatus = extensionStates[ExtensionLoader.UBLOCK_ID]?.status
-            val votStatus = extensionStates[ExtensionLoader.VOT_ID]?.status
+            val settingsUi by settingsViewModel.uiState.collectAsStateWithLifecycle()
+            val prefs = settingsUi.prefs
+            val adblockStatus = settingsUi.adblockStatus
+            val votStatus = settingsUi.votStatus
             val scope = rememberCoroutineScope()
             val darkTheme = when (prefs.theme) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
             val browserUi by browserViewModel.state.collectAsStateWithLifecycle()
@@ -333,24 +332,10 @@ class MainActivity : ComponentActivity() {
                     c.show(WindowInsetsCompat.Type.systemBars())
                 }
             }
-            val toggleAdblock: (Boolean) -> Unit = { b ->
-                scope.launch {
-                    settingsRepo.setAdblock(b)
-                    ExtensionLoader.setAdblock(Engine.runtime, b)
-                }
-            }
-            val retryAdblock: () -> Unit = {
-                ExtensionLoader.retryAdblock(Engine.runtime, prefs.adblockEnabled)
-            }
-            val toggleVot: (Boolean) -> Unit = { enabled ->
-                scope.launch {
-                    settingsRepo.setVot(enabled)
-                    ExtensionLoader.setVot(Engine.runtime, enabled)
-                }
-            }
-            val retryVot: () -> Unit = {
-                ExtensionLoader.retryVot(Engine.runtime, prefs.votEnabled)
-            }
+            val toggleAdblock: (Boolean) -> Unit = settingsViewModel::setAdblock
+            val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
+            val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
+            val retryVot: () -> Unit = settingsViewModel::retryVot
             val onShare: () -> Unit = {
                 currentTab?.url?.let { u ->
                     startActivity(
@@ -459,8 +444,8 @@ class MainActivity : ComponentActivity() {
                                 SettingsScreen(
                                     prefs,
                                     onBack = { browserViewModel.screen(BrowserScreen.Browser) },
-                                    onEngine = { e -> scope.launch { settingsRepo.setSearchEngine(e) } },
-                                    onTheme = { t -> scope.launch { settingsRepo.setTheme(t) } },
+                                    onEngine = settingsViewModel::setSearchEngine,
+                                    onTheme = settingsViewModel::setTheme,
                                     onAdblock = toggleAdblock,
                                     onRetryAdblock = retryAdblock,
                                     adblockStatus = adblockStatus,
@@ -468,7 +453,7 @@ class MainActivity : ComponentActivity() {
                                     votStatus = votStatus,
                                     onVot = toggleVot,
                                     onRetryVot = retryVot,
-                                    onTranslateLang = { lang -> scope.launch { settingsRepo.setTranslateTarget(lang) } },
+                                    onTranslateLang = settingsViewModel::setTranslateTarget,
                                     onClearData = { withBookmarks ->
                                         scope.launch {
                                             historyRepo.clear()
