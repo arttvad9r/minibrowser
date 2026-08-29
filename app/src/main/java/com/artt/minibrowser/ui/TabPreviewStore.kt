@@ -30,6 +30,7 @@ object TabPreviewStore {
     private val removedTabs = mutableSetOf<Long>()
     private val privateTabs = mutableSetOf<Long>()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var generation = 0
 
     private var currentView = WeakReference<GeckoView>(null)
     private var currentTabId: Long? = null
@@ -97,13 +98,39 @@ object TabPreviewStore {
         }
     }
 
+    /**
+     * Drops every preview and invalidates callbacks from captures that started before this call.
+     * This is used by browsing-data clearing so page pixels cannot re-enter memory after the UI
+     * has already reported the data as cleared.
+     */
+    fun clear() {
+        generation++
+        val retired = previews.values.toList()
+        previews.clear()
+        lru.clear()
+        cachedBytes = 0L
+        lastCapturedUrl.clear()
+        inFlight.clear()
+        removedTabs.clear()
+        privateTabs.clear()
+        currentView = WeakReference(null)
+        currentTabId = null
+        currentUrl = ""
+        retired.forEach(::retire)
+    }
+
     private fun capture(view: GeckoView, tabId: Long, url: String) {
         if (tabId in privateTabs || tabId in removedTabs || !inFlight.add(tabId)) return
+        val expectedGeneration = generation
         runCatching {
             view.capturePixels().accept(
                 { source ->
                     mainHandler.post {
                         inFlight.remove(tabId)
+                        if (expectedGeneration != generation) {
+                            source?.let(::retire)
+                            return@post
+                        }
                         if (source != null && source.width > 0 && source.height > 0) {
                             if (tabId in privateTabs || tabId in removedTabs) {
                                 retire(source)
