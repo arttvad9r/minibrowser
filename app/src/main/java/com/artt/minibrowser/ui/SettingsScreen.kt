@@ -243,7 +243,6 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         showClearDialog = false
-                        clearFaviconCaches(java.io.File(context.filesDir, "icons"))
                         onClearData(withBookmarks)
                     },
                 ) {
