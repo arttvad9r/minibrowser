@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtensionController
 
@@ -95,6 +96,6 @@ object ExtensionLoader {
 
     private fun setState(id: String, status: Status, error: String? = null) {
         if (error != null) Log.e("MinibrowserExtension", "$id: $error")
-        _state.value = _state.value + (id to ExtensionState(status, error))
+        _state.update { it + (id to ExtensionState(status, error)) }
     }
 }
