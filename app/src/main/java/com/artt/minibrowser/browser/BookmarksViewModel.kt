@@ -54,12 +54,11 @@ internal class BookmarksViewModel : ViewModel {
                 error = null,
             )
             try {
-                val bookmarks = loadBookmarks()
-                _uiState.value = BookmarksUiState(bookmarks = bookmarks, isLoading = false)
+                publishBookmarks(loadBookmarks())
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
-                _uiState.value = previous.copy(isLoading = false, error = BookmarksOperation.Load)
+                publishLoadFailure(previous)
             }
         }
     }
@@ -68,12 +67,13 @@ internal class BookmarksViewModel : ViewModel {
         viewModelScope.launch {
             try {
                 renameBookmark(url, title)
-                refreshAfterMutation()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = BookmarksOperation.Rename)
+                publishMutationFailure(BookmarksOperation.Rename)
+                return@launch
             }
+            reloadAfterMutation()
         }
     }
 
@@ -81,12 +81,13 @@ internal class BookmarksViewModel : ViewModel {
         viewModelScope.launch {
             try {
                 deleteBookmark(url)
-                refreshAfterMutation()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = BookmarksOperation.Delete)
+                publishMutationFailure(BookmarksOperation.Delete)
+                return@launch
             }
+            reloadAfterMutation()
         }
     }
 
@@ -96,9 +97,27 @@ internal class BookmarksViewModel : ViewModel {
         _uiState.value = _uiState.value.copy(error = null)
     }
 
-    private suspend fun refreshAfterMutation() {
-        val bookmarks = loadBookmarks()
+    private suspend fun reloadAfterMutation() {
+        val previous = _uiState.value
+        try {
+            publishBookmarks(loadBookmarks())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            publishLoadFailure(previous)
+        }
+    }
+
+    private fun publishBookmarks(bookmarks: List<Bookmark>) {
         _uiState.value = BookmarksUiState(bookmarks = bookmarks, isLoading = false)
+    }
+
+    private fun publishLoadFailure(previous: BookmarksUiState) {
+        _uiState.value = previous.copy(isLoading = false, error = BookmarksOperation.Load)
+    }
+
+    private fun publishMutationFailure(operation: BookmarksOperation) {
+        _uiState.value = _uiState.value.copy(isLoading = false, error = operation)
     }
 
     companion object {
