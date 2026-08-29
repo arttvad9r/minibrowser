@@ -59,12 +59,14 @@ import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.HistoryEntry
 import java.io.File
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun StartPage(
     bookmarks: List<Bookmark>,
     iconsDir: File,
     recent: List<HistoryEntry>,
     isPrivate: Boolean,
+    onSearchFocus: () -> Unit,
     onOpen: (String) -> Unit,
     onAllBookmarks: () -> Unit,
     onAllHistory: () -> Unit,
