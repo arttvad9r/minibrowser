@@ -84,7 +84,9 @@ object FaviconFetcher {
         fetchGeneration: Long,
     ): File = withContext(Dispatchers.IO) {
         dst.parentFile?.mkdirs()
-        val temp = File("${dst.path}.tmp")
+        // A clear() may invalidate a blocked request while a new request for the same origin starts.
+        // Generation-specific temp names prevent those two requests from writing the same file.
+        val temp = faviconTempFile(dst, fetchGeneration)
         temp.delete()
         if (downloadCandidate("$origin/favicon.ico", temp) != null) {
             synchronized(diskLock) {
@@ -191,20 +193,32 @@ internal fun faviconOrigin(pageUrlOrHost: String): String? = runCatching {
     URI(scheme, null, host, port, null, null, null).toASCIIString()
 }.getOrNull()
 
+internal fun faviconTempFile(cacheFile: File, generation: Long): File =
+    File("${cacheFile.path}.$generation.tmp")
+
+internal const val FAVICON_ORPHAN_TEMP_TTL_MS = 60 * 60 * 1000L
+
 /**
  * Keeps the dedicated favicon directory bounded. Old cache-version files are included so changing
- * the cache key/version cannot leak obsolete icons forever.
+ * the cache key/version cannot leak obsolete icons forever. Temp files are excluded from quota
+ * calculations; only old orphaned temps are removed so an active parallel download is not touched.
  */
 internal fun trimFaviconDiskCache(
     iconsDir: File,
     maxFiles: Int = 256,
     maxBytes: Long = 32L * 1024 * 1024,
+    nowMs: Long = System.currentTimeMillis(),
+    orphanTempTtlMs: Long = FAVICON_ORPHAN_TEMP_TTL_MS,
 ) {
-    if (maxFiles < 0 || maxBytes < 0) return
-    val files = iconsDir.listFiles()
-        ?.filter { it.isFile && !it.name.endsWith(".tmp") }
-        ?.sortedByDescending { it.lastModified() }
-        ?: return
+    if (maxFiles < 0 || maxBytes < 0 || orphanTempTtlMs < 0) return
+    val allFiles = iconsDir.listFiles()?.filter { it.isFile } ?: return
+    allFiles
+        .filter { it.name.endsWith(".tmp") && nowMs - it.lastModified() >= orphanTempTtlMs }
+        .forEach { it.delete() }
+
+    val files = allFiles
+        .filter { !it.name.endsWith(".tmp") && it.exists() }
+        .sortedByDescending { it.lastModified() }
     var keptFiles = 0
     var keptBytes = 0L
     files.forEach { file ->
