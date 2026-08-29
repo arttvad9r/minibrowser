@@ -81,7 +81,7 @@ fun SettingsScreen(
     var showLanguagePicker by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    BrowserMotionScreen(onBack = onBack) { requestExit ->
+    BrowserMotionScreen(onBack = onBack, fromBottom = true) { requestExit ->
         Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -258,82 +258,122 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun PickerChevron() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Spacer(Modifier.width(6.dp))
-        Icon(
-            AppIcons.ChevronRight,
-            null,
-            Modifier.size(18.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+private fun GroupLabel(text: String) {
+    Text(
+        text,
+        Modifier.padding(start = 4.dp, top = 18.dp, bottom = 8.dp),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+@Composable
+private fun SettingsGroup(content: @Composable () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(Radius.card)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
+    ) {
+        content()
     }
 }
 
 @Composable
-private fun GroupLabel(text: String) {
-    Text(
-        text.uppercase(),
-        Modifier.padding(start = 4.dp, top = 20.dp, bottom = 6.dp),
-        style = MaterialTheme.typography.labelMedium,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun SettingsRow(
+    title: String,
+    subtitle: String? = null,
+    value: String? = null,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val modifier = if (onClick != null) {
+        Modifier
+            .fillMaxWidth()
+            .softClickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 13.dp)
+    } else {
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)
+    }
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (value != null) {
+            Spacer(Modifier.width(12.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+            )
+        }
+        if (trailing != null) {
+            Spacer(Modifier.width(8.dp))
+            trailing()
+        }
+    }
+}
+
+@Composable
+private fun PickerChevron() {
+    Icon(
+        AppIcons.ChevronDown,
+        contentDescription = null,
+        modifier = Modifier.size(18.dp),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+@Composable
+private fun ThemeSelector(current: Int, onTheme: (Int) -> Unit) {
+    val options = listOf("Система" to 0, "Светлая" to 1, "Тёмная" to 2)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { (label, value) ->
+            val selected = current == value
+            val bg by animateColorAsState(
+                if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                animationSpec = tween(MotionTokens.Standard),
+                label = "themeOptionBg",
+            )
+            val border by animateColorAsState(
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                animationSpec = tween(MotionTokens.Standard),
+                label = "themeOptionBorder",
+            )
+            Text(
+                label,
+                Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(Radius.button)
+                    .background(bg)
+                    .border(1.dp, border, Radius.button)
+                    .softClickable(onClick = { onTheme(value) })
+                    .semantics { contentDescription = "Тема: $label" },
+                textAlign = TextAlign.Center,
+                lineHeight = 44.sp,
+                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+    }
 }
 
 @Composable
 private fun HorizontalDividerThin() {
     androidx.compose.material3.HorizontalDivider(
-        Modifier.padding(horizontal = 16.dp),
-        thickness = 1.dp,
+        modifier = Modifier.padding(horizontal = 16.dp),
         color = MaterialTheme.colorScheme.outlineVariant,
     )
-}
-
-/** Выбор темы: выбранная карточка меняет поверхность/обводку коротко, без spring. */
-@Composable
-private fun ThemeSelector(selected: Int, onSelect: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ThemeOption("Системная", AppIcons.SystemTheme, 0, selected, onSelect, Modifier.weight(1f))
-        ThemeOption("Светлая", AppIcons.Sun, 1, selected, onSelect, Modifier.weight(1f))
-        ThemeOption("Тёмная", AppIcons.Moon, 2, selected, onSelect, Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun ThemeOption(
-    label: String,
-    icon: ImageVector,
-    value: Int,
-    selected: Int,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val isSelected = value == selected
-    val background by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant,
-        animationSpec = tween(MotionTokens.Standard),
-        label = "themeBackground",
-    )
-    val border by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
-        animationSpec = tween(MotionTokens.Standard),
-        label = "themeBorder",
-    )
-
-    Column(
-        modifier
-            .clip(Radius.button)
-            .background(background)
-            .border(width = 1.dp, color = border, shape = Radius.button)
-            .softClickable(pressedScale = 0.96f) { onSelect(value) }
-            .padding(vertical = 11.dp)
-            .semantics { contentDescription = label },
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
-        Spacer(Modifier.height(5.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
-    }
 }
