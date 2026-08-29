@@ -70,6 +70,8 @@ fun SettingsScreen(
     onVot: (Boolean) -> Unit,
     onRetryVot: () -> Unit,
     onClearData: (withBookmarks: Boolean) -> Unit,
+    clearDataInProgress: Boolean,
+    clearDataFailed: Boolean,
     onTranslateLang: (String) -> Unit,
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
@@ -164,8 +166,12 @@ fun SettingsScreen(
                     HorizontalDividerThin()
                     SettingsRow(
                         "Очистить данные",
-                        subtitle = "История, cookies, данные сайтов и кэш",
-                        onClick = { showClearDialog = true },
+                        subtitle = when {
+                            clearDataInProgress -> "Очистка данных…"
+                            clearDataFailed -> "Не удалось полностью очистить данные · Нажмите, чтобы повторить"
+                            else -> "История, cookies, данные сайтов и кэш"
+                        },
+                        onClick = if (clearDataInProgress) null else ({ showClearDialog = true }),
                     )
                 }
                 Spacer(Modifier.height(32.dp))
@@ -217,7 +223,6 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         showClearDialog = false
-                        TabPreviewStore.clear()
                         onClearData(withBookmarks)
                     },
                 ) {
