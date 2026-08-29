@@ -50,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -84,9 +85,22 @@ private object FaviconMemoryCache {
     private val cache = object : LruCache<String, Bitmap>(4 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
+    var generation by mutableIntStateOf(0)
+        private set
 
     fun get(key: String): Bitmap? = synchronized(cache) { cache.get(key) }
     fun put(key: String, bitmap: Bitmap) = synchronized(cache) { cache.put(key, bitmap) }
+
+    fun clear() {
+        synchronized(cache) { cache.evictAll() }
+        generation++
+    }
+}
+
+/** Clears Compose bitmap state, in-flight favicon work and the on-disk favicon cache as one action. */
+fun clearFaviconCaches(iconsDir: File) {
+    FaviconMemoryCache.clear()
+    FaviconFetcher.clear(iconsDir)
 }
 
 /** Favicon с дисковым кэшем и bounded sampled bitmap cache. */
@@ -97,8 +111,9 @@ fun Favicon(source: String, iconsDir: File, size: Dp, modifier: Modifier = Modif
         hostOf(source).ifBlank { hostOf("https://${source.trim()}") }.ifBlank { source.trim() }
     }
     val key = origin ?: source.trim().lowercase()
-    var bmp by remember(key) { mutableStateOf(FaviconMemoryCache.get(key)) }
-    LaunchedEffect(key, origin) {
+    val cacheGeneration = FaviconMemoryCache.generation
+    var bmp by remember(key, cacheGeneration) { mutableStateOf(FaviconMemoryCache.get(key)) }
+    LaunchedEffect(key, origin, cacheGeneration) {
         if (origin != null && bmp == null) {
             val loaded = withContext(Dispatchers.IO) {
                 val f = FaviconFetcher.fetch(origin, iconsDir)
