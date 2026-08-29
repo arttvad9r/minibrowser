@@ -15,6 +15,7 @@ import androidx.test.uiautomator.Until
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.regex.Pattern
 
 internal const val TARGET_PACKAGE = "com.artt.minibrowser"
 private const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
@@ -23,6 +24,7 @@ private const val TAB_STORE_LOAD_TRACE = "TabStore.loadState"
 private const val TAB_RESTORE_MATERIALIZE_TRACE = "TabManager.restoreTabs"
 private const val TAB_RESTORE_OPEN_SELECTED_TRACE = "TabManager.openSelected"
 private const val TARGET_RESTORE_TAB_COUNT = 10
+private val TAB_COUNT_TEXT = Pattern.compile("^\\d+ (?:вкладка|вкладки|вкладок)$")
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
@@ -64,9 +66,12 @@ class StartupBenchmark {
                 startActivityAndWait()
                 val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                 clickDescription(device, "Вкладки")
-                val existingTabs = device.findObjects(By.desc("Закрыть вкладку")).size
-                check(existingTabs in 1..TARGET_RESTORE_TAB_COUNT) {
-                    "Unexpected tab count while preparing restore benchmark: $existingTabs"
+                val countLabel = checkNotNull(device.wait(Until.findObject(By.text(TAB_COUNT_TEXT)), 3_000)) {
+                    "Missing full tab count in overview"
+                }.text
+                val existingTabs = countLabel.substringBefore(' ').toIntOrNull()
+                check(existingTabs != null && existingTabs in 1..TARGET_RESTORE_TAB_COUNT) {
+                    "Unexpected tab count while preparing restore benchmark: $countLabel"
                 }
                 device.pressBack()
                 device.waitForIdle()
