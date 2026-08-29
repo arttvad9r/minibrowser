@@ -19,6 +19,8 @@ class GeckoContextMenuController(
         if (link == null && media == null) return
 
         activity.runOnUiThread {
+            if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+
             val labels = mutableListOf<String>()
             val actions = mutableListOf<() -> Unit>()
 
@@ -49,6 +51,7 @@ class GeckoContextMenuController(
     }
 
     private fun copy(value: String, label: String) {
+        if (activity.isFinishing || activity.isDestroyed) return
         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
         Toast.makeText(activity, "Скопировано", Toast.LENGTH_SHORT).show()
