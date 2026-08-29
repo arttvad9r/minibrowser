@@ -5,6 +5,7 @@ import com.artt.minibrowser.data.DownloadStatus
 import com.artt.minibrowser.data.downloadSourceForHistory
 import com.artt.minibrowser.data.mergeRestoredDownloads
 import com.artt.minibrowser.data.normalizeRestoredDownload
+import com.artt.minibrowser.data.shouldPersistRestoredDownloadMerge
 import com.artt.minibrowser.data.writeTextAtomically
 import com.artt.minibrowser.engine.shouldPersistDownloadHistory
 import java.io.File
@@ -99,6 +100,46 @@ class DownloadHistoryTest {
         }
 
         assertEquals(3, mergeRestoredDownloads(emptyList(), restored, limit = 3).size)
+    }
+
+    @Test fun settledSanitizedRestoreDoesNotRewriteDisk() {
+        val restored = listOf(
+            BrowserDownload(
+                id = "done",
+                name = "done.bin",
+                sourceUrl = "https://example.com",
+                mime = "application/octet-stream",
+                status = DownloadStatus.Completed,
+                startedAt = 1L,
+                finishedAt = 2L,
+            ),
+        )
+
+        assertFalse(
+            shouldPersistRestoredDownloadMerge(
+                live = emptyList(),
+                rawRestored = restored,
+                normalizedRestored = restored,
+                discardRestoredHistory = false,
+            ),
+        )
+    }
+
+    @Test fun changedOrRacedRestoreIsPersisted() {
+        val raw = BrowserDownload(
+            id = "old",
+            name = "old.bin",
+            sourceUrl = "https://example.com/path?secret=1",
+            mime = "application/octet-stream",
+            status = DownloadStatus.Completed,
+            startedAt = 1L,
+        )
+        val normalized = normalizeRestoredDownload(raw, now = 2L)
+        val live = raw.copy(id = "live", sourceUrl = "https://live.example")
+
+        assertTrue(shouldPersistRestoredDownloadMerge(emptyList(), listOf(raw), listOf(normalized), false))
+        assertTrue(shouldPersistRestoredDownloadMerge(listOf(live), listOf(raw), listOf(raw), false))
+        assertTrue(shouldPersistRestoredDownloadMerge(emptyList(), listOf(raw), listOf(raw), true))
     }
 
     @Test fun atomicWriteReplacesExistingHistoryAndRemovesTempFile() {
