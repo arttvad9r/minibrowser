@@ -49,20 +49,28 @@ internal fun collapseHistoryNoise(
 ): List<HistoryEntry> {
     if (entries.size < 2) return entries
     val sorted = historyDescending(entries)
-    val result = ArrayList<HistoryEntry>(sorted.size)
+    var result: ArrayList<HistoryEntry>? = null
     var previousKey: String? = null
     var previousVisitedAt: Long? = null
-    sorted.forEach { entry ->
+
+    for (index in sorted.indices) {
+        val entry = sorted[index]
         val key = historyDisplayKey(entry)
         val delta = previousVisitedAt?.let { it - entry.visitedAt }
         val isNavigationNoise = previousKey == key && delta != null && delta in 0..windowMs
-        if (!isNavigationNoise) {
-            result += entry
-            previousKey = key
-            previousVisitedAt = entry.visitedAt
+        if (isNavigationNoise) {
+            if (result == null) {
+                result = ArrayList(sorted.size)
+                for (retainedIndex in 0 until index) result.add(sorted[retainedIndex])
+            }
+            continue
         }
+
+        result?.add(entry)
+        previousKey = key
+        previousVisitedAt = entry.visitedAt
     }
-    return result
+    return result ?: sorted
 }
 
 /**
