@@ -6,6 +6,7 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import android.os.Build
 import android.os.Process
+import android.os.Trace
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.ui.TabPreviewStore
@@ -15,6 +16,8 @@ import org.mozilla.geckoview.GeckoRuntimeSettings
 import java.io.File
 
 object Engine { lateinit var runtime: GeckoRuntime }
+
+internal const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
 
 internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: String): Boolean =
     currentProcess == null || currentProcess == mainProcess
@@ -46,17 +49,22 @@ class BrowserApp : Application() {
             .allowListBaselineTrackingProtection(true)
             .allowListConvenienceTrackingProtection(true)
             .build()
-        Engine.runtime = GeckoRuntime.create(
-            this,
-            GeckoRuntimeSettings.Builder()
-                .aboutConfigEnabled(BuildConfig.DEBUG)
-                // GeckoView logging is enabled by default. Keep it for debug builds, but avoid the
-                // formatting/IPC/logcat overhead in the release build used on the phone.
-                .debugLogging(BuildConfig.DEBUG)
-                .contentBlocking(contentBlocking)
-                .setLnaBlocking(true)
-                .build()
-        )
+        Trace.beginSection(GECKO_RUNTIME_CREATE_TRACE)
+        try {
+            Engine.runtime = GeckoRuntime.create(
+                this,
+                GeckoRuntimeSettings.Builder()
+                    .aboutConfigEnabled(BuildConfig.DEBUG)
+                    // GeckoView logging is enabled by default. Keep it for debug builds, but avoid the
+                    // formatting/IPC/logcat overhead in the release build used on the phone.
+                    .debugLogging(BuildConfig.DEBUG)
+                    .contentBlocking(contentBlocking)
+                    .setLnaBlocking(true)
+                    .build()
+            )
+        } finally {
+            Trace.endSection()
+        }
         if (!performance.lowRamDevice && performance.totalMemoryBytes >= 6L * 1024L * 1024L * 1024L) {
             // Gecko documents this as a pure performance feature. On multicore/high-memory phones,
             // parallel marking trades spare CPU cores for shorter JavaScript GC marking pauses.
