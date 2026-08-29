@@ -18,13 +18,17 @@ android {
     experimentalProperties["android.experimental.self-instrumenting"] = true
 
     buildTypes {
-        // Measures the R8/minified app:benchmark target.
+        // Measures the R8/minified app:benchmark target. The test APK itself still needs a
+        // certificate before Android can install it, so use the standard local debug key.
         create("benchmark") {
             isDebuggable = true
+            signingConfig = signingConfigs.getByName("debug")
         }
-        // Collects HRF rules from the non-minified app:profile target.
+        // Collects HRF rules from the non-minified app:profile target. This test APK is likewise
+        // never distributed; debug signing is only for installability on benchmark devices.
         create("profile") {
             isDebuggable = true
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
