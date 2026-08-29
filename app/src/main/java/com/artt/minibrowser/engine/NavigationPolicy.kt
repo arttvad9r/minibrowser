@@ -106,6 +106,10 @@ fun resolveNavigation(input: String): NavigationTarget {
     return NavigationTarget.Search(value)
 }
 
+/** Source-compatible bridge for the existing Activity call site; search engine does not affect classification. */
+@Suppress("UNUSED_PARAMETER")
+fun resolveNavigation(input: String, engine: SearchEngine): NavigationTarget = resolveNavigation(input)
+
 fun buildLoadUri(input: String, engine: SearchEngine): String = when (val target = resolveNavigation(input)) {
     is NavigationTarget.Web -> target.uri
     is NavigationTarget.Internal -> target.uri
