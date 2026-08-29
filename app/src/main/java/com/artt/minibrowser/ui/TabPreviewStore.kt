@@ -18,7 +18,8 @@ import kotlin.math.roundToInt
  */
 object TabPreviewStore {
     private const val MAX_PREVIEW_WIDTH = 320
-    private const val MAX_CACHE_BYTES = 16L * 1024L * 1024L
+    private const val DEFAULT_MAX_CACHE_BYTES = 16L * 1024L * 1024L
+    private const val DEFAULT_BACKGROUND_CACHE_BYTES = 4L * 1024L * 1024L
     private const val RETIRE_DELAY_MS = 1_000L
     private const val OVERVIEW_CAPTURE_DELAY_MS = 420L
 
@@ -27,6 +28,8 @@ object TabPreviewStore {
     private val previews = mutableStateMapOf<Long, Bitmap>()
     private val lru = LinkedHashMap<Long, Unit>(16, 0.75f, true)
     private var cachedBytes = 0L
+    private var maxCacheBytes = DEFAULT_MAX_CACHE_BYTES
+    private var backgroundCacheBytes = DEFAULT_BACKGROUND_CACHE_BYTES
     private val lastCapturedUrl = mutableMapOf<Long, String>()
     private val inFlight = mutableSetOf<Long>()
     private val removedTabs = mutableSetOf<Long>()
@@ -48,6 +51,38 @@ object TabPreviewStore {
         val bitmap = previews[tabId] ?: return null
         lru[tabId] = Unit
         return bitmap
+    }
+
+    /** Configure byte budgets from the device capability profile. */
+    fun configureMemoryPolicy(maxBytes: Long, backgroundBytes: Long) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { configureMemoryPolicy(maxBytes, backgroundBytes) }
+            return
+        }
+        maxCacheBytes = maxBytes.coerceAtLeast(0L)
+        backgroundCacheBytes = backgroundBytes.coerceIn(0L, maxCacheBytes)
+        trimCache(maxCacheBytes)
+    }
+
+    /**
+     * Release reconstructible UI memory without changing logical tabs. UI-hidden trims keep only a
+     * small warm preview set; background/low-memory trims drop every preview and invalidate pending
+     * compositor readbacks so they cannot immediately allocate the memory again.
+     */
+    fun trimMemory(aggressive: Boolean) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { trimMemory(aggressive) }
+            return
+        }
+        generation++
+        deferredPreviews.values.map { it.bitmap }.forEach(::retire)
+        deferredPreviews.clear()
+        inFlight.clear()
+        if (aggressive) {
+            previews.keys.toList().forEach(::removePreview)
+        } else {
+            trimCache(backgroundCacheBytes)
+        }
     }
 
     /**
@@ -266,7 +301,7 @@ object TabPreviewStore {
             cachedBytes += bitmap.byteCount.toLong()
         }
         lru[tabId] = Unit
-        trimCache()
+        trimCache(maxCacheBytes)
     }
 
     private fun removePreview(tabId: Long) {
@@ -281,8 +316,8 @@ object TabPreviewStore {
         deferredPreviews.remove(tabId)?.bitmap?.let(::retire)
     }
 
-    private fun trimCache() {
-        while (cachedBytes > MAX_CACHE_BYTES && lru.isNotEmpty()) {
+    private fun trimCache(targetBytes: Long) {
+        while (cachedBytes > targetBytes && lru.isNotEmpty()) {
             val eldest = lru.entries.iterator().next().key
             removePreview(eldest)
         }
