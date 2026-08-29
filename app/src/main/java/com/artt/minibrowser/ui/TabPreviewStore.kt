@@ -68,7 +68,7 @@ object TabPreviewStore {
      * Keep track of the visible GeckoView, but do not take a screenshot automatically when every
      * page finishes loading. capturePixels() is compositor work and downscaling allocates a bitmap;
      * doing that on the normal navigation path made page completion visibly hitch. A fresh frame is
-     * captured only when the user actually opens the tab overview or before a session swap.
+     * captured only when the user actually opens the tab overview.
      */
     fun maybeCapture(
         view: GeckoView,
@@ -79,7 +79,7 @@ object TabPreviewStore {
     ) {
         attach(view, tabId, url, isPrivate)
         if (!pageSettled) return
-        // Intentionally deferred to captureCurrent()/captureBeforeSessionSwap().
+        // Intentionally deferred to captureCurrent().
     }
 
     /**
@@ -107,13 +107,14 @@ object TabPreviewStore {
         }, OVERVIEW_CAPTURE_DELAY_MS)
     }
 
-    /** Called before GeckoView releases the old session so its last visible frame is not lost. */
+    /**
+     * Session swaps are latency-critical. Do not read back the old compositor here: the overview
+     * already schedules a fresh capture after its reveal, and an older cached preview is preferable
+     * to stalling the selected tab while GeckoView changes sessions.
+     */
     fun captureBeforeSessionSwap(view: GeckoView) {
         if (currentView.get() !== view) return
-        val id = currentTabId ?: return
-        val url = currentUrl
-        if (id in privateTabs || id in removedTabs || !isPreviewableUrl(url)) return
-        capture(view, id, url)
+        // Deliberately no-op.
     }
 
     fun remove(tabId: Long) {
