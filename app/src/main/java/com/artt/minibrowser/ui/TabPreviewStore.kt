@@ -1,33 +1,46 @@
 package com.artt.minibrowser.ui
 
 import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.mutableStateMapOf
 import org.mozilla.geckoview.GeckoView
 import java.lang.ref.WeakReference
+import java.util.LinkedHashMap
 import kotlin.math.roundToInt
 
 /**
  * In-process cache of real GeckoView renders for the tab switcher.
  *
- * Normal-tab previews stay memory-only. Private tabs are deliberately excluded even from this
- * transient cache: otherwise opening the overview from a normal tab could expose private-page
- * pixels to a screenshot despite FLAG_SECURE being enabled while the private tab itself is active.
+ * Normal-tab previews stay memory-only and are kept in a byte-bounded LRU. Private tabs are
+ * deliberately excluded even from this transient cache: otherwise opening the overview from a
+ * normal tab could expose private-page pixels to a screenshot despite FLAG_SECURE being enabled
+ * while the private tab itself is active.
  */
 object TabPreviewStore {
     private const val MAX_PREVIEW_WIDTH = 420
+    private const val MAX_CACHE_BYTES = 24L * 1024L * 1024L
+    private const val RETIRE_DELAY_MS = 1_000L
 
     private val previews = mutableStateMapOf<Long, Bitmap>()
+    private val lru = LinkedHashMap<Long, Unit>(16, 0.75f, true)
+    private var cachedBytes = 0L
     private val lastCapturedUrl = mutableMapOf<Long, String>()
     private val inFlight = mutableSetOf<Long>()
     private val removedTabs = mutableSetOf<Long>()
     private val privateTabs = mutableSetOf<Long>()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var currentView = WeakReference<GeckoView>(null)
     private var currentTabId: Long? = null
     private var currentUrl: String = ""
 
-    operator fun get(tabId: Long): Bitmap? =
-        if (tabId in privateTabs) null else previews[tabId]
+    operator fun get(tabId: Long): Bitmap? {
+        if (tabId in privateTabs) return null
+        val bitmap = previews[tabId] ?: return null
+        lru[tabId] = Unit
+        return bitmap
+    }
 
     fun attach(view: GeckoView, tabId: Long?, url: String, isPrivate: Boolean) {
         currentView = WeakReference(view)
@@ -38,7 +51,7 @@ object TabPreviewStore {
         removedTabs.remove(tabId)
         if (isPrivate) {
             privateTabs += tabId
-            previews.remove(tabId)
+            removePreview(tabId)
             lastCapturedUrl.remove(tabId)
             inFlight.remove(tabId)
         } else {
@@ -75,7 +88,7 @@ object TabPreviewStore {
     fun remove(tabId: Long) {
         removedTabs += tabId
         privateTabs.remove(tabId)
-        previews.remove(tabId)
+        removePreview(tabId)
         lastCapturedUrl.remove(tabId)
         inFlight.remove(tabId)
         if (currentTabId == tabId) {
@@ -89,24 +102,62 @@ object TabPreviewStore {
         runCatching {
             view.capturePixels().accept(
                 { source ->
-                    inFlight.remove(tabId)
-                    if (source != null && source.width > 0 && source.height > 0) {
-                        if (tabId in privateTabs || tabId in removedTabs) {
-                            if (!source.isRecycled) source.recycle()
-                        } else {
-                            // Do not recycle a replaced preview here: Crossfade may still draw it
-                            // for a few frames after the state map changes.
-                            previews[tabId] = downscale(source)
-                            lastCapturedUrl[tabId] = url
+                    mainHandler.post {
+                        inFlight.remove(tabId)
+                        if (source != null && source.width > 0 && source.height > 0) {
+                            if (tabId in privateTabs || tabId in removedTabs) {
+                                retire(source)
+                            } else {
+                                putPreview(tabId, downscale(source))
+                                lastCapturedUrl[tabId] = url
+                            }
                         }
                     }
                 },
                 {
-                    // A compositor that is not ready is a normal transient state; fallback UI stays.
-                    inFlight.remove(tabId)
+                    mainHandler.post {
+                        // A compositor that is not ready is a normal transient state; fallback UI stays.
+                        inFlight.remove(tabId)
+                    }
                 },
             )
         }.onFailure { inFlight.remove(tabId) }
+    }
+
+    private fun putPreview(tabId: Long, bitmap: Bitmap) {
+        val previous = previews.put(tabId, bitmap)
+        if (previous !== bitmap) {
+            previous?.let {
+                cachedBytes -= it.byteCount.toLong()
+                retire(it)
+            }
+            cachedBytes += bitmap.byteCount.toLong()
+        }
+        lru[tabId] = Unit
+        trimCache()
+    }
+
+    private fun removePreview(tabId: Long) {
+        lru.remove(tabId)
+        previews.remove(tabId)?.let {
+            cachedBytes = (cachedBytes - it.byteCount.toLong()).coerceAtLeast(0L)
+            retire(it)
+        }
+    }
+
+    private fun trimCache() {
+        while (cachedBytes > MAX_CACHE_BYTES && lru.isNotEmpty()) {
+            val eldest = lru.entries.iterator().next().key
+            removePreview(eldest)
+        }
+    }
+
+    /** Crossfade may draw the old bitmap for a few frames, so recycle only after it has left state. */
+    private fun retire(bitmap: Bitmap) {
+        mainHandler.postDelayed({
+            val stillReferenced = previews.values.any { it === bitmap }
+            if (!stillReferenced && !bitmap.isRecycled) bitmap.recycle()
+        }, RETIRE_DELAY_MS)
     }
 
     private fun downscale(source: Bitmap): Bitmap {
@@ -114,7 +165,7 @@ object TabPreviewStore {
         val ratio = MAX_PREVIEW_WIDTH.toFloat() / source.width.toFloat()
         val height = (source.height * ratio).roundToInt().coerceAtLeast(1)
         val scaled = Bitmap.createScaledBitmap(source, MAX_PREVIEW_WIDTH, height, true)
-        if (scaled !== source && !source.isRecycled) source.recycle()
+        if (scaled !== source) retire(source)
         return scaled
     }
 
