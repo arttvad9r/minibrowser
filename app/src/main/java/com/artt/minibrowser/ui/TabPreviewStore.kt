@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import org.mozilla.geckoview.GeckoView
 import java.lang.ref.WeakReference
 import java.util.LinkedHashMap
+import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
@@ -21,6 +22,8 @@ object TabPreviewStore {
     private const val RETIRE_DELAY_MS = 1_000L
     private const val OVERVIEW_CAPTURE_DELAY_MS = 420L
 
+    private data class DeferredPreview(val bitmap: Bitmap, val url: String)
+
     private val previews = mutableStateMapOf<Long, Bitmap>()
     private val lru = LinkedHashMap<Long, Unit>(16, 0.75f, true)
     private var cachedBytes = 0L
@@ -28,8 +31,13 @@ object TabPreviewStore {
     private val inFlight = mutableSetOf<Long>()
     private val removedTabs = mutableSetOf<Long>()
     private val privateTabs = mutableSetOf<Long>()
+    private val deferredPreviews = mutableMapOf<Long, DeferredPreview>()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scaleExecutor = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "minibrowser-tab-preview-scale").apply { isDaemon = true }
+    }
     private var generation = 0
+    private var overviewVisible = false
 
     private var currentView = WeakReference<GeckoView>(null)
     private var currentTabId: Long? = null
@@ -42,6 +50,16 @@ object TabPreviewStore {
         return bitmap
     }
 
+    /**
+     * Keep newly captured pixels out of a currently visible overview. A preview that appears halfway
+     * through the user's glance reads as a card jump even if the capture itself is fast. Deferred
+     * previews are published after the overview leaves composition and are ready on the next open.
+     */
+    fun setOverviewVisible(visible: Boolean) {
+        overviewVisible = visible
+        if (!visible) flushDeferredPreviews()
+    }
+
     fun attach(view: GeckoView, tabId: Long?, url: String, isPrivate: Boolean) {
         currentView = WeakReference(view)
         currentTabId = tabId
@@ -50,6 +68,7 @@ object TabPreviewStore {
 
         if (tabId in removedTabs) {
             removePreview(tabId)
+            removeDeferredPreview(tabId)
             lastCapturedUrl.remove(tabId)
             inFlight.remove(tabId)
             return
@@ -57,6 +76,7 @@ object TabPreviewStore {
         if (isPrivate) {
             privateTabs += tabId
             removePreview(tabId)
+            removeDeferredPreview(tabId)
             lastCapturedUrl.remove(tabId)
             inFlight.remove(tabId)
         } else {
@@ -123,6 +143,7 @@ object TabPreviewStore {
         removedTabs += tabId
         privateTabs.remove(tabId)
         removePreview(tabId)
+        removeDeferredPreview(tabId)
         lastCapturedUrl.remove(tabId)
         inFlight.remove(tabId)
         if (currentTabId == tabId) {
@@ -139,17 +160,20 @@ object TabPreviewStore {
     fun clear() {
         generation++
         removedTabs += previews.keys
+        removedTabs += deferredPreviews.keys
         removedTabs += lastCapturedUrl.keys
         removedTabs += inFlight
         removedTabs += privateTabs
         currentTabId?.let(removedTabs::add)
-        val retired = previews.values.toList()
+        val retired = previews.values.toList() + deferredPreviews.values.map { it.bitmap }
         previews.clear()
+        deferredPreviews.clear()
         lru.clear()
         cachedBytes = 0L
         lastCapturedUrl.clear()
         inFlight.clear()
         privateTabs.clear()
+        overviewVisible = false
         currentView = WeakReference(null)
         currentTabId = null
         currentUrl = ""
@@ -163,28 +187,73 @@ object TabPreviewStore {
             view.capturePixels().accept(
                 { source ->
                     mainHandler.post {
-                        inFlight.remove(tabId)
                         if (expectedGeneration != generation) {
+                            inFlight.remove(tabId)
                             source?.let(::retire)
                             return@post
                         }
-                        if (source != null && source.width > 0 && source.height > 0) {
-                            if (tabId in privateTabs || tabId in removedTabs) {
+                        if (source == null || source.width <= 0 || source.height <= 0) {
+                            inFlight.remove(tabId)
+                            source?.let(::retire)
+                            return@post
+                        }
+                        if (tabId in privateTabs || tabId in removedTabs) {
+                            inFlight.remove(tabId)
+                            retire(source)
+                            return@post
+                        }
+
+                        // Bitmap scaling is CPU/allocation work. Do not perform it on the main thread
+                        // while the user may be scrolling or selecting a card in the overview.
+                        scaleExecutor.execute {
+                            val scaled = runCatching { downscale(source) }.getOrElse {
                                 retire(source)
-                            } else {
-                                putPreview(tabId, downscale(source))
-                                lastCapturedUrl[tabId] = url
+                                null
+                            }
+                            mainHandler.post {
+                                inFlight.remove(tabId)
+                                if (scaled == null) return@post
+                                if (
+                                    expectedGeneration != generation ||
+                                    tabId in privateTabs ||
+                                    tabId in removedTabs
+                                ) {
+                                    retire(scaled)
+                                } else {
+                                    publishOrDefer(tabId, scaled, url)
+                                }
                             }
                         }
                     }
                 },
                 {
-                    mainHandler.post {
-                        inFlight.remove(tabId)
-                    }
+                    mainHandler.post { inFlight.remove(tabId) }
                 },
             )
         }.onFailure { inFlight.remove(tabId) }
+    }
+
+    private fun publishOrDefer(tabId: Long, bitmap: Bitmap, url: String) {
+        if (overviewVisible) {
+            deferredPreviews.put(tabId, DeferredPreview(bitmap, url))?.bitmap?.let(::retire)
+        } else {
+            putPreview(tabId, bitmap)
+            lastCapturedUrl[tabId] = url
+        }
+    }
+
+    private fun flushDeferredPreviews() {
+        if (deferredPreviews.isEmpty()) return
+        val pending = deferredPreviews.toMap()
+        deferredPreviews.clear()
+        pending.forEach { (tabId, deferred) ->
+            if (tabId in privateTabs || tabId in removedTabs) {
+                retire(deferred.bitmap)
+            } else {
+                putPreview(tabId, deferred.bitmap)
+                lastCapturedUrl[tabId] = deferred.url
+            }
+        }
     }
 
     private fun putPreview(tabId: Long, bitmap: Bitmap) {
@@ -208,6 +277,10 @@ object TabPreviewStore {
         }
     }
 
+    private fun removeDeferredPreview(tabId: Long) {
+        deferredPreviews.remove(tabId)?.bitmap?.let(::retire)
+    }
+
     private fun trimCache() {
         while (cachedBytes > MAX_CACHE_BYTES && lru.isNotEmpty()) {
             val eldest = lru.entries.iterator().next().key
@@ -217,7 +290,8 @@ object TabPreviewStore {
 
     private fun retire(bitmap: Bitmap) {
         mainHandler.postDelayed({
-            val stillReferenced = previews.values.any { it === bitmap }
+            val stillReferenced = previews.values.any { it === bitmap } ||
+                deferredPreviews.values.any { it.bitmap === bitmap }
             if (!stillReferenced && !bitmap.isRecycled) bitmap.recycle()
         }, RETIRE_DELAY_MS)
     }
