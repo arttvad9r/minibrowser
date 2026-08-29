@@ -18,7 +18,7 @@ data class PersistedTab(
     val sessionState: String? = null,
     val lastAccess: Long = 0L,
     // URL the Gecko session state belongs to. Older persisted files do not have this field;
-    // for those, a non-null state is assumed to belong to `url` for backwards compatibility.
+    // their unbound session state is deliberately ignored by TabManager and the URL is reloaded.
     val sessionStateUrl: String? = null,
 )
 
@@ -31,6 +31,7 @@ data class PersistedBrowserState(
 object TabStore {
     private const val FILE_NAME = "open_tabs.json"
     private val json = Json { ignoreUnknownKeys = true }
+    private val writeLock = Any()
 
     fun save(dir: File, urls: List<String>) {
         saveState(dir, PersistedBrowserState(
@@ -38,22 +39,32 @@ object TabStore {
         ))
     }
 
-    fun saveState(dir: File, state: PersistedBrowserState) {
+    /**
+     * Process-local writes are serialized because lifecycle shutdown can flush while the IO
+     * persistence loop is still finishing its previous write. The live JSON is never truncated;
+     * a synced temp file is published with atomic move when supported and replace-move otherwise.
+     */
+    fun saveState(dir: File, state: PersistedBrowserState) = synchronized(writeLock) {
         dir.mkdirs()
         val target = File(dir, FILE_NAME)
         val temp = File(dir, "$FILE_NAME.tmp")
-        FileOutputStream(temp).use { output ->
-            output.write(json.encodeToString(PersistedBrowserState.serializer(), state).toByteArray())
-            output.fd.sync()
-        }
-        runCatching {
-            Files.move(
-                temp.toPath(), target.toPath(),
-                StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE,
-            )
-        }.getOrElse {
-            if (!temp.renameTo(target)) error("Could not atomically replace ${target.name}")
+        try {
+            FileOutputStream(temp).use { output ->
+                output.write(json.encodeToString(PersistedBrowserState.serializer(), state).toByteArray())
+                output.fd.sync()
+            }
+            runCatching {
+                Files.move(
+                    temp.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE,
+                )
+            }.recoverCatching {
+                Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }.getOrThrow()
+        } finally {
+            temp.delete()
         }
     }
 
