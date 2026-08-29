@@ -25,14 +25,37 @@ class PersistenceSignalTest {
         val snapshot = snapshotPersistedState(1, listOf(normal, private))
         assertEquals("https://latest.example", snapshot.tabs.single().url)
         assertEquals("Latest", snapshot.tabs.single().title)
+        assertEquals("https://latest.example", snapshot.tabs.single().sessionStateUrl)
     }
 
     @Test fun immutablePersistenceSnapshotKeepsMetadataAndFiltersPrivateTabs() {
         val snapshot = PersistenceSnapshot(
             selectedId = 1,
             tabs = listOf(
-                PersistenceTabSnapshot(1, "https://latest.example", "Latest", true, 12L, null, "state-c", false),
-                PersistenceTabSnapshot(2, "https://private.example", "Private", false, 13L, null, "private-state", true),
+                PersistenceTabSnapshot(
+                    id = 1,
+                    url = "https://latest.example",
+                    title = "Latest",
+                    desktop = true,
+                    lastAccess = 12L,
+                    latestSessionState = null,
+                    latestSessionStateUrl = null,
+                    serializedSessionState = "state-c",
+                    serializedSessionStateUrl = "https://latest.example",
+                    isPrivate = false,
+                ),
+                PersistenceTabSnapshot(
+                    id = 2,
+                    url = "https://private.example",
+                    title = "Private",
+                    desktop = false,
+                    lastAccess = 13L,
+                    latestSessionState = null,
+                    latestSessionStateUrl = null,
+                    serializedSessionState = "private-state",
+                    serializedSessionStateUrl = "https://private.example",
+                    isPrivate = true,
+                ),
             ),
         )
         val persisted = serializePersistenceSnapshot(snapshot)
@@ -40,6 +63,7 @@ class PersistenceSignalTest {
         assertEquals(1, persisted.tabs.size)
         assertEquals("https://latest.example", persisted.tabs.single().url)
         assertEquals("state-c", persisted.tabs.single().sessionState)
+        assertEquals("https://latest.example", persisted.tabs.single().sessionStateUrl)
     }
 
     @Test
