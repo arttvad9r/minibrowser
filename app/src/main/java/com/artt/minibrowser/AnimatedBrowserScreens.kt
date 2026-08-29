@@ -54,7 +54,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.DateFormat
-import java.util.Calendar
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Date
 
 /** History destination with shared-axis motion and progress-aware Predictive Back. */
@@ -264,13 +265,10 @@ internal fun SmoothPageProgress(tab: Tab?) {
 }
 
 private fun motionGroupByDay(entries: List<HistoryEntry>): List<Pair<String, List<HistoryEntry>>> {
-    val calendar = Calendar.getInstance()
-    val today = calendar.clone() as Calendar
-    today.set(Calendar.HOUR_OF_DAY, 0)
-    today.set(Calendar.MINUTE, 0)
-    today.set(Calendar.SECOND, 0)
-    val todayStart = today.timeInMillis
-    val yesterdayStart = todayStart - 24 * 60 * 60 * 1000L
+    val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    val todayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
+    val yesterdayStart = today.minusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
     val groups = linkedMapOf(
         "Сегодня" to mutableListOf<HistoryEntry>(),
         "Вчера" to mutableListOf<HistoryEntry>(),
