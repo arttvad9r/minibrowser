@@ -320,7 +320,7 @@ private fun BookmarksScreen(
                                 }
                                 IconButton(
                                     onClick = { selected = bookmark },
-                                    modifier = Modifier.size(40.dp),
+                                    modifier = Modifier.size(48.dp),
                                 ) {
                                     Icon(
                                         Icons.Filled.MoreVert,
