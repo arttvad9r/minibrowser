@@ -9,24 +9,21 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Bounded favicon fetcher.
+ * Bounded, privacy-preserving favicon fetcher.
  *
- * Prefer the site's own icon, then a requested 128px favicon, with the old DuckDuckGo endpoint as
- * a final fallback. Only the hostname is sent to fallback favicon services. Cache v2 intentionally
- * invalidates older 16/32px files that looked pixelated when Compose rendered them at phone dpi.
+ * Fetch only the conventional same-origin /favicon.ico. Third-party favicon proxy services are
+ * intentionally avoided because querying them reveals the user's visited hostname. Cache v3 also
+ * invalidates older files that may have been fetched through such proxies.
  */
 object FaviconFetcher {
-    private const val CACHE_VERSION = "v2"
+    private const val CACHE_VERSION = "v3"
     private const val MAX_BYTES = 1024 * 1024
-    private const val GOOD_ICON_DIMENSION = 96
     private const val NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000L
     private val scope = kotlinx.coroutines.CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = ConcurrentHashMap<String, Deferred<File>>()
@@ -57,52 +54,24 @@ object FaviconFetcher {
 
     private suspend fun fetchOnce(host: String, dst: File): File = withContext(Dispatchers.IO) {
         dst.parentFile?.mkdirs()
-        val encodedHost = URLEncoder.encode(host, StandardCharsets.UTF_8.name())
-        val candidates = listOf(
-            "https://$host/favicon.ico",
-            "https://www.google.com/s2/favicons?domain=$encodedHost&sz=128",
-            "https://icons.duckduckgo.com/ip3/$host.ico",
-        )
-
-        var best: File? = null
-        var bestDimension = 0
-
-        for ((index, url) in candidates.withIndex()) {
-            val temp = File("${dst.path}.$index.tmp")
-            temp.delete()
-            val dimensions = downloadCandidate(url, temp)
-            if (dimensions == null) {
-                temp.delete()
-                continue
-            }
-
-            val dimension = minOf(dimensions.first, dimensions.second)
-            if (dimension > bestDimension) {
-                best?.delete()
-                best = temp
-                bestDimension = dimension
-            } else {
-                temp.delete()
-            }
-
-            if (bestDimension >= GOOD_ICON_DIMENSION) break
-        }
-
-        val selected = best
-        if (selected != null && selected.exists()) {
+        val temp = File("${dst.path}.tmp")
+        temp.delete()
+        if (downloadCandidate("https://$host/favicon.ico", temp) != null) {
             runCatching {
                 Files.move(
-                    selected.toPath(),
+                    temp.toPath(),
                     dst.toPath(),
                     StandardCopyOption.REPLACE_EXISTING,
                     StandardCopyOption.ATOMIC_MOVE,
                 )
             }.getOrElse {
-                if (!selected.renameTo(dst)) {
-                    selected.delete()
+                if (!temp.renameTo(dst)) {
+                    temp.delete()
                     dst.delete()
                 }
             }
+        } else {
+            temp.delete()
         }
         dst
     }
