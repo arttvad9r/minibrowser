@@ -156,12 +156,13 @@ fun SectionHeader(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
-    Row(modifier.fillMaxWidth().height(32.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.weight(1f))
         if (actionLabel != null && onAction != null) {
             Row(
                 Modifier
+                    .heightIn(min = 48.dp)
                     .clip(Radius.small)
                     .softClickable(onClick = onAction)
                     .padding(horizontal = 4.dp, vertical = 2.dp)
