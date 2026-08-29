@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -365,7 +364,7 @@ class MainActivity : ComponentActivity() {
                         .background(MaterialTheme.colorScheme.background)
                         .focusable(),
                 ) {
-                    Box(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
+                    Box(Modifier.fillMaxSize().systemBarsPadding()) {
                         Column(Modifier.fillMaxSize()) {
                             if (!inFullscreen) TopBar(
                                 currentTab,
