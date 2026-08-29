@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ContentValues
+import android.content.Context
 import android.content.pm.PackageManager
 import android.media.MediaScannerConnection
 import android.net.Uri
@@ -23,19 +24,119 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 
+private data class SavedDownload(val location: String, val bytes: Long)
+
+/**
+ * Download transfers can outlive an Activity (for example during recreation). Keep only the
+ * application context in this process-level scope; the Activity-owned controller is used solely
+ * for confirmation dialogs and runtime permission requests before the transfer starts.
+ */
+private object DownloadIo {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    fun save(
+        context: Context,
+        body: InputStream,
+        name: String,
+        mime: String,
+        sourceUrl: String,
+    ) {
+        val appContext = context.applicationContext
+        scope.launch {
+            val historyId = DownloadHistory.start(name, sourceUrl, mime)
+            val result = runCatching {
+                body.use { input ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        saveToMediaStore(appContext, input, name, mime)
+                    } else {
+                        saveToLegacyDownloads(appContext, input, name, mime)
+                    }
+                }
+            }
+            result.fold(
+                onSuccess = { saved ->
+                    DownloadHistory.complete(historyId, saved.location, saved.bytes)
+                    withContext(Dispatchers.Main) { toast(appContext, "Скачано: $name") }
+                },
+                onFailure = { error ->
+                    DownloadHistory.fail(historyId, error.localizedMessage ?: "Не удалось сохранить файл")
+                    withContext(Dispatchers.Main) { toast(appContext, "Не удалось скачать файл") }
+                },
+            )
+        }
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    private fun saveToMediaStore(
+        context: Context,
+        input: InputStream,
+        name: String,
+        mime: String,
+    ): SavedDownload {
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.MIME_TYPE, mime)
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: error("Unable to create download")
+        try {
+            val bytes = resolver.openOutputStream(uri, "w")?.use { output -> input.copyTo(output) }
+                ?: error("Unable to open download output")
+            resolver.update(
+                uri,
+                ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) },
+                null,
+                null,
+            )
+            return SavedDownload(uri.toString(), bytes)
+        } catch (error: Throwable) {
+            resolver.delete(uri, null, null)
+            throw error
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun saveToLegacyDownloads(
+        context: Context,
+        input: InputStream,
+        name: String,
+        mime: String,
+    ): SavedDownload {
+        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        if (!dir.exists() && !dir.mkdirs()) error("Unable to create Downloads directory")
+        val file = uniqueFile(dir, name)
+        val bytes = FileOutputStream(file).use { output -> input.copyTo(output) }
+        MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf(mime), null)
+        return SavedDownload(Uri.fromFile(file).toString(), bytes)
+    }
+
+    private fun uniqueFile(dir: File, name: String): File {
+        val initial = File(dir, name)
+        if (!initial.exists()) return initial
+        val dot = name.lastIndexOf('.')
+        val stem = if (dot > 0) name.substring(0, dot) else name
+        val extension = if (dot > 0) name.substring(dot) else ""
+        var index = 1
+        while (true) {
+            val candidate = File(dir, "$stem ($index)$extension")
+            if (!candidate.exists()) return candidate
+            index++
+        }
+    }
+}
+
 /** Saves GeckoView's already-authenticated WebResponse instead of issuing a second HTTP request. */
 class GeckoDownloadController(
     private val activity: Activity,
     private val requestPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)? = null,
 ) {
-    private data class SavedDownload(val location: String, val bytes: Long)
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     fun handle(response: WebResponse) {
         val body = response.body
         if (body == null) {
-            toast("Не удалось получить файл")
+            toast(activity.applicationContext, "Не удалось получить файл")
             return
         }
 
@@ -58,6 +159,10 @@ class GeckoDownloadController(
         }
 
         activity.runOnUiThread {
+            if (activity.isFinishing || activity.isDestroyed) {
+                body.closeQuietly()
+                return@runOnUiThread
+            }
             AlertDialog.Builder(activity)
                 .setTitle("Скачать файл?")
                 .setMessage(name)
@@ -77,108 +182,30 @@ class GeckoDownloadController(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         ) {
-            saveAsync(body, name, mime, sourceUrl)
+            DownloadIo.save(activity.applicationContext, body, name, mime, sourceUrl)
             return
         }
 
         val requester = requestPermissions
         if (requester == null) {
             body.closeQuietly()
-            toast("Нет доступа к папке Downloads")
+            toast(activity.applicationContext, "Нет доступа к папке Downloads")
             return
         }
         requester(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)) { granted ->
-            if (granted) saveAsync(body, name, mime, sourceUrl)
+            if (granted) DownloadIo.save(activity.applicationContext, body, name, mime, sourceUrl)
             else {
                 body.closeQuietly()
-                toast("Загрузка отменена: нет доступа к хранилищу")
+                toast(activity.applicationContext, "Загрузка отменена: нет доступа к хранилищу")
             }
-        }
-    }
-
-    private fun saveAsync(body: InputStream, name: String, mime: String, sourceUrl: String) {
-        scope.launch {
-            val historyId = DownloadHistory.start(name, sourceUrl, mime)
-            val result = runCatching {
-                body.use { input ->
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        saveToMediaStore(input, name, mime)
-                    } else {
-                        saveToLegacyDownloads(input, name, mime)
-                    }
-                }
-            }
-            result.fold(
-                onSuccess = { saved ->
-                    DownloadHistory.complete(historyId, saved.location, saved.bytes)
-                    withContext(Dispatchers.Main) { toast("Скачано: $name") }
-                },
-                onFailure = { error ->
-                    DownloadHistory.fail(historyId, error.localizedMessage ?: "Не удалось сохранить файл")
-                    withContext(Dispatchers.Main) { toast("Не удалось скачать файл") }
-                },
-            )
-        }
-    }
-
-    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
-    private fun saveToMediaStore(input: InputStream, name: String, mime: String): SavedDownload {
-        val resolver = activity.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, name)
-            put(MediaStore.Downloads.MIME_TYPE, mime)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
-        }
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: error("Unable to create download")
-        try {
-            val bytes = resolver.openOutputStream(uri, "w")?.use { output -> input.copyTo(output) }
-                ?: error("Unable to open download output")
-            resolver.update(
-                uri,
-                ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) },
-                null,
-                null,
-            )
-            return SavedDownload(uri.toString(), bytes)
-        } catch (t: Throwable) {
-            resolver.delete(uri, null, null)
-            throw t
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun saveToLegacyDownloads(input: InputStream, name: String, mime: String): SavedDownload {
-        val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        if (!dir.exists() && !dir.mkdirs()) error("Unable to create Downloads directory")
-        val file = uniqueFile(dir, name)
-        val bytes = FileOutputStream(file).use { output -> input.copyTo(output) }
-        MediaScannerConnection.scanFile(activity, arrayOf(file.absolutePath), arrayOf(mime), null)
-        return SavedDownload(Uri.fromFile(file).toString(), bytes)
-    }
-
-    private fun uniqueFile(dir: File, name: String): File {
-        val initial = File(dir, name)
-        if (!initial.exists()) return initial
-        val dot = name.lastIndexOf('.')
-        val stem = if (dot > 0) name.substring(0, dot) else name
-        val extension = if (dot > 0) name.substring(dot) else ""
-        var index = 1
-        while (true) {
-            val candidate = File(dir, "$stem ($index)$extension")
-            if (!candidate.exists()) return candidate
-            index++
-        }
-    }
-
-    private fun toast(message: String) {
-        activity.runOnUiThread {
-            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun InputStream.closeQuietly() {
         runCatching { close() }
     }
+}
+
+private fun toast(context: Context, message: String) {
+    Toast.makeText(context.applicationContext, message, Toast.LENGTH_SHORT).show()
 }
