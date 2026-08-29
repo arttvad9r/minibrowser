@@ -25,6 +25,19 @@ private fun historyDisplayKey(entry: HistoryEntry): String {
 }
 
 /**
+ * Room history queries already return visitedAt DESC. Avoid allocating and sorting a second list
+ * on that hot path, while retaining the old ordering semantics for arbitrary callers/tests.
+ */
+private fun historyDescending(entries: List<HistoryEntry>): List<HistoryEntry> {
+    for (index in 1 until entries.size) {
+        if (entries[index - 1].visitedAt < entries[index].visitedAt) {
+            return entries.sortedByDescending { it.visitedAt }
+        }
+    }
+    return entries
+}
+
+/**
  * Gecko/SPA navigation can expose several top-level URLs for what is visually the same page.
  * Keep the real URLs in storage, but collapse adjacent same-site/same-title transitions that
  * happened within a short window. This removes redirect/navigation noise without merging
@@ -35,7 +48,7 @@ internal fun collapseHistoryNoise(
     windowMs: Long = 2 * 60 * 1000L,
 ): List<HistoryEntry> {
     if (entries.size < 2) return entries
-    val sorted = entries.sortedByDescending { it.visitedAt }
+    val sorted = historyDescending(entries)
     val result = ArrayList<HistoryEntry>(sorted.size)
     var previousKey: String? = null
     var previousVisitedAt: Long? = null
