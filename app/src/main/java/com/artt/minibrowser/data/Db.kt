@@ -54,11 +54,10 @@ data class Bookmark(
         upsertHistory(HistoryEntry(url, title ?: previous?.title ?: url, now, (previous?.visits ?: 0) + 1))
     }
 
-    @Transaction
-    suspend fun updateHistoryTitle(url: String, title: String, now: Long) {
-        val previous = historyByUrl(url)
-        upsertHistory(previous?.copy(title = title) ?: HistoryEntry(url, title, now, 0))
-    }
+    // A title callback is metadata for a visit that was already recorded. Never create a new
+    // history row here: doing so could resurrect an entry after the user clears browsing history.
+    @Query("UPDATE history SET title = :title WHERE url = :url")
+    suspend fun updateHistoryTitle(url: String, title: String): Int
 
     @Query("DELETE FROM history")
     suspend fun clearHistory()
