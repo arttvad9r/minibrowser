@@ -1,5 +1,7 @@
 name: Android
 
+# Baseline/Startup Profile regeneration is intentionally kept out of normal PR CI. This workflow
+# validates the committed profile and production packaging without repeating the costly capture.
 on:
   push:
     branches: [master]
