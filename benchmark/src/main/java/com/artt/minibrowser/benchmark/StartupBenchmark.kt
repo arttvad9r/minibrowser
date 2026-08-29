@@ -15,6 +15,7 @@ import org.junit.runner.RunWith
 
 internal const val TARGET_PACKAGE = "com.artt.minibrowser"
 private const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
+private const val DB_INIT_TRACE = "DbHolder.init"
 private const val TAB_STORE_LOAD_TRACE = "TabStore.loadState"
 private const val TAB_RESTORE_MATERIALIZE_TRACE = "TabManager.restoreTabs"
 private const val TAB_RESTORE_OPEN_SELECTED_TRACE = "TabManager.openSelected"
@@ -53,6 +54,11 @@ class StartupBenchmark {
                     sectionName = GECKO_RUNTIME_CREATE_TRACE,
                     mode = TraceSectionMetric.Mode.First,
                     label = "geckoRuntimeCreate",
+                ),
+                TraceSectionMetric(
+                    sectionName = DB_INIT_TRACE,
+                    mode = TraceSectionMetric.Mode.First,
+                    label = "dbInit",
                 ),
                 TraceSectionMetric(
                     sectionName = TAB_STORE_LOAD_TRACE,
