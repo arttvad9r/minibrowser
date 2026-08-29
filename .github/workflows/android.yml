@@ -77,10 +77,12 @@ jobs:
             # connectedAndroidTest may uninstall the debug target when it finishes. Clear data when
             # the package is still present; otherwise the profile variant will be installed fresh.
             adb shell pm clear com.artt.minibrowser || true
-            ./gradlew :benchmark:connectedProfileAndroidTest \
-              -PminibrowserAbi=x86_64 \
-              -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile \
-              --stacktrace
+            # Regression tests use zero animation scales, but profile collection should exercise
+            # the real Compose/Material motion paths that run on user devices.
+            adb shell settings put global window_animation_scale 1.0
+            adb shell settings put global transition_animation_scale 1.0
+            adb shell settings put global animator_duration_scale 1.0
+            ./gradlew :benchmark:connectedProfileAndroidTest -PminibrowserAbi=x86_64 -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=BaselineProfile --stacktrace
       - name: Upload generated profile rules
         if: always()
         uses: actions/upload-artifact@v4
