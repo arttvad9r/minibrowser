@@ -13,9 +13,7 @@ import kotlin.math.roundToInt
  * In-process cache of real GeckoView renders for the tab switcher.
  *
  * Normal-tab previews stay memory-only and are kept in a byte-bounded LRU. Private tabs are
- * deliberately excluded even from this transient cache: otherwise opening the overview from a
- * normal tab could expose private-page pixels to a screenshot despite FLAG_SECURE being enabled
- * while the private tab itself is active.
+ * deliberately excluded even from this transient cache.
  */
 object TabPreviewStore {
     private const val MAX_PREVIEW_WIDTH = 420
@@ -27,9 +25,6 @@ object TabPreviewStore {
     private var cachedBytes = 0L
     private val lastCapturedUrl = mutableMapOf<Long, String>()
     private val inFlight = mutableSetOf<Long>()
-    // Tab ids are monotonic within a TabManager process. Once an id is removed or invalidated by
-    // browsing-data clearing it must never publish pixels again, even if the old GeckoView manages
-    // one last Compose update before TabManager removes the session.
     private val removedTabs = mutableSetOf<Long>()
     private val privateTabs = mutableSetOf<Long>()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -68,7 +63,12 @@ object TabPreviewStore {
         }
     }
 
-    /** Capture once after a URL has settled; opening/switching tabs can force a fresher frame. */
+    /**
+     * Keep track of the visible GeckoView, but do not take a screenshot automatically when every
+     * page finishes loading. capturePixels() is compositor work and downscaling allocates a bitmap;
+     * doing that on the normal navigation path made page completion visibly hitch. A fresh frame is
+     * captured only when the user actually opens the tab overview or before a session swap.
+     */
     fun maybeCapture(
         view: GeckoView,
         tabId: Long?,
@@ -77,9 +77,8 @@ object TabPreviewStore {
         pageSettled: Boolean,
     ) {
         attach(view, tabId, url, isPrivate)
-        val id = tabId ?: return
-        if (id in removedTabs || isPrivate || !pageSettled || !isPreviewableUrl(url) || lastCapturedUrl[id] == url) return
-        capture(view, id, url)
+        if (!pageSettled) return
+        // Intentionally deferred to captureCurrent()/captureBeforeSessionSwap().
     }
 
     fun captureCurrent() {
@@ -155,7 +154,6 @@ object TabPreviewStore {
                 },
                 {
                     mainHandler.post {
-                        // A compositor that is not ready is a normal transient state; fallback UI stays.
                         inFlight.remove(tabId)
                     }
                 },

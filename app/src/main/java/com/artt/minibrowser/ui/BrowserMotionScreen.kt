@@ -1,8 +1,8 @@
 package com.artt.minibrowser.ui
 
-import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.animation.core.Animatable
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,108 +10,55 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 /**
- * Shared motion container for full-screen browser destinations such as Settings/History/Bookmarks.
- * It keeps the underlying browser composed and exposes an exit callback so taps and Back use the
- * same transition. Predictive Back maps gesture progress directly to the visual state.
+ * Shared full-screen destination container for Settings/History/Bookmarks.
+ *
+ * These screens deliberately use only a short opacity transition. Horizontal translation made
+ * destinations look like side sheets and produced visible stepping when GeckoView was composed
+ * underneath them. Back and toolbar actions use the same exit path.
  */
 @Composable
 fun BrowserMotionScreen(
     onBack: () -> Unit,
     content: @Composable (requestExit: (() -> Unit) -> Unit) -> Unit,
 ) {
-    var entered by remember { mutableStateOf(false) }
-    var leaving by remember { mutableStateOf(false) }
+    var visible by remember { mutableStateOf(false) }
     var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var predictiveActive by remember { mutableStateOf(false) }
-    var predictiveReturning by remember { mutableStateOf(false) }
-    var predictiveProgress by remember { mutableFloatStateOf(0f) }
-    val predictiveReturn = remember { Animatable(1f) }
-    val motionScope = rememberCoroutineScope()
-    val density = LocalDensity.current
-    val travelPx = with(density) { 22.dp.toPx() }
 
-    LaunchedEffect(Unit) { entered = true }
+    LaunchedEffect(Unit) { visible = true }
 
-    val settledProgress by animateFloatAsState(
-        targetValue = if (entered && !leaving) 1f else 0f,
-        animationSpec = MotionTokens.StandardSpatial,
-        label = "browserScreenMotion",
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(MotionTokens.Quick),
+        label = "browserScreenFade",
     )
 
     LaunchedEffect(pendingExit) {
         val action = pendingExit ?: return@LaunchedEffect
-        snapshotFlow { settledProgress }.first { it <= 0.015f }
+        visible = false
+        delay(MotionTokens.Quick.toLong())
         pendingExit = null
         action()
     }
 
     fun requestExit(action: () -> Unit) {
-        if (leaving || pendingExit != null) return
-        leaving = true
+        if (pendingExit != null) return
         pendingExit = action
     }
 
-    PredictiveBackHandler(enabled = !leaving) { events ->
-        var receivedProgress = false
-        try {
-            predictiveReturning = false
-            predictiveActive = true
-            events.collect { event ->
-                receivedProgress = true
-                predictiveProgress = event.progress.coerceIn(0f, 1f)
-            }
-            if (receivedProgress) {
-                predictiveProgress = 1f
-                onBack()
-            } else {
-                predictiveActive = false
-                requestExit(onBack)
-            }
-        } catch (_: CancellationException) {
-            val visibleProgress = (1f - predictiveProgress).coerceIn(0f, 1f)
-            predictiveActive = false
-            predictiveReturning = true
-            motionScope.launch {
-                predictiveReturn.snapTo(visibleProgress)
-                predictiveReturn.animateTo(1f, MotionTokens.StandardSpatial)
-                predictiveProgress = 0f
-                predictiveReturning = false
-            }
-        }
-    }
-
-    val progress = when {
-        predictiveActive -> 1f - predictiveProgress
-        predictiveReturning -> predictiveReturn.value
-        else -> settledProgress
-    }.coerceIn(0f, 1f)
+    BackHandler(enabled = pendingExit == null) { requestExit(onBack) }
 
     Box(
         Modifier
             .fillMaxSize()
-            .graphicsLayer {
-                alpha = progress
-                translationX = (1f - progress) * travelPx
-                val scale = 0.985f + 0.015f * progress
-                scaleX = scale
-                scaleY = scale
-            }
+            .graphicsLayer { this.alpha = alpha }
             .background(MaterialTheme.colorScheme.background),
     ) {
         content(::requestExit)

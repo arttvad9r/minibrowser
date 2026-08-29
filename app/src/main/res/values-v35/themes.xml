@@ -1,0 +1,10 @@
+<resources>
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <!--
+            targetSdk 35 enables edge-to-edge by default on Android 15+. This app still embeds
+            GeckoView in a classic adjustResize window; opting out keeps the Activity bounds
+            synchronized with the IME so Gecko can honor interactive-widget=resizes-content.
+        -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>

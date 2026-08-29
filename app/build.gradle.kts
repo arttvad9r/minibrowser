@@ -50,7 +50,7 @@ kotlin {
     }
 }
 dependencies {
-    implementation("org.mozilla.geckoview:geckoview:154.0.20260814215756")
+    implementation("org.mozilla.geckoview:geckoview:156.0.20260827094544")
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")

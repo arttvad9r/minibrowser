@@ -1,10 +1,5 @@
 package com.artt.minibrowser
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,9 +44,7 @@ import com.artt.minibrowser.ui.BookmarkActionsSheet
 import com.artt.minibrowser.ui.BrowserMotionScreen
 import com.artt.minibrowser.ui.EmptyState
 import com.artt.minibrowser.ui.Favicon
-import com.artt.minibrowser.ui.MotionTokens
 import com.artt.minibrowser.ui.hostOf
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.DateFormat
@@ -59,7 +52,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Date
 
-/** History destination with shared-axis motion and progress-aware Predictive Back. */
+/** History destination. */
 @Composable
 internal fun MotionHistoryScreen(
     repo: HistoryRepository,
@@ -160,7 +153,7 @@ internal fun MotionHistoryScreen(
     }
 }
 
-/** Bookmarks destination with the same motion model as History and Settings. */
+/** Bookmarks destination with the same transition model as History and Settings. */
 @Composable
 internal fun MotionBookmarksScreen(
     bookmarks: List<Bookmark>,
@@ -244,44 +237,17 @@ internal fun MotionBookmarksScreen(
 }
 
 /**
- * Smooth browser loading line: progress changes interpolate instead of jumping, and completion
- * reaches 100% before the indicator fades away. A fast page therefore no longer flashes a bar for
- * a single frame.
+ * Reflect Gecko's real progress without intentionally lagging behind it. The previous interpolated
+ * bar kept animating after Gecko had already reported page completion, which made fast pages look
+ * slower than they were.
  */
 @Composable
 internal fun SmoothPageProgress(tab: Tab?) {
-    val rawProgress = tab?.progress ?: -1f
-    val tabId = tab?.id
-    val progress = remember(tabId) { Animatable(0f) }
-    var visible by remember(tabId) { mutableStateOf(false) }
-
-    LaunchedEffect(tabId, rawProgress) {
-        if (rawProgress >= 0f) {
-            if (!visible) {
-                progress.snapTo(0f)
-                visible = true
-            }
-            progress.animateTo(
-                targetValue = rawProgress.coerceIn(0f, 0.96f),
-                animationSpec = tween(MotionTokens.Standard),
-            )
-        } else if (visible) {
-            progress.animateTo(1f, animationSpec = tween(MotionTokens.Quick))
-            delay(90)
-            visible = false
-            delay(MotionTokens.Quick.toLong())
-            progress.snapTo(0f)
-        }
-    }
-
+    val progress = tab?.progress ?: -1f
     Box(Modifier.fillMaxWidth().height(2.dp)) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(tween(MotionTokens.Quick)),
-            exit = fadeOut(tween(MotionTokens.Quick)),
-        ) {
+        if (progress >= 0f) {
             LinearProgressIndicator(
-                progress = { progress.value },
+                progress = { progress.coerceIn(0f, 1f) },
                 modifier = Modifier.fillMaxWidth().height(2.dp),
             )
         }
