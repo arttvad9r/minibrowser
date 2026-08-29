@@ -2,8 +2,6 @@ package com.artt.minibrowser.ui
 
 // Настройки: компактные группы; большие списки выбора вынесены в bottom sheet.
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -293,7 +291,7 @@ private fun HorizontalDividerThin() {
     )
 }
 
-/** Выбор темы: выбранная карточка меняет поверхность/обводку коротко, без spring. */
+/** Выбор темы без отдельной цветовой анимации: состояние меняется одним кадром. */
 @Composable
 private fun ThemeSelector(selected: Int, onSelect: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -313,16 +311,8 @@ private fun ThemeOption(
     modifier: Modifier = Modifier,
 ) {
     val isSelected = value == selected
-    val background by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant,
-        animationSpec = tween(MotionTokens.Standard),
-        label = "themeBackground",
-    )
-    val border by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
-        animationSpec = tween(MotionTokens.Standard),
-        label = "themeBorder",
-    )
+    val background = if (isSelected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
+    val border = if (isSelected) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant
 
     Column(
         modifier
