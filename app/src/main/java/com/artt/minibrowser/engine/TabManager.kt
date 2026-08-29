@@ -5,7 +5,6 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -80,8 +79,11 @@ internal class PersistSignalQueue(
     },
 ) {
     private companion object {
-        const val TRAILING_DEBOUNCE_NS = 1_000_000_000L
-        const val HARD_DEADLINE_NS = 3_000_000_000L
+        // SessionState changes can arrive continuously while a page is being scrolled or edited.
+        // Persist after a short quiet period, with a bounded fallback for long interactions. App
+        // backgrounding still sends PersistSignal.Immediate, so lifecycle durability is unchanged.
+        const val TRAILING_DEBOUNCE_NS = 1_500_000_000L
+        const val HARD_DEADLINE_NS = 5_000_000_000L
     }
 
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
@@ -234,7 +236,6 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var url by mutableStateOf("")
     var title by mutableStateOf("")
     var progress by mutableFloatStateOf(-1f)
-    var scrollY by mutableIntStateOf(0)
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
     var desktop by mutableStateOf(false)
@@ -323,7 +324,7 @@ class TabManager(
         val tab = createTab(private)
         deactivateOthers(tab.id)
         currentId.value = tab.id
-        tab.session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
+        tab.session.setPriorityHint(if (appVisible) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT)
         runtime.webExtensionController.setTabActive(tab.session, true)
         return tab.session
     }
@@ -585,7 +586,6 @@ class TabManager(
                 tab.progressGate.accept(progress = 5)
                 tab.loadError = null
                 tab.securityState = SecurityState.Unknown
-                tab.scrollY = 0
                 tab.progress = 0.05f
                 tab.historyTitleUrl = null
                 tab.url = url
@@ -612,6 +612,12 @@ class TabManager(
                 tab.latestSessionState = state
                 tab.latestSessionStateUrl = currentSessionStateUrl(state)
                 if (!tab.isPrivate) requestPersist(immediate = false)
+                // setActive(false) flushes state asynchronously. If this is a cold background tab,
+                // retry the budget once that restorable state actually arrives instead of waiting
+                // for another user tab switch.
+                if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > hotTabLimit) {
+                    enforceHotTabBudget()
+                }
             }
         }
 
@@ -671,12 +677,6 @@ class TabManager(
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
                 if (BuildConfig.DEBUG) Log.d("MinibrowserNavigation", "new session uri=$uri")
                 return GeckoResult.fromValue(newWindowSession(tab.isPrivate))
-            }
-        }
-
-        tab.session.scrollDelegate = object : GeckoSession.ScrollDelegate {
-            override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
-                tab.scrollY = scrollY.coerceAtLeast(0)
             }
         }
 
@@ -786,7 +786,6 @@ class TabManager(
         closeIfOpen(tab.session)
         tab.canGoBack = false
         tab.canGoForward = false
-        tab.scrollY = 0
         val fresh = GeckoSession(sessionSettings(tab.isPrivate))
         tab.session = fresh
         attachDelegates(tab)
