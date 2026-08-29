@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,13 +21,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -228,6 +233,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         tabManager = TabManager(
             Engine.runtime,
             File(filesDir, "tabs"),
@@ -301,6 +307,9 @@ class MainActivity : ComponentActivity() {
             val currentSession = currentTab?.session
             val focusManager = LocalFocusManager.current
             val omniboxFocus = remember { FocusRequester() }
+            val horizontalSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+            val topSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top)
+            val bottomSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
 
             // Уход с браузера закрывает подсказки омнибокса (попап рисуется поверх любых экранов).
             LaunchedEffect(screen, showSwitcher) {
@@ -373,54 +382,66 @@ class MainActivity : ComponentActivity() {
                         .background(MaterialTheme.colorScheme.background)
                         .focusable(),
                 ) {
-                    Box(Modifier.fillMaxSize().systemBarsPadding()) {
-                        Column(Modifier.fillMaxSize()) {
-                            if (!inFullscreen) TopBar(
-                                currentTab,
-                                engine = prefs.searchEngine,
-                                tabCount = tabs.size,
-                                bookmarked = bookmarked,
-                                iconsDir = iconsDir,
-                                omniboxFocus = omniboxFocus,
-                                suggestions = omniboxSuggestionsUi.suggestions,
-                                onSuggestionQueryChanged = omniboxSuggestionsViewModel::updateQuery,
-                                onNavigate = { uri ->
-                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
-                                },
-                                onExternal = ::openExternalUri,
-                                onBack = { currentSession?.goBack() },
-                                onForward = { currentSession?.goForward() },
-                                onReload = { currentSession?.reload() },
-                                onSiteInfo = { browserViewModel.showSiteInfo(true) },
-                                onSwitcher = {
-                                    TabPreviewStore.captureCurrent()
-                                    browserViewModel.showSwitcher(true)
-                                },
-                                onNewTab = { tabManager.newTab(null) },
-                                onNewPrivateTab = { tabManager.newTab(null, private = true) },
-                                onFind = { browserViewModel.showFind(true) },
-                                onToggleBookmark = {
-                                    val t = currentTab ?: return@TopBar
-                                    pageBookmarkViewModel.toggle(t.url, t.title)
-                                },
-                                onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
-                                onHistory = { browserViewModel.screen(BrowserScreen.History) },
-                                onShare = onShare,
-                                onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
-                                onToggleAdblock = toggleAdblock,
-                                onRetryAdblock = retryAdblock,
-                                adblockStatus = adblockStatus,
-                                onTranslate = {
-                                    val u = currentTab?.url ?: return@TopBar
-                                    buildTranslateUri(u, prefs.translateTarget)?.let(currentTab.session::loadUri)
-                                },
-                            )
+                    Box(Modifier.fillMaxSize()) {
+                        Column(
+                            Modifier
+                                .fillMaxSize()
+                                .windowInsetsPadding(horizontalSafeInsets),
+                        ) {
+                            if (!inFullscreen) {
+                                Box(Modifier.windowInsetsPadding(topSafeInsets)) {
+                                    TopBar(
+                                        currentTab,
+                                        engine = prefs.searchEngine,
+                                        tabCount = tabs.size,
+                                        bookmarked = bookmarked,
+                                        iconsDir = iconsDir,
+                                        omniboxFocus = omniboxFocus,
+                                        suggestions = omniboxSuggestionsUi.suggestions,
+                                        onSuggestionQueryChanged = omniboxSuggestionsViewModel::updateQuery,
+                                        onNavigate = { uri ->
+                                            (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                        },
+                                        onExternal = ::openExternalUri,
+                                        onBack = { currentSession?.goBack() },
+                                        onForward = { currentSession?.goForward() },
+                                        onReload = { currentSession?.reload() },
+                                        onSiteInfo = { browserViewModel.showSiteInfo(true) },
+                                        onSwitcher = {
+                                            TabPreviewStore.captureCurrent()
+                                            browserViewModel.showSwitcher(true)
+                                        },
+                                        onNewTab = { tabManager.newTab(null) },
+                                        onNewPrivateTab = { tabManager.newTab(null, private = true) },
+                                        onFind = { browserViewModel.showFind(true) },
+                                        onToggleBookmark = {
+                                            val t = currentTab ?: return@TopBar
+                                            pageBookmarkViewModel.toggle(t.url, t.title)
+                                        },
+                                        onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
+                                        onHistory = { browserViewModel.screen(BrowserScreen.History) },
+                                        onShare = onShare,
+                                        onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
+                                        onToggleAdblock = toggleAdblock,
+                                        onRetryAdblock = retryAdblock,
+                                        adblockStatus = adblockStatus,
+                                        onTranslate = {
+                                            val u = currentTab?.url ?: return@TopBar
+                                            buildTranslateUri(u, prefs.translateTarget)?.let(currentTab.session::loadUri)
+                                        },
+                                    )
+                                }
+                            }
                             if (showFind && currentSession != null && !inFullscreen) {
                                 key(currentTab.id) {
                                     FindBar(currentSession) { browserViewModel.showFind(false) }
                                 }
                             }
-                            Box(Modifier.weight(1f)) {
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .windowInsetsPadding(bottomSafeInsets),
+                            ) {
                                 GeckoContent(currentTab, Modifier.fillMaxSize())
                                 SmoothPageProgress(currentTab)
                                 if (showStart) {
