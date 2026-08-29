@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.artt.minibrowser"
     compileSdk = 37
+    compileSdkMinor = 1
 
     defaultConfig {
         applicationId = "com.artt.minibrowser"
