@@ -47,4 +47,18 @@ class SessionStateUrlTest {
             ),
         )
     }
+
+    @Test
+    fun legacySerializedStateWithoutUrlBindingIsRejected() {
+        assertEquals(
+            SessionStateSelection(null, null),
+            selectSessionStateForUrl(
+                tabUrl = "https://example.com/new",
+                latestState = null,
+                latestStateUrl = null,
+                serializedState = "legacy persisted state",
+                serializedStateUrl = null,
+            ),
+        )
+    }
 }
