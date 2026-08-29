@@ -240,7 +240,13 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showClearDialog = false; onClearData(withBookmarks) }) {
+                TextButton(
+                    onClick = {
+                        showClearDialog = false
+                        clearFaviconCaches(java.io.File(context.filesDir, "icons"))
+                        onClearData(withBookmarks)
+                    },
+                ) {
                     Text("Очистить")
                 }
             },
