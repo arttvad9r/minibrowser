@@ -119,11 +119,7 @@ internal class StartPageViewModel : ViewModel {
         when (_uiState.value.error) {
             StartPageOperation.Load -> refresh()
             StartPageOperation.RefreshRecent -> refreshRecent()
-            StartPageOperation.Add,
-            StartPageOperation.Rename,
-            StartPageOperation.Delete,
-            null,
-            -> dismissError()
+            StartPageOperation.Add, StartPageOperation.Rename, StartPageOperation.Delete, null -> dismissError()
         }
     }
 
