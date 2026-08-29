@@ -57,7 +57,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +83,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.browser.ActivityRequestCoordinator
+import com.artt.minibrowser.browser.BrowserDataViewModel
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.NavigationController
@@ -123,7 +123,6 @@ import com.artt.minibrowser.ui.TabPreviewStore
 import com.artt.minibrowser.ui.ToggleRow
 import com.artt.minibrowser.ui.hostOf
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
@@ -140,6 +139,23 @@ class MainActivity : ComponentActivity() {
             this,
             SettingsViewModel.factory(settingsRepo, Engine.runtime),
         )[SettingsViewModel::class.java]
+    }
+    private val browserDataViewModel by lazy {
+        ViewModelProvider(
+            this,
+            BrowserDataViewModel.factory(
+                clearTabPreviews = TabPreviewStore::clear,
+                clearHistory = { historyRepo.clear() },
+                clearBookmarks = { bookmarksRepo.clearAll() },
+                clearFaviconCaches = {
+                    com.artt.minibrowser.ui.clearFaviconCaches(File(filesDir, "icons"))
+                },
+                clearWebData = {
+                    tabManager.clearWebData()
+                    Unit
+                },
+            ),
+        )[BrowserDataViewModel::class.java]
     }
     private val pageBookmarkViewModel by lazy {
         ViewModelProvider(
@@ -266,10 +282,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val settingsUi by settingsViewModel.uiState.collectAsStateWithLifecycle()
+            val browserDataUi by browserDataViewModel.uiState.collectAsStateWithLifecycle()
             val prefs = settingsUi.prefs
             val adblockStatus = settingsUi.adblockStatus
             val votStatus = settingsUi.votStatus
-            val scope = rememberCoroutineScope()
             val darkTheme = when (prefs.theme) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
             val browserUi by browserViewModel.state.collectAsStateWithLifecycle()
             val pageBookmarkUi by pageBookmarkViewModel.uiState.collectAsStateWithLifecycle()
@@ -453,15 +469,10 @@ class MainActivity : ComponentActivity() {
                                     votStatus = votStatus,
                                     onVot = toggleVot,
                                     onRetryVot = retryVot,
+                                    onClearData = browserDataViewModel::clear,
+                                    clearDataInProgress = browserDataUi.isClearing,
+                                    clearDataFailed = browserDataUi.clearFailed,
                                     onTranslateLang = settingsViewModel::setTranslateTarget,
-                                    onClearData = { withBookmarks ->
-                                        scope.launch {
-                                            historyRepo.clear()
-                                            if (withBookmarks) bookmarksRepo.clearAll()
-                                            com.artt.minibrowser.ui.clearFaviconCaches(iconsDir)
-                                            tabManager.clearWebData()
-                                        }
-                                    },
                                 )
                             }
                         }
