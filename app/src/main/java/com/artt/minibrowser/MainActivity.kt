@@ -5,7 +5,6 @@ package com.artt.minibrowser
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,14 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -56,14 +47,10 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -97,12 +84,12 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import com.artt.minibrowser.data.Bookmark
-import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.ActivityRequestCoordinator
-import com.artt.minibrowser.browser.NavigationController
+import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
+import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.areRequestedPermissionsSatisfied
+import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryEntry
@@ -112,8 +99,8 @@ import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.Engine
 import com.artt.minibrowser.engine.ExtensionLoader
-import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.NavigationTarget
+import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.engine.TabManager
@@ -122,13 +109,10 @@ import com.artt.minibrowser.engine.buildTranslateUri
 import com.artt.minibrowser.engine.createSafeExternalIntent
 import com.artt.minibrowser.engine.formatFindCounter
 import com.artt.minibrowser.engine.safeExternalFallbackUrl
-import com.artt.minibrowser.ui.AddBookmarkSheet
 import com.artt.minibrowser.ui.AppIcons
-import com.artt.minibrowser.ui.BookmarkActionsSheet
 import com.artt.minibrowser.ui.BrowserBottomSheet
 import com.artt.minibrowser.ui.BrowserTabSwitcher
 import com.artt.minibrowser.ui.BrowserTextField
-import com.artt.minibrowser.ui.EmptyState
 import com.artt.minibrowser.ui.Favicon
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.QuickAction
@@ -145,9 +129,6 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import java.io.File
-import java.text.DateFormat
-import java.util.Calendar
-import java.util.Date
 
 class MainActivity : ComponentActivity() {
     private val settingsRepo by lazy { SettingsRepository(this) }
@@ -314,7 +295,6 @@ class MainActivity : ComponentActivity() {
                 val u = currentTab?.url
                 bookmarked = !u.isNullOrBlank() && u.startsWith("http") && bookmarksRepo.isBookmarked(u)
             }
-            // Недавние страницы для домашнего экрана.
             var recent by remember { mutableStateOf(emptyList<HistoryEntry>()) }
             var recentReload by remember { mutableIntStateOf(0) }
             val showStart = screen == BrowserScreen.Browser &&
@@ -323,11 +303,9 @@ class MainActivity : ComponentActivity() {
                 if (showStart) recent = historyRepo.recent(3)
             }
 
-            // Системный back на странице браузера — назад по истории вкладки.
             BackHandler(enabled = screen == BrowserScreen.Browser && currentTab?.canGoBack == true) {
                 currentTab?.session?.goBack()
             }
-            // Во время fullscreen-видео back выходит из полноэкранного режима.
             val inFullscreen = currentTab?.fullscreen == true
             BackHandler(enabled = inFullscreen) { currentSession?.exitFullScreen() }
             BackHandler(enabled = showFind) {
@@ -366,9 +344,11 @@ class MainActivity : ComponentActivity() {
                     startActivity(
                         Intent.createChooser(
                             Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"; putExtra(Intent.EXTRA_TEXT, u)
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, u)
                             },
-                            "Поделиться")
+                            "Поделиться",
+                        ),
                     )
                 }
             }
@@ -378,8 +358,6 @@ class MainActivity : ComponentActivity() {
                     Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
-                        // Принимает на себя restoreDefaultFocus при получении окном фокуса,
-                        // иначе фокус уходит в первое поле (омнибокс) и выезжает клавиатура.
                         .focusable(),
                 ) {
                     Box(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -422,12 +400,12 @@ class MainActivity : ComponentActivity() {
                                 onSuggest = { q -> historyRepo.suggest(q) },
                                 onToggleAdblock = toggleAdblock,
                                 onRetryAdblock = retryAdblock,
-                                adblockEnabled = prefs.adblockEnabled,
                                 adblockStatus = adblockStatus,
                                 onTranslate = {
                                     val u = currentTab?.url ?: return@TopBar
                                     buildTranslateUri(u, prefs.translateTarget)?.let(currentTab.session::loadUri)
-                                })
+                                },
+                            )
                             if (showFind && currentSession != null && !inFullscreen) {
                                 key(currentTab.id) {
                                     FindBar(currentSession) { browserViewModel.showFind(false) }
@@ -451,7 +429,8 @@ class MainActivity : ComponentActivity() {
                                                 bookmarksRepo.add(url, title)
                                                 bmReload++
                                             }
-                                        })
+                                        },
+                                    )
                                 }
                                 if (!showStart && currentTab?.loadError != null) {
                                     ErrorOverlay(currentTab.loadError.orEmpty()) { currentSession?.reload() }
@@ -494,7 +473,8 @@ class MainActivity : ComponentActivity() {
                                 onOpen = { uri ->
                                     browserViewModel.screen(BrowserScreen.Browser)
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
-                                })
+                                },
+                            )
                         }
                         if (screen == BrowserScreen.Bookmarks) Box(Modifier.fillMaxSize()) {
                             MotionBookmarksScreen(
@@ -505,9 +485,9 @@ class MainActivity : ComponentActivity() {
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
                                 onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
-                                onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } })
+                                onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } },
+                            )
                         }
-                        // Переключатель вкладок — полноэкранный слой поверх браузера.
                         if (showSwitcher) {
                             BrowserTabSwitcher(
                                 tabs, currentId, iconsDir,
@@ -517,7 +497,8 @@ class MainActivity : ComponentActivity() {
                                     tabManager.closeTab(it)
                                 },
                                 onNew = { browserViewModel.showSwitcher(false); tabManager.newTab(null) },
-                                onDismiss = { browserViewModel.showSwitcher(false) })
+                                onDismiss = { browserViewModel.showSwitcher(false) },
+                            )
                         }
                         if (showSiteInfo && currentTab != null) {
                             SiteInfoSheet(currentTab, prefs.adblockEnabled) { browserViewModel.showSiteInfo(false) }
@@ -526,7 +507,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        // Холодный старт с VIEW-интентом: хук ещё не готов — uri уйдёт в pendingUri.
         externalNavigation.accept(intent?.data?.toString())
     }
 
@@ -549,6 +529,7 @@ class MainActivity : ComponentActivity() {
         pendingPermissionRequest = emptySet()
         permissionCompletion = null
         fileCompletion = null
+        if (::tabManager.isInitialized) tabManager.close()
         super.onDestroy()
     }
 }
@@ -586,19 +567,6 @@ private fun GeckoContent(
 }
 
 @Composable
-private fun PageProgress(tab: Tab?) {
-    val progress = tab?.progress ?: -1f
-    if (progress >= 0f) {
-        LinearProgressIndicator(
-            progress = { progress },
-            Modifier.fillMaxWidth().height(2.dp),
-        )
-    }
-}
-
-// ---------- Верхняя панель: омнибокс + подсказки + действия ----------
-
-@Composable
 private fun TopBar(
     tab: Tab?,
     engine: SearchEngine,
@@ -606,7 +574,6 @@ private fun TopBar(
     bookmarked: Boolean,
     iconsDir: File,
     omniboxFocus: FocusRequester,
-    adblockEnabled: Boolean,
     adblockStatus: ExtensionLoader.Status?,
     onToggleAdblock: (Boolean) -> Unit,
     onRetryAdblock: () -> Unit,
@@ -774,7 +741,7 @@ private fun TopBar(
                 Popup(
                     alignment = Alignment.TopStart,
                     offset = IntOffset(0, fieldSize.height + offsetY),
-                    onDismissRequest = {},
+                    onDismissRequest = { focusManager.clearFocus(force = true) },
                 ) {
                     Column(
                         Modifier
@@ -797,8 +764,10 @@ private fun TopBar(
                 }
             }
         }
-        IconButton(onClick = { focusManager.clearFocus(force = true); onNewTab() },
-            modifier = Modifier.semantics { contentDescription = "Новая вкладка" }) {
+        IconButton(
+            onClick = { focusManager.clearFocus(force = true); onNewTab() },
+            modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
+        ) {
             Icon(Icons.Filled.Add, null)
         }
         Box(
@@ -812,8 +781,10 @@ private fun TopBar(
         ) {
             Text("$tabCount", style = MaterialTheme.typography.titleMedium)
         }
-        IconButton(onClick = { focusManager.clearFocus(force = true); menuOpen = true },
-            modifier = Modifier.semantics { contentDescription = "Меню" }) {
+        IconButton(
+            onClick = { focusManager.clearFocus(force = true); menuOpen = true },
+            modifier = Modifier.semantics { contentDescription = "Меню" },
+        ) {
             Icon(Icons.Filled.MoreVert, null)
         }
     }
@@ -822,7 +793,6 @@ private fun TopBar(
         MenuSheet(
             tab = tab,
             bookmarked = bookmarked,
-            adblockEnabled = adblockEnabled,
             adblockStatus = adblockStatus,
             onDismiss = { menuOpen = false },
             onNewTab = onNewTab,
@@ -867,10 +837,20 @@ private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
         Favicon(hostOf(s.url), iconsDir, 24.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(s.label.ifBlank { s.url }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                s.label.ifBlank { s.url },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
             if (s.label.isNotBlank()) {
-                Text(hostOf(s.url).ifBlank { s.url }, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    hostOf(s.url).ifBlank { s.url },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -880,7 +860,6 @@ private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
 private fun MenuSheet(
     tab: Tab?,
     bookmarked: Boolean,
-    adblockEnabled: Boolean,
     adblockStatus: ExtensionLoader.Status?,
     onDismiss: () -> Unit,
     onNewTab: () -> Unit,
@@ -909,9 +888,24 @@ private fun MenuSheet(
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            MenuNavigationAction(Icons.AutoMirrored.Filled.ArrowBack, "Назад", tab?.canGoBack == true, Modifier.weight(1f)) { onDismiss(); onBack() }
-            MenuNavigationAction(Icons.AutoMirrored.Filled.ArrowForward, "Вперёд", tab?.canGoForward == true, Modifier.weight(1f)) { onDismiss(); onForward() }
-            MenuNavigationAction(Icons.Filled.Refresh, "Обновить", tab != null && tab.url.isNotBlank(), Modifier.weight(1f)) { onDismiss(); onReload() }
+            MenuNavigationAction(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                "Назад",
+                tab?.canGoBack == true,
+                Modifier.weight(1f),
+            ) { onDismiss(); onBack() }
+            MenuNavigationAction(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                "Вперёд",
+                tab?.canGoForward == true,
+                Modifier.weight(1f),
+            ) { onDismiss(); onForward() }
+            MenuNavigationAction(
+                Icons.Filled.Refresh,
+                "Обновить",
+                httpPage,
+                Modifier.weight(1f),
+            ) { onDismiss(); onReload() }
             MenuNavigationAction(
                 if (bookmarked) Icons.Filled.Star else AppIcons.Star,
                 if (bookmarked) "Убрать из закладок" else "В закладки",
@@ -927,27 +921,33 @@ private fun MenuSheet(
             QuickAction(AppIcons.History, "История", { onDismiss(); onHistory() })
         }
         MenuDivider()
-        SheetRow(Icons.Filled.Search, "Найти на странице", enabled = true, onClick = { onDismiss(); onFind() })
-        SheetRow(AppIcons.Desktop, "Версия для ПК", enabled = tab != null,
-            trailing = {
-                Switch(
-                    checked = tab?.desktop == true,
-                    onCheckedChange = null,
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = MaterialTheme.colorScheme.primary,
-                        checkedThumbColor = MaterialTheme.colorScheme.surface,
-                    ),
-                )
-            },
-            onClick = { onDismiss(); onToggleDesktop() })
+        SheetRow(Icons.Filled.Search, "Найти на странице", enabled = httpPage, onClick = { onDismiss(); onFind() })
+        if (httpPage && tab != null) {
+            ToggleRow(
+                AppIcons.Desktop,
+                "Версия для ПК",
+                tab.desktop,
+                onChecked = { onDismiss(); onToggleDesktop() },
+            )
+        }
         SheetRow(Icons.Filled.Share, "Поделиться", enabled = httpPage, onClick = { onDismiss(); onShare() })
         SheetRow(AppIcons.Globe, "Перевести страницу", enabled = httpPage, onClick = { onDismiss(); onTranslate() })
         MenuDivider()
         when (adblockStatus) {
             null, ExtensionLoader.Status.Installing ->
-                SheetRow(AppIcons.Shield, "Блокировка рекламы", enabled = false, trailing = { Text("Запуск…", color = MaterialTheme.colorScheme.onSurfaceVariant) })
+                SheetRow(
+                    AppIcons.Shield,
+                    "Блокировка рекламы",
+                    enabled = false,
+                    trailing = { Text("Запуск…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                )
             ExtensionLoader.Status.Error ->
-                SheetRow(AppIcons.Shield, "Блокировка рекламы", trailing = { Text("Ошибка · повторить", color = MaterialTheme.colorScheme.error) }, onClick = { onDismiss(); onRetryAdblock() })
+                SheetRow(
+                    AppIcons.Shield,
+                    "Блокировка рекламы",
+                    trailing = { Text("Ошибка · повторить", color = MaterialTheme.colorScheme.error) },
+                    onClick = { onDismiss(); onRetryAdblock() },
+                )
             ExtensionLoader.Status.Enabled ->
                 ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
             ExtensionLoader.Status.Disabled ->
@@ -986,104 +986,48 @@ private fun MenuDivider() {
 }
 
 @Composable
-private fun TabSwitcher(
-    tabs: List<Tab>,
-    currentId: Long?,
-    iconsDir: File,
-    onSelect: (Long) -> Unit,
-    onClose: (Long) -> Unit,
-    onNew: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onDismiss, modifier = Modifier.semantics { contentDescription = "Закрыть" }) { Icon(AppIcons.ChevronDown, null) }
-            Text("${tabs.size} ${tabsPlural(tabs.size)}", Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyLarge)
-            IconButton(onClick = onNew, modifier = Modifier.semantics { contentDescription = "Новая вкладка" }) { Icon(Icons.Filled.Add, null) }
-        }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            items(tabs, key = { it.id }) { tab ->
-                TabCard(tab, isCurrent = tab.id == currentId, iconsDir, onSelect = { onSelect(tab.id) }, onClose = { onClose(tab.id) })
-            }
-        }
-    }
-}
-
-private fun tabsPlural(n: Int) = when {
-    n % 10 == 1 && n % 100 != 11 -> "вкладка"
-    n % 10 in 2..4 && (n % 100 < 12 || n % 100 > 14) -> "вкладки"
-    else -> "вкладок"
-}
-
-@Composable
-private fun TabCard(
-    tab: Tab,
-    isCurrent: Boolean,
-    iconsDir: File,
-    onSelect: () -> Unit,
-    onClose: () -> Unit,
-) {
-    val host = hostOf(tab.url)
-    Column(
-        Modifier
-            .clip(Radius.card)
-            .background(if (tab.isPrivate) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surface)
-            .border(1.dp, if (isCurrent) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant, Radius.card)
-            .clickable(onClick = onSelect),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 2.dp, top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (tab.isPrivate) Icon(AppIcons.Incognito, "Приватная вкладка", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            else Favicon(host, iconsDir, 18.dp)
-            Spacer(Modifier.width(6.dp))
-            Text(
-                tab.title.ifBlank { if (tab.url.isBlank() || tab.url == "about:blank") "Новая вкладка" else tab.url },
-                Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge,
-            )
-            Box(Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClose).semantics { contentDescription = "Закрыть вкладку" }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Close, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Row(
-            Modifier.padding(horizontal = 10.dp).fillMaxWidth().height(32.dp).clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(host.ifBlank { "Поиск" }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
-            if (tab.isPrivate) Icon(AppIcons.Incognito, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-            else if (host.isNotBlank()) Favicon(host, iconsDir, 40.dp)
-            else Icon(AppIcons.Globe, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-        }
-    }
-}
-
-@Composable
 private fun FindBar(session: GeckoSession, onClose: () -> Unit) {
     var q by remember { mutableStateOf("") }
     var current by remember { mutableIntStateOf(0) }
     var total by remember { mutableIntStateOf(0) }
     val doFind: (Boolean) -> Unit = { backward ->
-        if (q.isBlank()) { session.finder.clear(); total = 0; current = 0 }
-        else {
-            session.finder.find(q, if (backward) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD).accept { r ->
-                total = r?.total ?: 0; current = r?.current ?: 0
+        if (q.isBlank()) {
+            session.finder.clear()
+            total = 0
+            current = 0
+        } else {
+            session.finder.find(
+                q,
+                if (backward) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD,
+            ).accept { result ->
+                total = result?.total ?: 0
+                current = result?.current ?: 0
             }
         }
     }
     Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.weight(1f).clip(Radius.field).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier
+                .weight(1f)
+                .clip(Radius.field)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             BrowserTextField(q, { q = it; doFind(false) }, Modifier.weight(1f), placeholder = "Найти на странице")
-            if (total > 0) Text(formatFindCounter(current, total), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (total > 0) {
+                Text(
+                    formatFindCounter(current, total),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         IconBtn(Icons.Filled.KeyboardArrowUp, "Предыдущее") { doFind(true) }
         IconBtn(Icons.Filled.KeyboardArrowDown, "Следующее") { doFind(false) }
@@ -1112,129 +1056,33 @@ private fun SiteInfoSheet(tab: Tab, adblockEnabled: Boolean, onDismiss: () -> Un
         Spacer(Modifier.height(4.dp))
         Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
-        SheetRow(AppIcons.Shield, "Блокировка рекламы", trailing = { Text(if (adblockEnabled) "Вкл" else "Выкл", color = MaterialTheme.colorScheme.onSurfaceVariant) })
+        SheetRow(
+            AppIcons.Shield,
+            "Блокировка рекламы",
+            trailing = { Text(if (adblockEnabled) "Вкл" else "Выкл", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+        )
     }
 }
 
 @Composable
 private fun ErrorOverlay(message: String, onRetry: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 24.dp),
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text(message, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
-        Text("Проверьте адрес и соединение", style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        Text(
+            "Проверьте адрес и соединение",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(12.dp))
         TextButton(onClick = onRetry) { Text("Повторить") }
-    }
-}
-
-@Composable
-private fun HistoryScreen(
-    repo: HistoryRepository,
-    iconsDir: File,
-    onBack: () -> Unit,
-    onOpen: (String) -> Unit,
-) {
-    var entries by remember { mutableStateOf(emptyList<HistoryEntry>()) }
-    var reload by remember { mutableIntStateOf(0) }
-    val scope = rememberCoroutineScope()
-    val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
-    LaunchedEffect(reload) { entries = repo.recent(200) }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
-            Text("История", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = { scope.launch { repo.clear(); reload++ } }) { Text("Очистить", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        if (entries.isEmpty()) EmptyState(AppIcons.History, "История пуста", "Посещённые страницы появятся здесь.")
-        else {
-            val groups = remember(entries) { groupByDay(entries) }
-            LazyColumn(Modifier.fillMaxSize()) {
-                groups.forEach { (label, items) ->
-                    item(key = "header_$label") {
-                        Text(label, Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp), style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    items(items, key = { it.url }) { e ->
-                        Row(Modifier.fillMaxWidth().clickable { onOpen(e.url) }.padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Favicon(hostOf(e.url), iconsDir, 28.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(e.title.ifBlank { e.url }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                                Text("${hostOf(e.url)} · ${timeFormat.format(Date(e.visitedAt))}", maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun groupByDay(entries: List<HistoryEntry>): List<Pair<String, List<HistoryEntry>>> {
-    val cal = Calendar.getInstance()
-    val today = cal.clone() as Calendar
-    today.set(Calendar.HOUR_OF_DAY, 0); today.set(Calendar.MINUTE, 0); today.set(Calendar.SECOND, 0)
-    val todayStart = today.timeInMillis
-    val yesterdayStart = todayStart - 24 * 60 * 60 * 1000L
-    val groups = linkedMapOf("Сегодня" to mutableListOf<HistoryEntry>(), "Вчера" to mutableListOf<HistoryEntry>(), "Ранее" to mutableListOf<HistoryEntry>())
-    entries.forEach { e ->
-        when {
-            e.visitedAt >= todayStart -> groups.getValue("Сегодня").add(e)
-            e.visitedAt >= yesterdayStart -> groups.getValue("Вчера").add(e)
-            else -> groups.getValue("Ранее").add(e)
-        }
-    }
-    return groups.filter { it.value.isNotEmpty() }.map { it.key to it.value.toList() }
-}
-
-@Composable
-private fun BookmarksScreen(
-    bookmarks: List<Bookmark>,
-    iconsDir: File,
-    onBack: () -> Unit,
-    onOpen: (String) -> Unit,
-    onRename: (String, String) -> Unit,
-    onDelete: (String) -> Unit,
-) {
-    var selected by remember { mutableStateOf<Bookmark?>(null) }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
-            Text("Закладки", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-        }
-        if (bookmarks.isEmpty()) EmptyState(AppIcons.Star, "Закладок пока нет", "Сохранённые страницы появятся здесь.")
-        else {
-            LazyColumn(Modifier.fillMaxSize()) {
-                items(bookmarks, key = { it.url }) { bm ->
-                    Row(Modifier.fillMaxWidth().clickable { onOpen(bm.url) }.padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Favicon(bm.host, iconsDir, 40.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(bm.title.ifBlank { bm.host }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                            Text(hostOf(bm.url).ifBlank { bm.url }, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        IconButton(onClick = { selected = bm }, modifier = Modifier.size(40.dp).semantics { contentDescription = "Действия" }) {
-                            Icon(Icons.Filled.MoreVert, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    selected?.let { sel ->
-        BookmarkActionsSheet(
-            bookmark = sel,
-            onDismiss = { selected = null },
-            onOpen = { onOpen(sel.url); selected = null },
-            onRename = { onRename(sel.url, it); selected = null },
-            onDelete = { onDelete(sel.url); selected = null },
-        )
     }
 }
