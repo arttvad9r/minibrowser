@@ -8,7 +8,6 @@ import android.os.Build
 import android.os.Process
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.DbHolder
-import com.artt.minibrowser.data.DownloadHistory
 import com.artt.minibrowser.ui.TabPreviewStore
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
@@ -36,7 +35,8 @@ class BrowserApp : Application() {
             backgroundBytes = performance.backgroundPreviewCacheBytes,
         )
         DbHolder.init(this)
-        DownloadHistory.init(this)
+        // Download history is intentionally lazy: most launches never open Downloads or start a
+        // transfer, so reading/parsing downloads.json must not compete with GeckoRuntime cold start.
         val contentBlocking = ContentBlocking.Settings.Builder()
             .safeBrowsing(ContentBlocking.SafeBrowsing.DEFAULT)
             .cookieBehavior(ContentBlocking.CookieBehavior.ACCEPT_FIRST_PARTY_AND_ISOLATE_OTHERS)
