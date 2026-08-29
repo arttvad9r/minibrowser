@@ -73,6 +73,10 @@ private object DownloadIo {
     ) {
         val appContext = context.applicationContext
         scope.launch {
+            // History restore is lazy so ordinary browser startup never touches downloads.json.
+            // init() only schedules IO; start() can run immediately and its live entry wins when
+            // the older persisted snapshot is merged later.
+            if (persistHistory) DownloadHistory.init(appContext)
             val historyId = if (persistHistory) DownloadHistory.start(name, sourceUrl, mime) else null
             val result = runCatching {
                 body.use { input ->
