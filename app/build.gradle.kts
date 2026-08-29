@@ -34,14 +34,20 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
+        // Performance measurements must use the same R8/shrinker behavior as production.
         create("benchmark") {
             initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             isDebuggable = false
-            // Baseline/Profile generation must observe stable, original method signatures. A
-            // minified/optimized target would generate rules for R8-transformed code and make the
-            // captured profile unsuitable for the real release source graph.
+        }
+        // Profile collection is deliberately separate: generated HRF rules must reference stable,
+        // unobfuscated source method signatures. The release/benchmark variants remain optimized.
+        create("profile") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
             isMinifyEnabled = false
             isShrinkResources = false
         }
