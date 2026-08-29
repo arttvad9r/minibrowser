@@ -319,7 +319,7 @@ private fun ThemeOption(
             .clip(Radius.button)
             .background(background)
             .border(width = 1.dp, color = border, shape = Radius.button)
-            .softClickable(pressedScale = 0.96f) { onSelect(value) }
+            .softClickable { onSelect(value) }
             .padding(vertical = 11.dp)
             .semantics { contentDescription = label },
         horizontalAlignment = Alignment.CenterHorizontally,
