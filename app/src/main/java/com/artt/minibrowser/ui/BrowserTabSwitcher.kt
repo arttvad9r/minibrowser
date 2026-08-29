@@ -1,7 +1,7 @@
 package com.artt.minibrowser.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -33,10 +33,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +52,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.engine.Tab
-import kotlinx.coroutines.delay
 import java.io.File
 
 /**
@@ -71,37 +71,41 @@ fun BrowserTabSwitcher(
     onNew: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var visible by remember { mutableStateOf(false) }
+    val reveal = remember { Animatable(0f) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var switchTarget by remember { mutableStateOf<Long?>(null) }
+    var activeAnimations by remember { mutableIntStateOf(0) }
     val overviewCurrentId = remember { currentId }
 
-    LaunchedEffect(Unit) { visible = true }
+    HighFrameRateDuringMotion(activeAnimations > 0)
 
-    val reveal by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(MotionTokens.Quick),
-        label = "tabSwitcherContentFade",
-    )
+    suspend fun animateReveal(target: Float) {
+        activeAnimations++
+        try {
+            reveal.animateTo(target, animationSpec = tween(MotionTokens.Quick))
+        } finally {
+            activeAnimations--
+        }
+    }
+
+    LaunchedEffect(Unit) { animateReveal(1f) }
 
     LaunchedEffect(pendingAction) {
         val action = pendingAction ?: return@LaunchedEffect
-        visible = false
-        delay(MotionTokens.Quick.toLong())
+        animateReveal(0f)
         pendingAction = null
         action()
     }
 
     // A GeckoSession swap can do synchronous UI-thread work. Keep the overview fully opaque while
-    // it happens, let Compose/AndroidView apply the new session for two frames, and only then run
-    // the cheap overlay fade. This prevents session attachment from stalling the transition itself.
+    // it happens, let Compose/AndroidView apply the new session for two actual display frames, and
+    // only then run the cheap overlay fade. withFrameNanos follows 60/90/120/144 Hz automatically.
     LaunchedEffect(switchTarget, currentId) {
         val target = switchTarget ?: return@LaunchedEffect
         if (currentId != target) return@LaunchedEffect
         withFrameNanos { }
         withFrameNanos { }
-        visible = false
-        delay(MotionTokens.Quick.toLong())
+        animateReveal(0f)
         switchTarget = null
         onDismiss()
     }
@@ -128,7 +132,7 @@ fun BrowserTabSwitcher(
         Column(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = reveal },
+                .graphicsLayer { alpha = reveal.value },
         ) {
             Row(
                 Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
