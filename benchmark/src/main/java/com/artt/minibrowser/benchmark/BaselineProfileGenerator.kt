@@ -18,35 +18,51 @@ class BaselineProfileGenerator {
     val baselineProfileRule = BaselineProfileRule()
 
     @Test
-    fun startup() = baselineProfileRule.collect(
-        packageName = TARGET_PACKAGE,
-        outputFilePrefix = "startup",
-        includeInStartupProfile = true,
-    ) {
-        pressHome()
-        startActivityAndWait()
+    fun startup() {
+        resetTargetState()
+        baselineProfileRule.collect(
+            packageName = TARGET_PACKAGE,
+            outputFilePrefix = "startup",
+            includeInStartupProfile = true,
+        ) {
+            pressHome()
+            startActivityAndWait()
+        }
     }
 
     @Test
-    fun coreBrowserJourneys() = baselineProfileRule.collect(
-        packageName = TARGET_PACKAGE,
-        outputFilePrefix = "core-browser",
-        includeInStartupProfile = false,
-    ) {
-        pressHome()
-        startActivityAndWait()
+    fun coreBrowserJourneys() {
+        resetTargetState()
+        baselineProfileRule.collect(
+            packageName = TARGET_PACKAGE,
+            outputFilePrefix = "core-browser",
+            includeInStartupProfile = false,
+        ) {
+            pressHome()
+            startActivityAndWait()
 
+            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            device.waitForIdle()
+
+            clickDescription(device, "Новая вкладка")
+            clickDescription(device, "Вкладки")
+            device.pressBack()
+            device.waitForIdle()
+
+            clickDescription(device, "Меню")
+            clickText(device, "Настройки")
+            device.pressBack()
+            device.waitForIdle()
+        }
+    }
+
+    /** Keep generated rules independent from JUnit method order and previous profile journeys. */
+    private fun resetTargetState() {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        device.waitForIdle()
-
-        clickDescription(device, "Новая вкладка")
-        clickDescription(device, "Вкладки")
-        device.pressBack()
-        device.waitForIdle()
-
-        clickDescription(device, "Меню")
-        clickText(device, "Настройки")
-        device.pressBack()
+        val result = device.executeShellCommand("pm clear $TARGET_PACKAGE")
+        check(result.contains("Success", ignoreCase = true)) {
+            "Unable to reset $TARGET_PACKAGE before profile collection: $result"
+        }
         device.waitForIdle()
     }
 
