@@ -8,6 +8,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -19,11 +20,11 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Fetch only the conventional same-origin /favicon.ico. Third-party favicon proxy services are
  * intentionally avoided because querying them reveals the user's visited hostname. Redirects are
- * followed manually and only when they remain on the exact same origin. Cache v3 also invalidates
- * older files that may have been fetched through such proxies.
+ * followed manually and only when they remain on the exact same origin. Cache v4 keys by canonical
+ * origin so HTTP sites and non-default ports do not accidentally reuse an HTTPS/default-port icon.
  */
 object FaviconFetcher {
-    private const val CACHE_VERSION = "v3"
+    private const val CACHE_VERSION = "v4"
     private const val MAX_BYTES = 1024 * 1024
     private const val MAX_REDIRECTS = 3
     private const val NEGATIVE_TTL_MS = 6 * 60 * 60 * 1000L
@@ -31,34 +32,35 @@ object FaviconFetcher {
     private val inFlight = ConcurrentHashMap<String, Deferred<File>>()
     private val negative = ConcurrentHashMap<String, Long>()
 
-    fun cacheFile(host: String, iconsDir: File): File {
-        val md5 = MessageDigest.getInstance("MD5").digest(host.lowercase().trim().toByteArray())
+    fun cacheFile(key: String, iconsDir: File): File {
+        val md5 = MessageDigest.getInstance("MD5").digest(key.lowercase().trim().toByteArray())
             .joinToString("") { "%02x".format(it) }
         return File(iconsDir, "${CACHE_VERSION}_$md5.png")
     }
 
-    suspend fun fetch(host: String, iconsDir: File): File {
-        val key = host.lowercase().trim()
-        val dst = cacheFile(key, iconsDir)
+    suspend fun fetch(pageUrlOrHost: String, iconsDir: File): File {
+        val origin = faviconOrigin(pageUrlOrHost)
+            ?: return cacheFile("invalid:${pageUrlOrHost.trim()}", iconsDir)
+        val dst = cacheFile(origin, iconsDir)
         if (dst.exists()) return dst
-        if (negative[key]?.let { it > System.currentTimeMillis() } == true) return dst
-        val deferred = inFlight.computeIfAbsent(key) {
-            scope.async { fetchOnce(key, dst) }
+        if (negative[origin]?.let { it > System.currentTimeMillis() } == true) return dst
+        val deferred = inFlight.computeIfAbsent(origin) {
+            scope.async { fetchOnce(origin, dst) }
         }
         return try {
             deferred.await().also {
-                if (!it.exists()) negative[key] = System.currentTimeMillis() + NEGATIVE_TTL_MS
+                if (!it.exists()) negative[origin] = System.currentTimeMillis() + NEGATIVE_TTL_MS
             }
         } finally {
-            inFlight.remove(key, deferred)
+            inFlight.remove(origin, deferred)
         }
     }
 
-    private suspend fun fetchOnce(host: String, dst: File): File = withContext(Dispatchers.IO) {
+    private suspend fun fetchOnce(origin: String, dst: File): File = withContext(Dispatchers.IO) {
         dst.parentFile?.mkdirs()
         val temp = File("${dst.path}.tmp")
         temp.delete()
-        if (downloadCandidate("https://$host/favicon.ico", temp) != null) {
+        if (downloadCandidate("$origin/favicon.ico", temp) != null) {
             runCatching {
                 Files.move(
                     temp.toPath(),
@@ -134,6 +136,20 @@ object FaviconFetcher {
         }
     }
 }
+
+/** Canonical network origin for favicon fetching; bare hosts retain the old HTTPS default. */
+internal fun faviconOrigin(pageUrlOrHost: String): String? = runCatching {
+    val value = pageUrlOrHost.trim()
+    if (value.isEmpty()) return@runCatching null
+    val input = if (value.contains("://")) value else "https://$value"
+    val uri = URI(input)
+    val scheme = uri.scheme?.lowercase()?.takeIf { it == "http" || it == "https" }
+        ?: return@runCatching null
+    val host = uri.host?.takeIf { it.isNotBlank() } ?: return@runCatching null
+    val defaultPort = if (scheme == "https") 443 else 80
+    val port = uri.port.takeUnless { it == defaultPort }
+    URI(scheme, null, host, port, null, null, null).toASCIIString()
+}.getOrNull()
 
 private fun Int.isHttpRedirect(): Boolean =
     this == HttpURLConnection.HTTP_MOVED_PERM ||
