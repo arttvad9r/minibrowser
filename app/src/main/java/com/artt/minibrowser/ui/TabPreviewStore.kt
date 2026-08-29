@@ -16,10 +16,10 @@ import kotlin.math.roundToInt
  * deliberately excluded even from this transient cache.
  */
 object TabPreviewStore {
-    private const val MAX_PREVIEW_WIDTH = 420
-    private const val MAX_CACHE_BYTES = 24L * 1024L * 1024L
+    private const val MAX_PREVIEW_WIDTH = 320
+    private const val MAX_CACHE_BYTES = 16L * 1024L * 1024L
     private const val RETIRE_DELAY_MS = 1_000L
-    private const val OVERVIEW_CAPTURE_DELAY_MS = 160L
+    private const val OVERVIEW_CAPTURE_DELAY_MS = 420L
 
     private val previews = mutableStateMapOf<Long, Bitmap>()
     private val lru = LinkedHashMap<Long, Unit>(16, 0.75f, true)
@@ -83,17 +83,23 @@ object TabPreviewStore {
     }
 
     /**
-     * Opening the overview must not synchronously contend with a Gecko compositor readback.
-     * Schedule the fresh preview just after the short overview fade; stale targets are discarded
-     * if the tab/session changes in the meantime.
+     * Reuse the existing preview while the tab remains on the same URL. A compositor readback is
+     * only needed when the page URL changed or there is no preview yet, and it is scheduled well
+     * after the overview reveal so it cannot land in the transition's critical frames.
      */
     fun captureCurrent() {
         val view = currentView.get() ?: return
         val id = currentTabId ?: return
         val url = currentUrl
         if (id in privateTabs || id in removedTabs || !isPreviewableUrl(url)) return
-        val expectedGeneration = generation
 
+        val cached = previews[id]
+        if (lastCapturedUrl[id] == url && cached != null && !cached.isRecycled) {
+            lru[id] = Unit
+            return
+        }
+
+        val expectedGeneration = generation
         mainHandler.postDelayed({
             if (
                 generation != expectedGeneration ||
@@ -107,11 +113,7 @@ object TabPreviewStore {
         }, OVERVIEW_CAPTURE_DELAY_MS)
     }
 
-    /**
-     * Session swaps are latency-critical. Do not read back the old compositor here: the overview
-     * already schedules a fresh capture after its reveal, and an older cached preview is preferable
-     * to stalling the selected tab while GeckoView changes sessions.
-     */
+    /** Session swaps are latency-critical; never read back the old compositor here. */
     fun captureBeforeSessionSwap(view: GeckoView) {
         if (currentView.get() !== view) return
         // Deliberately no-op.
@@ -213,7 +215,6 @@ object TabPreviewStore {
         }
     }
 
-    /** Crossfade may draw the old bitmap for a few frames, so recycle only after it has left state. */
     private fun retire(bitmap: Bitmap) {
         mainHandler.postDelayed({
             val stillReferenced = previews.values.any { it === bitmap }
