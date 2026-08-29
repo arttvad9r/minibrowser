@@ -14,7 +14,9 @@ import androidx.compose.ui.platform.LocalView
 
 /** Shared timing vocabulary; app-level motion is intentionally minimal. */
 object MotionTokens {
-    const val Quick = 120
+    // Full-screen chrome needs enough real frames to read as motion rather than a jump.
+    // The duration is refresh-rate independent: 180 ms is ~11 frames at 60 Hz and ~22 at 120 Hz.
+    const val Screen = 180
 }
 
 /**
