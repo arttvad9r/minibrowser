@@ -2,12 +2,14 @@ package com.artt.minibrowser.engine
 
 import android.app.ActivityManager
 import android.app.Application
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.os.Build
 import android.os.Process
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.DownloadHistory
+import com.artt.minibrowser.ui.TabPreviewStore
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
@@ -19,11 +21,20 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
     currentProcess == null || currentProcess == mainProcess
 
 class BrowserApp : Application() {
+    private var mainProcess = false
+
     override fun onCreate() {
         super.onCreate()
         // GV child processes (:gpu, :tab, ...) instantiate Application as well. Resolve the actual
         // process name on API 26-27 instead of assuming the main process when /proc is unavailable.
-        if (!isMainApplicationProcess(currentProcessName(), applicationInfo.processName)) return
+        mainProcess = isMainApplicationProcess(currentProcessName(), applicationInfo.processName)
+        if (!mainProcess) return
+
+        val performance = BrowserPerformance.configure(this)
+        TabPreviewStore.configureMemoryPolicy(
+            maxBytes = performance.previewCacheBytes,
+            backgroundBytes = performance.backgroundPreviewCacheBytes,
+        )
         DbHolder.init(this)
         DownloadHistory.init(this)
         val contentBlocking = ContentBlocking.Settings.Builder()
@@ -43,6 +54,25 @@ class BrowserApp : Application() {
                 .setLnaBlocking(true)
                 .build()
         )
+    }
+
+    /**
+     * Android 14+ only reliably delivers the UI_HIDDEN/BACKGROUND trim levels. Preview bitmaps are
+     * fully reconstructible, so release them before the system has to reclaim or kill processes.
+     */
+    @Suppress("DEPRECATION")
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (!mainProcess) return
+        when {
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> TabPreviewStore.trimMemory(aggressive = true)
+            level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> TabPreviewStore.trimMemory(aggressive = false)
+        }
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        if (mainProcess) TabPreviewStore.trimMemory(aggressive = true)
     }
 
     private fun currentProcessName(): String? {
