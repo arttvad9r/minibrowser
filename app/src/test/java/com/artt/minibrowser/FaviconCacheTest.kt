@@ -1,6 +1,7 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.engine.FaviconFetcher
+import com.artt.minibrowser.engine.faviconInFlightKey
 import com.artt.minibrowser.engine.faviconTempFile
 import com.artt.minibrowser.engine.trimFaviconDiskCache
 import java.io.File
@@ -24,6 +25,12 @@ class FaviconCacheTest {
             FaviconFetcher.cacheFile("a.com", File("/i")).path,
             FaviconFetcher.cacheFile("b.com", File("/i")).path,
         )
+    }
+
+    @Test fun inFlightRequestsAreGenerationSpecific() {
+        val origin = "https://example.com"
+        assertNotEquals(faviconInFlightKey(origin, 7L), faviconInFlightKey(origin, 8L))
+        assertEquals(faviconInFlightKey(origin, 7L), faviconInFlightKey(origin, 7L))
     }
 
     @Test fun tempFilesAreGenerationSpecific() {
