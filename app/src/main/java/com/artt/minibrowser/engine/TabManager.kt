@@ -279,6 +279,7 @@ class TabManager(
     private val persistRevision = AtomicLong(0L)
     private val clearGeneration = AtomicLong(0L)
     private val hotTabLimit = BrowserPerformance.policy.hotTabLimit
+    private val backgroundHotTabLimit = BrowserPerformance.policy.backgroundHotTabLimit
     private val lifecycleOwner = context as? LifecycleOwner
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onDestroy(owner: LifecycleOwner) {
@@ -290,6 +291,7 @@ class TabManager(
     private var seq = 0L
     private var closed = false
     private var appVisible = true
+    private var backgroundTrimRequested = false
 
     init {
         lifecycleOwner?.lifecycle?.addObserver(lifecycleObserver)
@@ -438,6 +440,7 @@ class TabManager(
     fun setAppVisible(visible: Boolean) {
         if (closed) return
         appVisible = visible
+        if (visible) backgroundTrimRequested = false
         _tabs.value.filter { it.session.isOpen }.forEach { tab ->
             val active = visible && tab.id == currentId.value
             tab.session.setActive(active)
@@ -447,14 +450,28 @@ class TabManager(
     }
 
     /**
+     * Called only after the Activity is fully stopped. Keep the selected tab plus a small recent
+     * warm set; restorable cold sessions can be rebuilt when the user returns to them.
+     */
+    fun trimForBackground() {
+        if (closed) return
+        backgroundTrimRequested = true
+        enforceHotTabBudget()
+    }
+
+    private fun effectiveHotTabLimit(): Int =
+        if (backgroundTrimRequested) backgroundHotTabLimit else hotTabLimit
+
+    /**
      * Keep only a bounded LRU set of fully open Gecko sessions. Closed cold tabs remain logical tabs
      * and reopen from Gecko's SessionState, so history/scroll/zoom/form state is retained without
      * paying the resident cost of an unlimited number of content sessions.
      */
     private fun enforceHotTabBudget() {
         if (closed) return
+        val targetLimit = effectiveHotTabLimit()
         var openCount = _tabs.value.count { it.session.isOpen }
-        if (openCount <= hotTabLimit) return
+        if (openCount <= targetLimit) return
 
         val selectedId = currentId.value
         val coldest = _tabs.value
@@ -463,9 +480,9 @@ class TabManager(
             .sortedBy { it.lastAccess }
             .toList()
         for (tab in coldest) {
-            if (openCount <= hotTabLimit) break
+            if (openCount <= targetLimit) break
             // Never discard an in-flight navigation merely to hit the steady-state budget. Once
-            // Gecko finishes and flushes a restorable state, onSessionStateChange retries the trim.
+            // Gecko finishes or flushes a restorable state, its callback retries the trim.
             if (tab.progress >= 0f) continue
             val hasRestorableState = tab.url.isBlank() || tab.url == "about:blank" ||
                 (tab.latestSessionState != null && tab.latestSessionStateUrl == tab.url)
@@ -599,7 +616,7 @@ class TabManager(
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 tab.progress = -1f
-                if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > hotTabLimit) {
+                if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > effectiveHotTabLimit()) {
                     enforceHotTabBudget()
                 }
             }
@@ -620,10 +637,9 @@ class TabManager(
                 tab.latestSessionState = state
                 tab.latestSessionStateUrl = currentSessionStateUrl(state)
                 if (!tab.isPrivate) requestPersist(immediate = false)
-                // setActive(false) flushes state asynchronously. If this is a cold background tab,
-                // retry the budget once that restorable state actually arrives instead of waiting
-                // for another user tab switch.
-                if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > hotTabLimit) {
+                // setActive(false) flushes state asynchronously. Retry whichever foreground/background
+                // budget is currently active once the restorable state actually arrives.
+                if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > effectiveHotTabLimit()) {
                     enforceHotTabBudget()
                 }
             }
