@@ -40,6 +40,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             isDebuggable = false
+            isProfileable = true
         }
         // Profile collection is deliberately separate: generated HRF rules must reference stable,
         // unobfuscated source method signatures. The release/benchmark variants remain optimized.
@@ -48,6 +49,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             isDebuggable = false
+            isProfileable = true
             isMinifyEnabled = false
             isShrinkResources = false
         }
