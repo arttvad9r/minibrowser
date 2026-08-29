@@ -107,7 +107,9 @@ class DownloadsActivity : ComponentActivity() {
         val uri = runCatching {
             if (stored.scheme == "file") {
                 val path = stored.path ?: error("Missing file path")
-                FileProvider.getUriForFile(this, "$packageName.files", File(path))
+                val file = File(path)
+                if (!file.isFile) error("Downloaded file is missing")
+                FileProvider.getUriForFile(this, "$packageName.files", file)
             } else stored
         }.getOrElse {
             Toast.makeText(this, "Файл больше недоступен", Toast.LENGTH_SHORT).show()
