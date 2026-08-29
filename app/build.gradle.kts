@@ -4,6 +4,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
 }
+
+// Every APK is single-ABI. Phone/local builds default to arm64; CI overrides this property only
+// for the x86_64 emulator instrumentation build. Never package two copies of Gecko into one APK.
+val minibrowserAbi = providers.gradleProperty("minibrowserAbi").orElse("arm64-v8a")
+
 android {
     namespace = "com.artt.minibrowser"
     compileSdk = 37
@@ -16,19 +21,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 1
         versionName = "0.1"
+        ndk { abiFilters += minibrowserAbi.get() }
     }
     buildFeatures {
         compose = true
         buildConfig = true
     }
     buildTypes {
-        debug {
-            // arm64 для телефона + x86_64 для локального/CI emulator smoke test.
-            ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
-        }
         release {
-            // Личное устройство arm64; не кладём остальные GeckoView ABI в release APK.
-            ndk { abiFilters += "arm64-v8a" }
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
