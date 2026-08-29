@@ -26,6 +26,8 @@ import java.io.InputStream
 
 private data class SavedDownload(val location: String, val bytes: Long)
 
+internal fun shouldPersistDownloadHistory(isPrivate: Boolean): Boolean = !isPrivate
+
 /** Writes one legacy download and guarantees that a failed copy never leaves a partial file. */
 internal fun writeLegacyDownload(file: File, input: InputStream): Long {
     try {
@@ -67,10 +69,11 @@ private object DownloadIo {
         name: String,
         mime: String,
         sourceUrl: String,
+        persistHistory: Boolean,
     ) {
         val appContext = context.applicationContext
         scope.launch {
-            val historyId = DownloadHistory.start(name, sourceUrl, mime)
+            val historyId = if (persistHistory) DownloadHistory.start(name, sourceUrl, mime) else null
             val result = runCatching {
                 body.use { input ->
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -82,11 +85,13 @@ private object DownloadIo {
             }
             result.fold(
                 onSuccess = { saved ->
-                    DownloadHistory.complete(historyId, saved.location, saved.bytes)
+                    historyId?.let { DownloadHistory.complete(it, saved.location, saved.bytes) }
                     withContext(Dispatchers.Main) { toast(appContext, "Скачано: $name") }
                 },
                 onFailure = { error ->
-                    DownloadHistory.fail(historyId, error.localizedMessage ?: "Не удалось сохранить файл")
+                    historyId?.let {
+                        DownloadHistory.fail(it, error.localizedMessage ?: "Не удалось сохранить файл")
+                    }
                     withContext(Dispatchers.Main) { toast(appContext, "Не удалось скачать файл") }
                 },
             )
@@ -146,7 +151,7 @@ class GeckoDownloadController(
     private val activity: Activity,
     private val requestPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)? = null,
 ) {
-    fun handle(response: WebResponse) {
+    fun handle(response: WebResponse, isPrivate: Boolean = false) {
         val body = response.body
         if (body == null) {
             toast(activity.applicationContext, "Не удалось получить файл")
@@ -164,8 +169,9 @@ class GeckoDownloadController(
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: "application/octet-stream"
+        val persistHistory = shouldPersistDownloadHistory(isPrivate)
 
-        val begin = { ensureStorageAccessAndSave(body, name, mime, response.uri) }
+        val begin = { ensureStorageAccessAndSave(body, name, mime, response.uri, persistHistory) }
         if (response.skipConfirmation) {
             begin()
             return
@@ -191,11 +197,12 @@ class GeckoDownloadController(
         name: String,
         mime: String,
         sourceUrl: String,
+        persistHistory: Boolean,
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
             ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         ) {
-            DownloadIo.save(activity.applicationContext, body, name, mime, sourceUrl)
+            DownloadIo.save(activity.applicationContext, body, name, mime, sourceUrl, persistHistory)
             return
         }
 
@@ -206,8 +213,9 @@ class GeckoDownloadController(
             return
         }
         requester(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)) { granted ->
-            if (granted) DownloadIo.save(activity.applicationContext, body, name, mime, sourceUrl)
-            else {
+            if (granted) {
+                DownloadIo.save(activity.applicationContext, body, name, mime, sourceUrl, persistHistory)
+            } else {
                 body.closeQuietly()
                 toast(activity.applicationContext, "Загрузка отменена: нет доступа к хранилищу")
             }
