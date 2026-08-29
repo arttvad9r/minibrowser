@@ -1,7 +1,6 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.engine.NavigationTarget
-import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.selectSafeExternalUri
 import com.artt.minibrowser.engine.isAllowedPopupTarget
@@ -19,18 +18,18 @@ class NavigationPolicyTest {
     }
 
     @Test fun acceptsOnlyWebAndWhitelistedInternalUris() {
-        assertEquals(NavigationTarget.Web("https://example.com"), resolveNavigation("https://example.com", SearchEngine.GOOGLE))
-        assertEquals(NavigationTarget.Internal("about:blank"), resolveNavigation("about:blank", SearchEngine.GOOGLE))
-        assertEquals(NavigationTarget.External("mailto:test@example.com"), resolveNavigation("mailto:test@example.com", SearchEngine.GOOGLE))
+        assertEquals(NavigationTarget.Web("https://example.com"), resolveNavigation("https://example.com"))
+        assertEquals(NavigationTarget.Internal("about:blank"), resolveNavigation("about:blank"))
+        assertEquals(NavigationTarget.External("mailto:test@example.com"), resolveNavigation("mailto:test@example.com"))
     }
 
     @Test fun schemesAreNotPassedToGeckoAsArbitraryUris() {
-        assertEquals(NavigationTarget.External("intent://example.com"), resolveNavigation("intent://example.com", SearchEngine.GOOGLE))
-        assertEquals(NavigationTarget.Search("chrome://crash"), resolveNavigation("chrome://crash", SearchEngine.GOOGLE))
+        assertEquals(NavigationTarget.External("intent://example.com"), resolveNavigation("intent://example.com"))
+        assertEquals(NavigationTarget.Search("chrome://crash"), resolveNavigation("chrome://crash"))
     }
 
     @Test fun localhostWithoutSchemeUsesHttp() {
-        assertEquals(NavigationTarget.Web("http://localhost:8080/test"), resolveNavigation("localhost:8080/test", SearchEngine.GOOGLE))
+        assertEquals(NavigationTarget.Web("http://localhost:8080/test"), resolveNavigation("localhost:8080/test"))
     }
 
     @Test fun unsafeDirectUriUsesSafeFallback() {
