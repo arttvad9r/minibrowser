@@ -294,7 +294,12 @@ class MainActivity : ComponentActivity() {
 
             var bookmarks by remember { mutableStateOf(emptyList<Bookmark>()) }
             var bmReload by remember { mutableIntStateOf(0) }
-            LaunchedEffect(bmReload) { bookmarks = bookmarksRepo.all() }
+            LaunchedEffect(screen, currentTab?.url, bmReload) {
+                val needsBookmarks = screen == BrowserScreen.Bookmarks ||
+                    (screen == BrowserScreen.Browser &&
+                        (currentTab?.url.isNullOrBlank() || currentTab?.url == "about:blank"))
+                if (needsBookmarks) bookmarks = bookmarksRepo.all()
+            }
             var bookmarked by remember { mutableStateOf(false) }
             LaunchedEffect(currentTab?.url) {
                 val u = currentTab?.url

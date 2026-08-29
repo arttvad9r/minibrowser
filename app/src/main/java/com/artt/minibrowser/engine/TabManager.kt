@@ -649,8 +649,16 @@ class TabManager(
             }
 
             override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
+                val stateUrl = currentSessionStateUrl(state)
                 tab.latestSessionState = state
-                tab.latestSessionStateUrl = currentSessionStateUrl(state)
+                tab.latestSessionStateUrl = stateUrl
+                // Once Gecko has produced a fresh restorable state for this URL, the serialized
+                // startup backup is redundant. Release it instead of retaining two copies of the
+                // same session history in memory for every restored tab the user has reopened.
+                if (stateUrl != null && stateUrl == tab.url) {
+                    tab.persistedSessionState = null
+                    tab.persistedSessionStateUrl = null
+                }
                 if (!tab.isPrivate) requestPersist(immediate = false)
                 // setActive(false) flushes state asynchronously. Retry whichever foreground/background
                 // budget is currently active once the restorable state actually arrives.
