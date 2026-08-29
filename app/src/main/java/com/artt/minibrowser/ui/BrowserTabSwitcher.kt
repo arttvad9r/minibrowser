@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -32,12 +33,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -57,9 +60,9 @@ import java.io.File
 /**
  * Stable two-column tab overview.
  *
- * The background stays opaque for the whole transition, so a changing Gecko surface is never
- * blended through the overview. Cards themselves do not run independent spring/scale/color
- * animations: there is one short content fade for the screen, and that is all.
+ * The overview moves as one opaque surface instead of fading its cards against an already-opaque
+ * background. That removes the empty white frames visible during open/close while still preventing
+ * a live GeckoView from being alpha-blended through Compose.
  */
 @Composable
 fun BrowserTabSwitcher(
@@ -78,6 +81,11 @@ fun BrowserTabSwitcher(
     val overviewCurrentId = remember { currentId }
 
     HighFrameRateDuringMotion(activeAnimations > 0)
+
+    DisposableEffect(Unit) {
+        TabPreviewStore.setOverviewVisible(true)
+        onDispose { TabPreviewStore.setOverviewVisible(false) }
+    }
 
     suspend fun animateReveal(target: Float) {
         activeAnimations++
@@ -99,7 +107,7 @@ fun BrowserTabSwitcher(
 
     // A GeckoSession swap can do synchronous UI-thread work. Keep the overview fully opaque while
     // it happens, let Compose/AndroidView apply the new session for two actual display frames, and
-    // only then run the cheap overlay fade. withFrameNanos follows 60/90/120/144 Hz automatically.
+    // only then move the overview away. withFrameNanos follows 60/90/120/144 Hz automatically.
     LaunchedEffect(switchTarget, currentId) {
         val target = switchTarget ?: return@LaunchedEffect
         if (currentId != target) return@LaunchedEffect
@@ -124,79 +132,81 @@ fun BrowserTabSwitcher(
     val inputEnabled = pendingAction == null && switchTarget == null
     BackHandler(enabled = inputEnabled) { requestExit(onDismiss) }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        Column(
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val travelPx = with(density) { maxHeight.toPx() }
+
+        Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = reveal.value },
+                .graphicsLayer { translationY = (1f - reveal.value) * travelPx }
+                .background(MaterialTheme.colorScheme.background),
         ) {
-            Row(
-                Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(
-                    onClick = { requestExit(onDismiss) },
-                    enabled = inputEnabled,
-                    modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(AppIcons.ChevronDown, null)
-                }
-                Text(
-                    "${tabs.size} ${tabsPlural(tabs.size)}",
-                    Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                IconButton(
-                    onClick = { requestExit(onNew) },
-                    enabled = inputEnabled,
-                    modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
-                ) {
-                    Icon(Icons.Filled.Add, null)
-                }
-            }
-
-            when (tabs.size) {
-                0 -> EmptyState(AppIcons.Globe, "Нет открытых вкладок")
-                1 -> {
-                    val tab = tabs.first()
-                    Box(
-                        Modifier.fillMaxSize().padding(top = 8.dp),
-                        contentAlignment = Alignment.TopCenter,
+                    IconButton(
+                        onClick = { requestExit(onDismiss) },
+                        enabled = inputEnabled,
+                        modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
                     ) {
-                        BrowserTabCard(
-                            tab = tab,
-                            isCurrent = tab.id == overviewCurrentId,
-                            iconsDir = iconsDir,
-                            modifier = Modifier.width(224.dp),
-                            onSelect = { activateAndExit(tab.id) },
-                            onClose = { if (inputEnabled) onClose(tab.id) },
-                        )
+                        Icon(AppIcons.ChevronDown, null)
+                    }
+                    Text(
+                        "${tabs.size} ${tabsPlural(tabs.size)}",
+                        Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    IconButton(
+                        onClick = { requestExit(onNew) },
+                        enabled = inputEnabled,
+                        modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
+                    ) {
+                        Icon(Icons.Filled.Add, null)
                     }
                 }
-                else -> {
-                    val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
-                    val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        state = gridState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        items(tabs, key = { it.id }) { tab ->
+
+                when (tabs.size) {
+                    0 -> EmptyState(AppIcons.Globe, "Нет открытых вкладок")
+                    1 -> {
+                        val tab = tabs.first()
+                        Box(
+                            Modifier.fillMaxSize().padding(top = 8.dp),
+                            contentAlignment = Alignment.TopCenter,
+                        ) {
                             BrowserTabCard(
                                 tab = tab,
                                 isCurrent = tab.id == overviewCurrentId,
                                 iconsDir = iconsDir,
+                                modifier = Modifier.width(224.dp),
                                 onSelect = { activateAndExit(tab.id) },
                                 onClose = { if (inputEnabled) onClose(tab.id) },
                             )
+                        }
+                    }
+                    else -> {
+                        val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
+                        val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            state = gridState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            items(tabs, key = { it.id }) { tab ->
+                                BrowserTabCard(
+                                    tab = tab,
+                                    isCurrent = tab.id == overviewCurrentId,
+                                    iconsDir = iconsDir,
+                                    onSelect = { activateAndExit(tab.id) },
+                                    onClose = { if (inputEnabled) onClose(tab.id) },
+                                )
+                            }
                         }
                     }
                 }
