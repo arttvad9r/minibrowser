@@ -108,9 +108,14 @@ private object DownloadIo {
         val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         if (!dir.exists() && !dir.mkdirs()) error("Unable to create Downloads directory")
         val file = uniqueFile(dir, name)
-        val bytes = FileOutputStream(file).use { output -> input.copyTo(output) }
-        MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf(mime), null)
-        return SavedDownload(Uri.fromFile(file).toString(), bytes)
+        try {
+            val bytes = FileOutputStream(file).use { output -> input.copyTo(output) }
+            MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf(mime), null)
+            return SavedDownload(Uri.fromFile(file).toString(), bytes)
+        } catch (error: Throwable) {
+            file.delete()
+            throw error
+        }
     }
 
     private fun uniqueFile(dir: File, name: String): File {
