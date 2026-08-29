@@ -295,13 +295,12 @@ class MainActivity : ComponentActivity() {
             var bookmarks by remember { mutableStateOf(emptyList<Bookmark>()) }
             var bmReload by remember { mutableIntStateOf(0) }
             LaunchedEffect(screen, currentTab?.url, bmReload) {
-                val needsBookmarks = screen == BrowserScreen.Bookmarks ||
-                    (screen == BrowserScreen.Browser &&
-                        (currentTab?.url.isNullOrBlank() || currentTab?.url == "about:blank"))
+                val needsBookmarks = screen == BrowserScreen.Browser &&
+                    (currentTab?.url.isNullOrBlank() || currentTab?.url == "about:blank")
                 if (needsBookmarks) bookmarks = bookmarksRepo.all()
             }
             var bookmarked by remember { mutableStateOf(false) }
-            LaunchedEffect(currentTab?.url) {
+            LaunchedEffect(screen, currentTab?.url) {
                 val u = currentTab?.url
                 bookmarked = !u.isNullOrBlank() && u.startsWith("http") && bookmarksRepo.isBookmarked(u)
             }
@@ -487,14 +486,13 @@ class MainActivity : ComponentActivity() {
                         }
                         if (screen == BrowserScreen.Bookmarks) Box(Modifier.fillMaxSize()) {
                             MotionBookmarksScreen(
-                                bookmarks, iconsDir,
+                                bookmarksRepo,
+                                iconsDir,
                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                 onOpen = { uri ->
                                     browserViewModel.screen(BrowserScreen.Browser)
                                     (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                 },
-                                onRename = { url, t -> scope.launch { bookmarksRepo.rename(url, t); bmReload++ } },
-                                onDelete = { url -> scope.launch { bookmarksRepo.remove(url); bmReload++ } },
                             )
                         }
                         if (showSwitcher) {
