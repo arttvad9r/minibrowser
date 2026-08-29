@@ -1,6 +1,10 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.data.BrowserDownload
+import com.artt.minibrowser.data.DownloadStatus
 import com.artt.minibrowser.data.downloadSourceForHistory
+import com.artt.minibrowser.data.mergeRestoredDownloads
+import com.artt.minibrowser.data.normalizeRestoredDownload
 import com.artt.minibrowser.data.writeTextAtomically
 import com.artt.minibrowser.engine.shouldPersistDownloadHistory
 import java.io.File
@@ -33,6 +37,68 @@ class DownloadHistoryTest {
     @Test fun privateDownloadsDoNotPersistAppHistory() {
         assertTrue(shouldPersistDownloadHistory(isPrivate = false))
         assertFalse(shouldPersistDownloadHistory(isPrivate = true))
+    }
+
+    @Test fun restoredInFlightDownloadBecomesSanitizedFailure() {
+        val restored = BrowserDownload(
+            id = "old",
+            name = "archive.zip",
+            sourceUrl = "https://user:secret@example.com/private/archive.zip?token=secret",
+            mime = "application/zip",
+            status = DownloadStatus.Downloading,
+            startedAt = 10L,
+        )
+
+        val normalized = normalizeRestoredDownload(restored, now = 42L)
+
+        assertEquals("https://example.com", normalized.sourceUrl)
+        assertEquals(DownloadStatus.Failed, normalized.status)
+        assertEquals(42L, normalized.finishedAt)
+        assertEquals("Загрузка была прервана", normalized.error)
+    }
+
+    @Test fun liveDownloadWinsWhenRestoreCompletesLater() {
+        val live = BrowserDownload(
+            id = "same",
+            name = "new.bin",
+            sourceUrl = "https://new.example",
+            mime = "application/octet-stream",
+            status = DownloadStatus.Downloading,
+            startedAt = 20L,
+        )
+        val restoredSameId = live.copy(
+            name = "old.bin",
+            sourceUrl = "https://old.example",
+            status = DownloadStatus.Completed,
+            startedAt = 1L,
+            finishedAt = 2L,
+        )
+        val restoredOther = restoredSameId.copy(id = "other", name = "other.bin")
+
+        val merged = mergeRestoredDownloads(
+            live = listOf(live),
+            restored = listOf(restoredSameId, restoredOther),
+            limit = 2,
+        )
+
+        assertEquals(listOf("same", "other"), merged.map { it.id })
+        assertEquals("new.bin", merged.first().name)
+        assertEquals(DownloadStatus.Downloading, merged.first().status)
+    }
+
+    @Test fun restoredMergeHonorsBoundedHistorySize() {
+        val restored = (0 until 5).map { index ->
+            BrowserDownload(
+                id = "$index",
+                name = "$index.bin",
+                sourceUrl = "https://example.com",
+                mime = "application/octet-stream",
+                status = DownloadStatus.Completed,
+                startedAt = index.toLong(),
+            )
+        }
+
+        assertEquals(3, mergeRestoredDownloads(emptyList(), restored, limit = 3).size)
     }
 
     @Test fun atomicWriteReplacesExistingHistoryAndRemovesTempFile() {
