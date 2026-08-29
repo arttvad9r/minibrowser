@@ -159,6 +159,12 @@ internal fun selectSessionStateForUrl(
     return SessionStateSelection(null, null)
 }
 
+/** Returns the URI represented by the current history entry inside Gecko's own state snapshot. */
+internal fun currentSessionStateUrl(state: GeckoSession.SessionState): String? = runCatching {
+    val index = state.currentIndex
+    if (index < 0 || index >= state.size) null else state[index].uri
+}.getOrNull()?.takeIf { it.isNotBlank() }
+
 internal data class PersistenceTabSnapshot(
     val id: Long,
     val url: String,
@@ -315,7 +321,7 @@ class TabManager(
             tab.desktop = saved.desktop
             tab.lastAccess = saved.lastAccess
             tab.restoreUrlOnOpen = true
-            val stateUrl = saved.sessionStateUrl ?: saved.url.takeIf { saved.sessionState != null }
+            val stateUrl = saved.sessionStateUrl
             if (saved.sessionState != null && stateUrl == saved.url) {
                 tab.persistedSessionState = saved.sessionState
                 tab.persistedSessionStateUrl = stateUrl
@@ -497,7 +503,7 @@ class TabManager(
 
             override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
                 tab.latestSessionState = state
-                tab.latestSessionStateUrl = tab.url
+                tab.latestSessionStateUrl = currentSessionStateUrl(state)
                 if (!tab.isPrivate) requestPersist(immediate = false)
             }
         }
