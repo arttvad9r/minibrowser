@@ -239,6 +239,9 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     @Volatile internal var latestSessionStateUrl: String? = null
     internal var persistedSessionState: String? = null
     internal var persistedSessionStateUrl: String? = null
+    // Title callbacks do not carry a URL. Bind them only after Gecko confirms a top-level visit,
+    // and clear the binding as soon as navigation moves to another document/location.
+    internal var historyTitleUrl: String? = null
     internal var lastAccess = System.currentTimeMillis()
 }
 
@@ -481,6 +484,7 @@ class TabManager(
                 tab.securityState = SecurityState.Unknown
                 tab.scrollY = 0
                 tab.progress = 0.05f
+                tab.historyTitleUrl = null
                 tab.url = url
                 tab.title = ""
             }
@@ -515,7 +519,9 @@ class TabManager(
                 permissions: List<GeckoSession.PermissionDelegate.ContentPermission>,
                 triggeredByUser: Boolean,
             ) {
-                tab.url = url.orEmpty()
+                val nextUrl = url.orEmpty()
+                if (nextUrl != tab.url) tab.historyTitleUrl = null
+                tab.url = nextUrl
             }
 
             override fun onLoadRequest(
@@ -574,7 +580,8 @@ class TabManager(
         tab.session.contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
                 tab.title = title.orEmpty()
-                if (!tab.isPrivate) HistorySink.updateTitle(tab.url, title)
+                val historyUrl = tab.historyTitleUrl
+                if (!tab.isPrivate && historyUrl != null) HistorySink.updateTitle(historyUrl, title)
             }
 
             override fun onFullScreen(session: GeckoSession, fullscreen: Boolean) {
@@ -620,6 +627,7 @@ class TabManager(
                 flags: Int,
             ): GeckoResult<Boolean>? {
                 if (!tab.isPrivate && flags and GeckoSession.HistoryDelegate.VISIT_TOP_LEVEL != 0) {
+                    tab.historyTitleUrl = url
                     HistorySink.record(url, tab.title)
                 }
                 return null
