@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -102,11 +103,17 @@ private fun DownloadsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { requestExit(onBack) }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
                 }
-                Text("Загрузки", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    stringResource(R.string.downloads_title),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                )
                 if (downloads.isNotEmpty()) {
-                    TextButton(onClick = { showClearConfirm = true }) { Text("Очистить") }
+                    TextButton(onClick = { showClearConfirm = true }) {
+                        Text(stringResource(R.string.action_clear))
+                    }
                 }
             }
 
@@ -114,8 +121,8 @@ private fun DownloadsScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     EmptyState(
                         AppIcons.Download,
-                        "Загрузок пока нет",
-                        "Скачанные через Minibrowser файлы появятся здесь.",
+                        stringResource(R.string.downloads_empty_title),
+                        stringResource(R.string.downloads_empty_subtitle),
                     )
                 }
             } else {
@@ -135,18 +142,20 @@ private fun DownloadsScreen(
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
-            title = { Text("Очистить историю загрузок?") },
-            text = { Text("Записи о загрузках будут удалены. Скачанные файлы останутся на устройстве.") },
+            title = { Text(stringResource(R.string.downloads_clear_dialog_title)) },
+            text = { Text(stringResource(R.string.downloads_clear_dialog_message)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showClearConfirm = false
                         onClear()
                     },
-                ) { Text("Очистить") }
+                ) { Text(stringResource(R.string.action_clear)) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearConfirm = false }) { Text("Отмена") }
+                TextButton(onClick = { showClearConfirm = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }
@@ -186,12 +195,19 @@ private fun DownloadCard(
             )
             Spacer(Modifier.height(3.dp))
             val statusText = when (item.status) {
-                DownloadStatus.Downloading -> "Скачивается…"
+                DownloadStatus.Downloading -> stringResource(R.string.download_status_downloading)
                 DownloadStatus.Completed -> {
                     val whenDone = item.finishedAt ?: item.startedAt
-                    "${formatDownloadSize(item.bytes)} · ${dateFormat.format(Date(whenDone))}"
+                    stringResource(
+                        R.string.download_completed_subtitle,
+                        formatDownloadSize(item.bytes),
+                        dateFormat.format(Date(whenDone)),
+                    )
                 }
-                DownloadStatus.Failed -> "Ошибка · ${item.error ?: "Не удалось скачать"}"
+                DownloadStatus.Failed -> stringResource(
+                    R.string.download_failed_subtitle,
+                    item.error ?: stringResource(R.string.download_failed_default),
+                )
             }
             Text(
                 statusText,
@@ -234,7 +250,7 @@ private fun openDownload(context: Context, item: BrowserDownload) {
             stored
         }
     }.getOrElse {
-        Toast.makeText(context, "Файл больше недоступен", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.download_unavailable), Toast.LENGTH_SHORT).show()
         return
     }
 
@@ -244,12 +260,14 @@ private fun openDownload(context: Context, item: BrowserDownload) {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         if (intent.resolveActivity(context.packageManager) == null) return false
-        context.startActivity(Intent.createChooser(intent, "Открыть файл"))
+        context.startActivity(Intent.createChooser(intent, context.getString(R.string.open_file_chooser_title)))
         return true
     }
 
     val opened = runCatching {
         launch(item.mime.ifBlank { "application/octet-stream" }) || launch("*/*")
     }.getOrDefault(false)
-    if (!opened) Toast.makeText(context, "Нет приложения для открытия файла", Toast.LENGTH_SHORT).show()
+    if (!opened) {
+        Toast.makeText(context, context.getString(R.string.no_app_to_open_file), Toast.LENGTH_SHORT).show()
+    }
 }
