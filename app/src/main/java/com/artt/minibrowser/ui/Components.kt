@@ -57,10 +57,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
-import java.net.URI
+import com.artt.minibrowser.net.webUriHost
 import kotlinx.coroutines.launch
 
-fun hostOf(url: String): String = runCatching { URI(url).host ?: "" }.getOrDefault("")
+fun hostOf(url: String): String = webUriHost(url).orEmpty()
 
 /** Заголовок секции: слева название, справа необязательное действие («Все ›»). */
 @Composable
