@@ -5,6 +5,7 @@ package com.artt.minibrowser.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -344,23 +346,35 @@ private fun ThemeOption(
 ) {
     val isSelected = value == selected
     val background = if (isSelected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
-    val border = if (isSelected) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant
+    val border = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
 
-    Column(
+    Box(
         modifier
             .clip(Radius.button)
             .background(background)
-            .border(width = 1.dp, color = border, shape = Radius.button)
+            .border(width = if (isSelected) 1.5.dp else 1.dp, color = border, shape = Radius.button)
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,
                 onClick = { onSelect(value) },
             )
             .padding(vertical = 11.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
-        Spacer(Modifier.height(5.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+        Column(
+            Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.height(5.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+        }
+        if (isSelected) {
+            Icon(
+                Icons.Filled.Check,
+                null,
+                Modifier.align(Alignment.TopEnd).padding(end = 8.dp).size(14.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
