@@ -1,8 +1,11 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.net.isValidWebUri
+import com.artt.minibrowser.net.webUriHost
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class UrlPolicyTest {
@@ -17,6 +20,14 @@ class UrlPolicyTest {
         assertTrue(isValidWebUri("https://пример.рф/путь"))
         assertTrue(isValidWebUri("https://bücher.de:8443/"))
         assertTrue(isValidWebUri("https://例子.测试/"))
+    }
+
+    @Test fun returnsHostUsingTheSameValidationPolicy() {
+        assertEquals("example.com", webUriHost("https://example.com:443/path"))
+        assertEquals("пример.рф", webUriHost("https://пример.рф/путь"))
+        assertEquals("bücher.de", webUriHost("https://bücher.de:8443/"))
+        assertNull(webUriHost("https://example.com:65536/path"))
+        assertNull(webUriHost("file:///tmp/test"))
     }
 
     @Test fun rejectsOutOfRangePorts() {
