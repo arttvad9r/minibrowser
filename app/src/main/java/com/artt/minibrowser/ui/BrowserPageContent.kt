@@ -18,7 +18,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import com.artt.minibrowser.SmoothPageProgress
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
@@ -124,7 +123,7 @@ internal fun BrowserPageContent(
                 .windowInsetsPadding(bottomSafeInsets),
         ) {
             GeckoContent(currentTab, Modifier.fillMaxSize())
-            SmoothPageProgress(currentTab)
+            BrowserPageProgress(currentTab)
             if (state.showStart) {
                 startPageContent()
             }
