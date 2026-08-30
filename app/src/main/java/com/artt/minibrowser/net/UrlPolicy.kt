@@ -35,8 +35,9 @@ private fun WebAuthority.hasValidPort(): Boolean = port == -1 || port in 1..6553
 internal fun isValidWebUri(value: String): Boolean = webAuthority(value)?.hasValidPort() == true
 
 /** Returns the validated host using the same Unicode/IDN parsing rules as navigation policy. */
-internal fun webUriHost(value: String): String? =
-    webAuthority(value)?.takeIf(WebAuthority::hasValidPort)?.host
+internal fun webUriHost(value: String): String? = webAuthority(value)?.let { authority ->
+    authority.host.takeIf { authority.hasValidPort() }
+}
 
 /**
  * History and other automatic persistence must never retain HTTP user-info credentials. Preserve
