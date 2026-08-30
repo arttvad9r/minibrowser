@@ -54,15 +54,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.R
-import com.artt.minibrowser.data.Bookmark
-import com.artt.minibrowser.data.HistoryEntry
 import java.io.File
+
+internal data class StartPageBookmarkUiState(
+    val url: String,
+    val title: String,
+    val host: String,
+)
+
+internal data class StartPageRecentUiState(
+    val url: String,
+    val title: String,
+)
 
 @Composable
 fun StartPage(
-    bookmarks: List<Bookmark>,
+    bookmarks: List<StartPageBookmarkUiState>,
     iconsDir: File,
-    recent: List<HistoryEntry>,
+    recent: List<StartPageRecentUiState>,
     isPrivate: Boolean,
     onOpen: (String) -> Unit,
     onAllBookmarks: () -> Unit,
@@ -73,7 +82,7 @@ fun StartPage(
     onAdd: (url: String, title: String) -> Unit,
 ) {
     var showAdd by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<Bookmark?>(null) }
+    var selected by remember { mutableStateOf<StartPageBookmarkUiState?>(null) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     CenteredSinglePane {
@@ -172,11 +181,11 @@ fun StartPage(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BookmarkRow(
-    bookmarks: List<Bookmark>,
+    bookmarks: List<StartPageBookmarkUiState>,
     iconsDir: File,
     onOpen: (String) -> Unit,
     onAdd: () -> Unit,
-    onLongPress: (Bookmark) -> Unit,
+    onLongPress: (StartPageBookmarkUiState) -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -244,7 +253,7 @@ private fun BookmarkRow(
 /** «Недавние»: лёгкая карточка с несколькими содержательными последними страницами. */
 @Composable
 private fun RecentCard(
-    recent: List<HistoryEntry>,
+    recent: List<StartPageRecentUiState>,
     iconsDir: File,
     onOpen: (String) -> Unit,
     onShowAll: () -> Unit,
