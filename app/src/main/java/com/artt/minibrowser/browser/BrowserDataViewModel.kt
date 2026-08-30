@@ -20,26 +20,12 @@ internal data class BrowserDataUiState(
     val clearFailed: Boolean get() = status == BrowserDataStatus.Failed
 }
 
-/** Coordinates the cross-feature "clear browser data" operation outside the UI renderer. */
+/** Owns UI state for the cross-feature browser-data clearing operation. */
 internal class BrowserDataViewModel : ViewModel {
-    private val clearTabPreviews: () -> Unit
-    private val clearHistory: suspend () -> Unit
-    private val clearBookmarks: suspend () -> Unit
-    private val clearFaviconCaches: () -> Unit
-    private val clearWebData: suspend () -> Unit
+    private val clearBrowserData: suspend (Boolean) -> Unit
 
-    constructor(
-        clearTabPreviews: () -> Unit,
-        clearHistory: suspend () -> Unit,
-        clearBookmarks: suspend () -> Unit,
-        clearFaviconCaches: () -> Unit,
-        clearWebData: suspend () -> Unit,
-    ) : super() {
-        this.clearTabPreviews = clearTabPreviews
-        this.clearHistory = clearHistory
-        this.clearBookmarks = clearBookmarks
-        this.clearFaviconCaches = clearFaviconCaches
-        this.clearWebData = clearWebData
+    constructor(clearer: BrowserDataClearer) : super() {
+        clearBrowserData = clearer::clear
     }
 
     internal constructor(
@@ -50,11 +36,13 @@ internal class BrowserDataViewModel : ViewModel {
         clearWebData: suspend () -> Unit,
         viewModelScope: CoroutineScope,
     ) : super(viewModelScope) {
-        this.clearTabPreviews = clearTabPreviews
-        this.clearHistory = clearHistory
-        this.clearBookmarks = clearBookmarks
-        this.clearFaviconCaches = clearFaviconCaches
-        this.clearWebData = clearWebData
+        clearBrowserData = BrowserDataClearer(
+            clearTabPreviews = clearTabPreviews,
+            clearHistory = clearHistory,
+            clearBookmarks = clearBookmarks,
+            clearFaviconCaches = clearFaviconCaches,
+            clearWebData = clearWebData,
+        )::clear
     }
 
     private val _uiState = MutableStateFlow(BrowserDataUiState())
@@ -65,13 +53,7 @@ internal class BrowserDataViewModel : ViewModel {
         _uiState.value = BrowserDataUiState(BrowserDataStatus.Clearing)
         viewModelScope.launch {
             try {
-                // Preserve the previous user-visible ordering while keeping every storage detail
-                // behind one testable boundary instead of scattering it through Settings UI/root.
-                clearTabPreviews()
-                clearHistory()
-                if (withBookmarks) clearBookmarks()
-                clearFaviconCaches()
-                clearWebData()
+                clearBrowserData(withBookmarks)
                 _uiState.value = BrowserDataUiState()
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -88,22 +70,8 @@ internal class BrowserDataViewModel : ViewModel {
     }
 
     companion object {
-        fun factory(
-            clearTabPreviews: () -> Unit,
-            clearHistory: suspend () -> Unit,
-            clearBookmarks: suspend () -> Unit,
-            clearFaviconCaches: () -> Unit,
-            clearWebData: suspend () -> Unit,
-        ): ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                BrowserDataViewModel(
-                    clearTabPreviews = clearTabPreviews,
-                    clearHistory = clearHistory,
-                    clearBookmarks = clearBookmarks,
-                    clearFaviconCaches = clearFaviconCaches,
-                    clearWebData = clearWebData,
-                )
-            }
+        fun factory(clearer: BrowserDataClearer): ViewModelProvider.Factory = viewModelFactory {
+            initializer { BrowserDataViewModel(clearer) }
         }
     }
 }
