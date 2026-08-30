@@ -7,6 +7,8 @@
     <string name="action_all">Все</string>
     <string name="action_add">Добавить</string>
     <string name="action_back">Назад</string>
+    <string name="action_forward">Вперёд</string>
+    <string name="action_reload">Обновить</string>
     <string name="action_clear">Очистить</string>
     <string name="action_cancel">Отмена</string>
     <string name="action_retry">Повторить</string>
@@ -17,6 +19,8 @@
     <string name="action_ok">ОК</string>
     <string name="action_allow">Разрешить</string>
     <string name="action_deny">Запретить</string>
+    <string name="action_search">Искать</string>
+    <string name="action_share">Поделиться</string>
     <string name="add_bookmark_content_description">Добавить закладку</string>
     <string name="recent_title">Недавние</string>
     <string name="refresh_recent_content_description">Обновить недавние</string>
@@ -85,6 +89,29 @@
     <string name="copied_to_clipboard">Скопировано</string>
     <string name="external_chooser_title">Открыть с помощью</string>
     <string name="share_chooser_title">Поделиться</string>
+
+    <string name="omnibox_hint">Поиск или адрес</string>
+    <string name="search_content_description">Поиск</string>
+    <string name="site_info_content_description">Информация о сайте</string>
+    <string name="tabs_content_description">Вкладки</string>
+    <string name="menu_content_description">Меню</string>
+    <string name="add_to_bookmarks_action">В закладки</string>
+    <string name="remove_from_bookmarks_action">Убрать из закладок</string>
+    <string name="find_on_page">Найти на странице</string>
+    <string name="desktop_site">Версия для ПК</string>
+    <string name="translate_page">Перевести страницу</string>
+    <string name="extension_starting">Запуск…</string>
+    <string name="extension_retry_short">Ошибка · повторить</string>
+    <string name="previous_match_content_description">Предыдущее</string>
+    <string name="next_match_content_description">Следующее</string>
+    <string name="close_find_content_description">Закрыть поиск</string>
+    <string name="security_secure">Соединение защищено</string>
+    <string name="security_exception">Есть исключение безопасности</string>
+    <string name="security_insecure">Соединение не защищено</string>
+    <string name="security_unknown">Состояние соединения неизвестно</string>
+    <string name="state_on">Вкл</string>
+    <string name="state_off">Выкл</string>
+    <string name="page_error_hint">Проверьте адрес и соединение</string>
 
     <string name="site_fallback">Сайт</string>
     <string name="permission_geolocation_message">%1$s хочет получить доступ к местоположению.</string>
