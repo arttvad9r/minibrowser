@@ -1,6 +1,7 @@
 package com.artt.minibrowser.browser
 
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.artt.minibrowser.engine.TabManager
 
@@ -9,8 +10,10 @@ internal class BrowserTabLifecycleController(
     owner: LifecycleOwner,
     private val tabManager: TabManager,
 ) : DefaultLifecycleObserver {
+    private val lifecycle: Lifecycle = owner.lifecycle
+
     init {
-        owner.lifecycle.addObserver(this)
+        lifecycle.addObserver(this)
     }
 
     override fun onResume(owner: LifecycleOwner) {
@@ -24,5 +27,9 @@ internal class BrowserTabLifecycleController(
 
     override fun onStop(owner: LifecycleOwner) {
         tabManager.trimForBackground()
+    }
+
+    override fun onDestroy(owner: LifecycleOwner) {
+        lifecycle.removeObserver(this)
     }
 }
