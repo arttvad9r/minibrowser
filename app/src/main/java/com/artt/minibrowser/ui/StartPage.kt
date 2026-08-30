@@ -68,7 +68,7 @@ internal data class StartPageRecentUiState(
 )
 
 @Composable
-fun StartPage(
+internal fun StartPage(
     bookmarks: List<StartPageBookmarkUiState>,
     iconsDir: File,
     recent: List<StartPageRecentUiState>,
