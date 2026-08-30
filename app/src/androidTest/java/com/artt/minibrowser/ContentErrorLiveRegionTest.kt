@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -26,6 +27,60 @@ import org.junit.runner.RunWith
 class ContentErrorLiveRegionTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun historyInitialLoadFailureIsPoliteErrorWithSeparateRetryAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val message = context.getString(R.string.history_load_error)
+        val hint = context.getString(R.string.retry_hint)
+        val retry = context.getString(R.string.action_retry)
+
+        composeRule.setContent {
+            MinibrowserTheme(darkTheme = false) {
+                HistoryScreenContent(
+                    state = HistoryScreenUiState.Error(HistoryScreenOperation.Load),
+                    iconsDir = File(context.cacheDir, "history-initial-error-icons"),
+                    onBack = {},
+                    onOpen = {},
+                    onClear = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        assertPoliteError(message, hint)
+        composeRule.onNodeWithText(retry).assertHasClickAction()
+    }
+
+    @Test
+    fun bookmarkInitialLoadFailureIsPoliteErrorWithSeparateRetryAction() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val message = context.getString(R.string.bookmarks_load_error)
+        val hint = context.getString(R.string.retry_hint)
+        val retry = context.getString(R.string.action_retry)
+
+        composeRule.setContent {
+            MinibrowserTheme(darkTheme = false) {
+                BookmarksScreenContent(
+                    state = BookmarksScreenUiState(
+                        bookmarks = emptyList(),
+                        isLoading = false,
+                        error = BookmarksScreenOperation.Load,
+                    ),
+                    iconsDir = File(context.cacheDir, "bookmarks-initial-error-icons"),
+                    onBack = {},
+                    onOpen = {},
+                    onRename = { _, _ -> },
+                    onDelete = {},
+                    onRetryLoad = {},
+                    onDismissError = {},
+                )
+            }
+        }
+
+        assertPoliteError(message, hint)
+        composeRule.onNodeWithText(retry).assertHasClickAction()
+    }
 
     @Test
     fun historyContentFailureIsPoliteLiveRegion() {
@@ -88,6 +143,22 @@ class ContentErrorLiveRegionTest {
         }
 
         assertPoliteLiveRegion(message)
+    }
+
+    private fun assertPoliteError(text: String, hint: String) {
+        composeRule.onNodeWithText(text)
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.Error,
+                    hint,
+                ),
+            )
     }
 
     private fun assertPoliteLiveRegion(text: String) {

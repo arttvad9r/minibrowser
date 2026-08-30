@@ -29,8 +29,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -130,12 +132,7 @@ internal fun HistoryScreenContent(
                             HistoryScreenOperation.Load -> stringResource(R.string.history_load_error)
                             HistoryScreenOperation.Clear -> stringResource(R.string.history_clear_error)
                         }
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                EmptyState(AppIcons.History, title, stringResource(R.string.retry_hint))
-                                TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
-                            }
-                        }
+                        InitialLoadErrorState(AppIcons.History, title, onRetry)
                     }
                     is HistoryScreenUiState.Content -> {
                         state.error?.let { operation ->
@@ -276,16 +273,11 @@ internal fun BookmarksScreenContent(
                         }
                     }
                     state.error == BookmarksScreenOperation.Load && state.bookmarks.isEmpty() -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                EmptyState(
-                                    AppIcons.Star,
-                                    stringResource(R.string.bookmarks_load_error),
-                                    stringResource(R.string.retry_hint),
-                                )
-                                TextButton(onClick = onRetryLoad) { Text(stringResource(R.string.action_retry)) }
-                            }
-                        }
+                        InitialLoadErrorState(
+                            AppIcons.Star,
+                            stringResource(R.string.bookmarks_load_error),
+                            onRetryLoad,
+                        )
                     }
                     state.bookmarks.isEmpty() -> {
                         EmptyState(
@@ -385,6 +377,28 @@ internal fun BookmarksScreenContent(
             onRename = { onRename(bookmark.url, it); selected = null },
             onDelete = { onDelete(bookmark.url); selected = null },
         )
+    }
+}
+
+@Composable
+private fun InitialLoadErrorState(
+    icon: ImageVector,
+    title: String,
+    onRetry: () -> Unit,
+) {
+    val retryHint = stringResource(R.string.retry_hint)
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.semantics(mergeDescendants = true) {
+                    error(retryHint)
+                    liveRegion = LiveRegionMode.Polite
+                },
+            ) {
+                EmptyState(icon, title, retryHint)
+            }
+            TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
+        }
     }
 }
 
