@@ -58,13 +58,13 @@ class MainActivity : ComponentActivity() {
     private val pageBookmarkViewModel by lazy {
         ViewModelProvider(
             this,
-            PageBookmarkViewModel.factory { bookmarksRepo },
+            PageBookmarkViewModel.factory { BookmarksRepository(DbHolder.db.dao()) },
         )[PageBookmarkViewModel::class.java]
     }
     private val omniboxSuggestionsViewModel by lazy {
         ViewModelProvider(
             this,
-            OmniboxSuggestionsViewModel.factory { historyRepo },
+            OmniboxSuggestionsViewModel.factory { HistoryRepository(DbHolder.db.dao()) },
         )[OmniboxSuggestionsViewModel::class.java]
     }
 
