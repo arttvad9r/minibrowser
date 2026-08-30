@@ -9,10 +9,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.artt.minibrowser.data.Bookmark
-import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.StartPage
+import com.artt.minibrowser.ui.StartPageBookmarkUiState
+import com.artt.minibrowser.ui.StartPageRecentUiState
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
@@ -65,11 +65,10 @@ class StartPageSemanticsTest {
             MinibrowserTheme(darkTheme = false) {
                 StartPage(
                     bookmarks = listOf(
-                        Bookmark(
+                        StartPageBookmarkUiState(
                             url = "https://example.com",
                             title = title,
                             host = "example.com",
-                            position = 0,
                         ),
                     ),
                     iconsDir = File(context.cacheDir, "test-icons"),
@@ -104,11 +103,9 @@ class StartPageSemanticsTest {
                     bookmarks = emptyList(),
                     iconsDir = File(context.cacheDir, "test-icons"),
                     recent = listOf(
-                        HistoryEntry(
+                        StartPageRecentUiState(
                             url = "https://example.com",
                             title = recentTitle,
-                            visitedAt = 1L,
-                            visits = 1,
                         ),
                     ),
                     isPrivate = false,
