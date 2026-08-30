@@ -25,13 +25,51 @@ class BookmarksPolicyTest {
         assertEquals(listOf(safe), webBookmarks(listOf(safe, hostless, script)))
     }
 
-    @Test fun omniboxMergeNeverPublishesUnsafeStoredUrls() {
-        val unsafe = Bookmark("file:///tmp/private", "Private", "", 1)
-        val safe = Bookmark("https://example.com", "Example", "example.com", 2)
+    @Test fun credentialLegacyBookmarkIsSanitizedBeforeUi() {
+        val rawUrl = "https://user:secret@example.com/private?q=1#section"
+        val bookmark = Bookmark(rawUrl, rawUrl, "example.com", 7)
 
         assertEquals(
-            listOf("https://example.com"),
-            mergeSuggestions(listOf(unsafe, safe), emptyList()).map { it.url },
+            listOf(
+                Bookmark(
+                    url = "https://example.com/private?q=1#section",
+                    title = "https://example.com/private?q=1#section",
+                    host = "example.com",
+                    position = 7,
+                ),
+            ),
+            webBookmarks(listOf(bookmark)),
+        )
+    }
+
+    @Test fun credentialVariantDoesNotDuplicateExistingSafeBookmark() {
+        val safe = Bookmark("https://example.com/private", "Safe", "example.com", 1)
+        val credential = Bookmark(
+            "https://user:secret@example.com/private",
+            "Credential copy",
+            "example.com",
+            2,
+        )
+
+        assertEquals(listOf(safe), webBookmarks(listOf(safe, credential)))
+    }
+
+    @Test fun omniboxMergeNeverPublishesUnsafeStoredUrls() {
+        val unsafe = Bookmark("file:///tmp/private", "Private", "", 1)
+        val credential = Bookmark(
+            "https://user:secret@example.com/private",
+            "Credential",
+            "example.com",
+            2,
+        )
+        val safe = Bookmark("https://example.org", "Example", "example.org", 3)
+
+        assertEquals(
+            listOf(
+                "https://example.com/private",
+                "https://example.org",
+            ),
+            mergeSuggestions(listOf(unsafe, credential, safe), emptyList()).map { it.url },
         )
     }
 }
