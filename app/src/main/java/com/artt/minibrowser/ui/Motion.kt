@@ -11,6 +11,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
 
 /** Shared timing vocabulary; app-level motion is intentionally minimal. */
 object MotionTokens {
@@ -39,7 +40,7 @@ fun HighFrameRateDuringMotion(active: Boolean) {
     }
 }
 
-/** App-chrome click using the platform/Material indication only. */
+/** App-chrome click using the platform/Material indication and button semantics. */
 @Composable
 fun Modifier.softClickable(
     enabled: Boolean = true,
@@ -50,11 +51,12 @@ fun Modifier.softClickable(
         interactionSource = interactionSource,
         indication = LocalIndication.current,
         enabled = enabled,
+        role = Role.Button,
         onClick = onClick,
     )
 }
 
-/** Same single-indication behavior while preserving long-click semantics. */
+/** Same single-indication behavior while preserving long-click and button semantics. */
 @Composable
 fun Modifier.softCombinedClickable(
     enabled: Boolean = true,
@@ -66,6 +68,7 @@ fun Modifier.softCombinedClickable(
         interactionSource = interactionSource,
         indication = LocalIndication.current,
         enabled = enabled,
+        role = Role.Button,
         onLongClick = onLongClick,
         onClick = onClick,
     )
