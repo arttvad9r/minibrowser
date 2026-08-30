@@ -96,11 +96,27 @@ object TabStore {
     private val json = Json { ignoreUnknownKeys = true }
     private val writeLock = Any()
     private val newestRevisionByTarget = mutableMapOf<String, Long>()
+    private val allocatedRevisionByTarget = mutableMapOf<String, Long>()
 
     fun save(dir: File, urls: List<String>) {
         saveState(dir, PersistedBrowserState(
             tabs = urls.mapIndexed { index, url -> PersistedTab(index.toLong() + 1, url) },
         ))
+    }
+
+    /**
+     * Returns a process-wide monotonic revision for this tab store. TabManager instances are
+     * Activity-owned and can be recreated while the process stays alive, so a manager-local counter
+     * would restart at zero and make its fresh writes look older than the previous manager's final
+     * snapshot.
+     */
+    internal fun nextRevision(dir: File): Long = synchronized(writeLock) {
+        val key = File(dir, FILE_NAME).absolutePath
+        val latest = maxOf(
+            newestRevisionByTarget[key] ?: 0L,
+            allocatedRevisionByTarget[key] ?: 0L,
+        )
+        (latest + 1L).also { allocatedRevisionByTarget[key] = it }
     }
 
     /**
@@ -121,6 +137,7 @@ object TabStore {
     fun saveStateVersioned(dir: File, state: PersistedBrowserState, revision: Long): Boolean =
         synchronized(writeLock) {
             val key = File(dir, FILE_NAME).absolutePath
+            allocatedRevisionByTarget[key] = maxOf(allocatedRevisionByTarget[key] ?: 0L, revision)
             val newest = newestRevisionByTarget[key]
             if (newest != null && revision < newest) {
                 false
