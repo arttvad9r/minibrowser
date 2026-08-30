@@ -7,7 +7,6 @@ package com.artt.minibrowser.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -281,7 +280,7 @@ internal fun TopBar(
                 .size(48.dp)
                 .clip(Radius.button)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable { focusManager.clearFocus(force = true); onSwitcher() }
+                .softClickable { focusManager.clearFocus(force = true); onSwitcher() }
                 .semantics { contentDescription = tabsDescription },
             contentAlignment = Alignment.Center,
         ) {
@@ -326,7 +325,7 @@ private fun SuggestionRow(s: BrowserSuggestionUiState, iconsDir: File, onClick: 
         Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .clickable(onClick = onClick)
+            .softClickable(onClick = onClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -509,7 +508,7 @@ private fun MenuNavigationAction(
         modifier
             .height(48.dp)
             .clip(Radius.small)
-            .clickable(enabled = enabled, onClick = onClick)
+            .softClickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
