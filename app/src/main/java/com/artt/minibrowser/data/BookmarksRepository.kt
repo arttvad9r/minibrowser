@@ -44,8 +44,13 @@ class BookmarksRepository(private val dao: AppDao) {
     suspend fun add(url: String, title: String) {
         val safeUrl = sanitizeWebUriForPersistence(url) ?: return
         val host = runCatching { URI(safeUrl).host ?: "" }.getOrDefault("")
+        val safeTitle = when {
+            title.isBlank() -> host
+            title == url -> safeUrl
+            else -> title
+        }
         val max = dao.maxBookmarkPosition()
-        dao.upsertBookmark(Bookmark(safeUrl, title.ifBlank { host }, host, max + 1))
+        dao.upsertBookmark(Bookmark(safeUrl, safeTitle, host, max + 1))
     }
 
     suspend fun remove(url: String) {
