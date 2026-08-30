@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -186,7 +187,7 @@ internal fun BrowserTabSwitcher(
                 },
         ) {
             Row(
-                Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp),
+                Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
@@ -305,7 +306,7 @@ private fun BrowserTabCard(
             .clickable(role = Role.Button, onClick = onSelect),
     ) {
         if (tab.isPrivate) {
-            Box(Modifier.fillMaxWidth().height(48.dp)) {
+            Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text(
                     displayTitle,
                     Modifier.align(Alignment.Center),
@@ -332,7 +333,7 @@ private fun BrowserTabCard(
             }
         } else {
             Row(
-                Modifier.fillMaxWidth().height(48.dp).padding(start = 10.dp, end = 2.dp),
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 10.dp, end = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Favicon(if (host.isNotBlank()) tab.url else host, iconsDir, 17.dp)
