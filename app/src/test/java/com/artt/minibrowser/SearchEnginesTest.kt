@@ -37,11 +37,20 @@ class SearchEnginesTest {
         assertEquals(
             "https://example-com.translate.goog/a?_x_tr_sl=auto&_x_tr_tl=de&_x_tr_hl=de",
             buildTranslateUri("https://example.com/a", " DE "))
-    @Test fun translateUriRejectsGarbage() {
+    @Test fun translateUriAcceptsDefaultPortWithoutChangingOrigin() =
+        assertEquals(
+            "https://example-com.translate.goog/a?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en",
+            buildTranslateUri("https://example.com:443/a", "en"))
+    @Test fun translateUriRejectsGarbageAndLocalOrigins() {
         assertNull(buildTranslateUri("https://a.translate.goog/x", "ru"))
         assertNull(buildTranslateUri("https://TRANSLATE.GOOG/x", "ru"))
         assertNull(buildTranslateUri("about:blank", "ru"))
         assertNull(buildTranslateUri("httpx://example.com/x", "ru"))
+        assertNull(buildTranslateUri("https://example.com:8443/x", "ru"))
+        assertNull(buildTranslateUri("http://localhost:8080/x", "ru"))
+        assertNull(buildTranslateUri("https://192.168.1.2/x", "ru"))
+        assertNull(buildTranslateUri("https://[2001:db8::1]/x", "ru"))
+        assertNull(buildTranslateUri("https://printer.local/x", "ru"))
         assertNull(buildTranslateUri("https://a.b/c", "  "))
         assertNull(buildTranslateUri("https://a.b/c", "ru&x=1"))
         assertNull(buildTranslateUri("https://a.b/c", "es"))
