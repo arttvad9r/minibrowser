@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -43,6 +45,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -50,6 +54,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -345,6 +351,15 @@ private fun RecentCard(
 fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) -> Unit) {
     var title by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
+    val addressFocusRequester = remember { FocusRequester() }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val submit: () -> Unit = {
+        if (url.isNotBlank()) {
+            focusManager.clearFocus(force = true)
+            onAdd(url, title.trim())
+        }
+    }
+
     BrowserBottomSheet(onDismissRequest = onDismiss) {
         Text(stringResource(R.string.add_bookmark_title), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(20.dp))
@@ -353,6 +368,8 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
             value = title,
             onChange = { title = it },
             placeholder = stringResource(R.string.bookmark_title_placeholder),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+            keyboardActions = KeyboardActions(onNext = { addressFocusRequester.requestFocus() }),
         )
         Spacer(Modifier.height(12.dp))
         Field(
@@ -360,6 +377,12 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
             value = url,
             onChange = { url = it },
             placeholder = stringResource(R.string.bookmark_url_placeholder),
+            modifier = Modifier.focusRequester(addressFocusRequester),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(onDone = { submit() }),
         )
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -367,7 +390,7 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
                 Text(stringResource(R.string.action_cancel))
             }
             Button(
-                onClick = { onAdd(url, title.trim()) },
+                onClick = submit,
                 enabled = url.isNotBlank(),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
@@ -380,7 +403,15 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
 }
 
 @Composable
-private fun Field(label: String, value: String, onChange: (String) -> Unit, placeholder: String) {
+private fun Field(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(),
+    keyboardActions: KeyboardActions = KeyboardActions(),
+) {
     Text(
         label,
         modifier = Modifier.clearAndSetSemantics { },
@@ -391,10 +422,12 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit, plac
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .semantics { contentDescription = label },
         singleLine = true,
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         placeholder = { Text(placeholder, Modifier.clearAndSetSemantics { }) },
         shape = Radius.button,
         colors = OutlinedTextFieldDefaults.colors(
