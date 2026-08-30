@@ -44,11 +44,12 @@ internal fun sanitizeWebUriForPersistence(value: String): String? {
     val trimmed = value.trim()
     if (!isValidWebUri(trimmed)) return null
     val uri = runCatching { URI(trimmed) }.getOrNull() ?: return null
-    if (uri.rawUserInfo == null) return trimmed
-
     val rawAuthority = uri.rawAuthority ?: return null
+    // URI.rawUserInfo can be null for a Unicode authority even when rawAuthority contains userinfo.
+    // A literal '@' is the authority delimiter; an '@' that belongs to user data is percent-encoded.
     val userInfoEnd = rawAuthority.lastIndexOf('@')
     if (userInfoEnd < 0) return trimmed
+
     val schemeEnd = trimmed.indexOf("://")
     if (schemeEnd < 0) return null
     val authorityStart = schemeEnd + 3
