@@ -93,9 +93,10 @@ class StartPageSemanticsTest {
     }
 
     @Test
-    fun showAllHistoryKeepsMinimumTouchTarget() {
+    fun recentActionsKeepMinimumTouchTargets() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val showAllHistory = context.getString(R.string.show_all_history)
+        val recentTitle = "Example"
 
         composeRule.setContent {
             MinibrowserTheme(darkTheme = false) {
@@ -105,7 +106,7 @@ class StartPageSemanticsTest {
                     recent = listOf(
                         HistoryEntry(
                             url = "https://example.com",
-                            title = "Example",
+                            title = recentTitle,
                             visitedAt = 1L,
                             visits = 1,
                         ),
@@ -122,6 +123,11 @@ class StartPageSemanticsTest {
             }
         }
 
+        composeRule
+            .onNodeWithText(recentTitle)
+            .assertIsDisplayed()
+            .assertHasClickAction()
+            .assertHeightIsAtLeast(48.dp)
         composeRule
             .onNodeWithText(showAllHistory)
             .assertIsDisplayed()
