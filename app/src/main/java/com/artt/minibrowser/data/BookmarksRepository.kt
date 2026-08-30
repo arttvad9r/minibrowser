@@ -4,24 +4,24 @@ import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import com.artt.minibrowser.net.webUriHost
 import kotlinx.coroutines.CancellationException
 
+internal fun bookmarkTitleForPersistence(title: String): String =
+    sanitizeWebUriForPersistence(title) ?: title
+
 internal fun bookmarkForPersistence(url: String, title: String, position: Int): Bookmark? {
     val safeUrl = sanitizeWebUriForPersistence(url) ?: return null
     val host = webUriHost(safeUrl).orEmpty()
-    val safeTitle = when {
-        title.isBlank() -> host
-        title == url -> safeUrl
-        else -> title
-    }
+    val safeTitle = bookmarkTitleForPersistence(title).ifBlank { host }
     return Bookmark(safeUrl, safeTitle, host, position)
 }
 
 private fun sanitizedBookmark(entry: Bookmark): Bookmark? {
     val safeUrl = sanitizeWebUriForPersistence(entry.url) ?: return null
-    if (safeUrl == entry.url) return entry
-    val safeHost = webUriHost(safeUrl).orEmpty()
+    val safeTitle = bookmarkTitleForPersistence(entry.title)
+    if (safeUrl == entry.url && safeTitle == entry.title) return entry
+    val safeHost = if (safeUrl == entry.url) entry.host else webUriHost(safeUrl).orEmpty()
     return entry.copy(
         url = safeUrl,
-        title = if (entry.title == entry.url) safeUrl else entry.title,
+        title = safeTitle,
         host = safeHost,
     )
 }
@@ -82,7 +82,9 @@ class BookmarksRepository(private val dao: AppDao) {
     suspend fun clearAll() = dao.clearBookmarks()
 
     suspend fun rename(url: String, title: String) {
-        sanitizeWebUriForPersistence(url)?.let { dao.renameBookmark(it, title) }
+        sanitizeWebUriForPersistence(url)?.let { safeUrl ->
+            dao.renameBookmark(safeUrl, bookmarkTitleForPersistence(title))
+        }
     }
 
     suspend fun isBookmarked(url: String): Boolean {
@@ -91,10 +93,11 @@ class BookmarksRepository(private val dao: AppDao) {
     }
 
     /**
-     * Legacy builds could persist valid HTTP(S) URLs containing user-info credentials. Publish only
-     * sanitized copies immediately, then converge storage in the background path used to load the
-     * bookmark screen. Upsert the safe key before deleting the old key so process death cannot lose
-     * a bookmark; if the safe key already exists, simply discard the credential-bearing duplicate.
+     * Legacy builds could persist valid HTTP(S) URLs or URL-shaped titles containing user-info
+     * credentials. Publish only sanitized copies immediately, then converge storage in the
+     * background path used to load the bookmark screen. Upsert the safe key before deleting the old
+     * key so process death cannot lose a bookmark; if the safe key already exists, simply discard
+     * the credential-bearing duplicate.
      */
     private suspend fun migrateLegacyRows(stored: List<Bookmark>) {
         stored.forEach { entry ->
@@ -105,6 +108,7 @@ class BookmarksRepository(private val dao: AppDao) {
                     if (dao.bookmarkCount(safe.url) == 0) dao.upsertBookmark(safe)
                     dao.deleteBookmark(entry.url)
                 }
+                safe != entry -> dao.upsertBookmark(safe)
             }
         }
     }
