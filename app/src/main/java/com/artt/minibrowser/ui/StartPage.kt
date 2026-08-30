@@ -6,7 +6,6 @@ package com.artt.minibrowser.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -291,7 +290,7 @@ private fun RecentCard(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
-                    .clickable { onOpen(entry.url) }
+                    .softClickable { onOpen(entry.url) }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -322,7 +321,7 @@ private fun RecentCard(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .clickable(onClick = onShowAll)
+                .softClickable(onClick = onShowAll)
                 .padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
