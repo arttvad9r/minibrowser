@@ -1,6 +1,6 @@
 package com.artt.minibrowser
 
-import com.artt.minibrowser.engine.formatFindCounter
+import com.artt.minibrowser.ui.formatFindCounter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
