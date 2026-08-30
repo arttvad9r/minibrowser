@@ -252,10 +252,10 @@ internal fun BrowserRoute(
                     GeckoContent(currentTab, Modifier.fillMaxSize())
                     BrowserPageProgress(currentTab?.progress ?: -1f)
                 },
-                findContent = if (currentSession != null && currentTab != null) {
+                findContent = if (currentTab != null) {
                     {
                         key(currentTab.id) {
-                            FindInPageRoute(currentSession, pageActions.onCloseFind)
+                            FindInPageRoute(currentTab.session, pageActions.onCloseFind)
                         }
                     }
                 } else {
