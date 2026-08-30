@@ -29,7 +29,7 @@ private fun isTranslatableHost(host: String): Boolean =
 private fun translateQueryKey(segment: String): String {
     val rawKey = segment.substringBefore('=')
     return runCatching {
-        URLDecoder.decode(rawKey, StandardCharsets.UTF_8).lowercase()
+        URLDecoder.decode(rawKey, StandardCharsets.UTF_8.name()).lowercase()
     }.getOrDefault(rawKey.lowercase())
 }
 
