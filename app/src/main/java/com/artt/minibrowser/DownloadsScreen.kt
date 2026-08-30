@@ -3,7 +3,6 @@ package com.artt.minibrowser
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,6 +16,7 @@ import com.artt.minibrowser.data.BrowserDownload
 import com.artt.minibrowser.data.DownloadFailureReason
 import com.artt.minibrowser.data.DownloadStatus
 import com.artt.minibrowser.data.DownloadsRepository
+import com.artt.minibrowser.data.isSupportedDownloadLocation
 import com.artt.minibrowser.data.normalizeDownloadMime
 import com.artt.minibrowser.ui.DownloadFailureUiState
 import com.artt.minibrowser.ui.DownloadItemUiState
@@ -24,7 +24,6 @@ import com.artt.minibrowser.ui.DownloadStatusUiState
 import com.artt.minibrowser.ui.DownloadsScreenContent
 import com.artt.minibrowser.ui.DownloadsScreenUiState
 import java.io.File
-import java.net.URI
 
 /** Downloads stays in the same Compose navigation layer as Settings/History/Bookmarks. */
 @Composable
@@ -71,28 +70,6 @@ private fun DownloadFailureReason?.toUiState(): DownloadFailureUiState = when (t
     DownloadFailureReason.Interrupted -> DownloadFailureUiState.Interrupted
     DownloadFailureReason.SaveFailed -> DownloadFailureUiState.SaveFailed
     null -> DownloadFailureUiState.Unknown
-}
-
-internal fun isSupportedDownloadLocation(value: String): Boolean = runCatching {
-    val uri = URI(value)
-    when (uri.scheme?.lowercase()) {
-        "content" -> isMediaStoreDownloadRow(uri)
-        "file" -> !uri.path.isNullOrBlank()
-        else -> false
-    }
-}.getOrDefault(false)
-
-private fun isMediaStoreDownloadRow(uri: URI): Boolean {
-    if (!uri.rawAuthority.equals(MediaStore.AUTHORITY, ignoreCase = true)) return false
-    if (uri.rawQuery != null || uri.rawFragment != null) return false
-    val segments = uri.rawPath
-        ?.split('/')
-        ?.filter { it.isNotEmpty() }
-        .orEmpty()
-    return segments.size == 3 &&
-        segments[0].isNotBlank() &&
-        segments[1].equals("downloads", ignoreCase = true) &&
-        segments[2].toLongOrNull()?.let { it >= 0L } == true
 }
 
 private fun openDownload(context: Context, item: BrowserDownload) {
