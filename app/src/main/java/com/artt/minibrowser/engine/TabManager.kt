@@ -533,7 +533,7 @@ class TabManager(
         // Any callbacks emitted while the old sessions were closing have already advanced the
         // revision. The clear barrier is therefore newer than every snapshot that can still
         // contain those tabs, and it is fsynced before Gecko's asynchronous storage clear starts.
-        val clearRevision = persistRevision.incrementAndGet()
+        val clearRevision = TabStore.nextRevision(storeDir)
         withContext(Dispatchers.IO) {
             TabStore.saveStateVersioned(storeDir, PersistedBrowserState(), clearRevision)
         }
@@ -573,7 +573,7 @@ class TabManager(
     fun close() {
         if (closed) return
         val finalSnapshot = capturePersistenceSnapshot()
-        val finalRevision = persistRevision.incrementAndGet()
+        val finalRevision = TabStore.nextRevision(storeDir)
         closed = true
         persistJob.cancel()
         runCatching {
@@ -589,7 +589,8 @@ class TabManager(
 
     private fun requestPersist(immediate: Boolean) {
         if (!closed) {
-            persistRevision.incrementAndGet()
+            val revision = TabStore.nextRevision(storeDir)
+            persistRevision.updateAndGet { current -> maxOf(current, revision) }
             persistRequests.send(if (immediate) PersistSignal.Immediate else PersistSignal.Dirty)
         }
     }
