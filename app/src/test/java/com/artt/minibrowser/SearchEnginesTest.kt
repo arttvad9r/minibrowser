@@ -29,6 +29,16 @@ class SearchEnginesTest {
         assertEquals("http://localhost:8080/x", buildLoadUri("http://localhost:8080/x", SearchEngine.GOOGLE))
     @Test fun shorthandLocalhostUsesHttp() =
         assertEquals("http://localhost:8080/x", buildLoadUri("localhost:8080/x", SearchEngine.GOOGLE))
+    @Test fun shorthandLocalhostPreservesQueryAndFragment() {
+        assertEquals(
+            "http://localhost:8080?debug=1",
+            buildLoadUri("localhost:8080?debug=1", SearchEngine.GOOGLE),
+        )
+        assertEquals(
+            "http://localhost:8080#section",
+            buildLoadUri("localhost:8080#section", SearchEngine.GOOGLE),
+        )
+    }
     @Test fun shorthandInvalidPortsFallBackToSearch() {
         assertEquals(
             "https://www.google.com/search?q=example.com%3A99999",

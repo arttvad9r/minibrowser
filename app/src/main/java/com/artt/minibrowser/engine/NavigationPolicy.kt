@@ -95,13 +95,13 @@ fun resolveNavigation(input: String): NavigationTarget {
     if (scheme in EXTERNAL_SCHEMES && value.contains(':')) return NavigationTarget.External(value)
     if (value.startsWith("about:", ignoreCase = true)) return NavigationTarget.Search(value)
 
-    val localhost = Regex("^localhost(?::\\d+)?(?:/.*)?$", RegexOption.IGNORE_CASE).matches(value)
+    val authority = value.substringBefore('/').substringBefore('?').substringBefore('#')
+    val localhost = Regex("^localhost(?::\\d+)?$", RegexOption.IGNORE_CASE).matches(authority)
     if (localhost) {
         val candidate = "http://$value"
         if (isValidWebUri(candidate)) return NavigationTarget.Web(candidate)
     }
 
-    val authority = value.substringBefore('/').substringBefore('?').substringBefore('#')
     val hostLike = authority.contains('.') &&
         '@' !in authority &&
         authority.none(Char::isWhitespace)
