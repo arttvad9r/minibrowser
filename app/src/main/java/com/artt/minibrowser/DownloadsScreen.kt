@@ -3,6 +3,7 @@ package com.artt.minibrowser
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.text.format.Formatter
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,7 +51,6 @@ import com.artt.minibrowser.data.BrowserDownload
 import com.artt.minibrowser.data.DownloadFailureReason
 import com.artt.minibrowser.data.DownloadHistory
 import com.artt.minibrowser.data.DownloadStatus
-import com.artt.minibrowser.data.formatDownloadSize
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BrowserMotionScreen
 import com.artt.minibrowser.ui.CenteredSinglePane
@@ -181,6 +181,7 @@ private fun DownloadCard(
     dateFormat: DateFormat,
     onOpen: () -> Unit,
 ) {
+    val context = LocalContext.current
     val canOpen = item.status == DownloadStatus.Completed && !item.location.isNullOrBlank()
     val iconTint = when (item.status) {
         DownloadStatus.Downloading -> MaterialTheme.colorScheme.primary
@@ -214,7 +215,7 @@ private fun DownloadCard(
                     val whenDone = item.finishedAt ?: item.startedAt
                     stringResource(
                         R.string.download_completed_subtitle,
-                        formatDownloadSize(item.bytes),
+                        Formatter.formatShortFileSize(context, item.bytes.coerceAtLeast(0L)),
                         dateFormat.format(Date(whenDone)),
                     )
                 }
