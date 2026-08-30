@@ -39,6 +39,11 @@ data class BrowserDownload(
     val failureReason: DownloadFailureReason? = null,
 )
 
+internal data class ParsedDownloadHistory(
+    val items: List<BrowserDownload>,
+    val needsRewrite: Boolean,
+)
+
 // Read-only migration sentinel from the pre-structured history format. Never shown directly.
 private const val LEGACY_INTERRUPTED_ERROR = "Загрузка была прервана"
 
@@ -68,6 +73,42 @@ internal fun normalizeRestoredDownload(item: BrowserDownload, now: Long): Browse
         )
         DownloadStatus.Completed -> sanitized
     }
+}
+
+internal fun parseDownloadHistoryJson(text: String, limit: Int = 200): ParsedDownloadHistory {
+    val maxItems = limit.coerceAtLeast(0)
+    val array = JSONArray(text)
+    val seenIds = HashSet<String>()
+    var needsRewrite = array.length() > maxItems
+    val items = buildList {
+        for (index in 0 until minOf(array.length(), maxItems)) {
+            val item = runCatching {
+                val o = array.getJSONObject(index)
+                BrowserDownload(
+                    id = o.getString("id"),
+                    name = o.getString("name"),
+                    sourceUrl = o.optString("sourceUrl"),
+                    mime = o.optString("mime", "application/octet-stream"),
+                    status = runCatching { DownloadStatus.valueOf(o.getString("status")) }
+                        .getOrDefault(DownloadStatus.Failed),
+                    startedAt = o.optLong("startedAt"),
+                    finishedAt = o.optLong("finishedAt").takeIf { o.has("finishedAt") },
+                    bytes = o.optLong("bytes"),
+                    location = o.optString("location").takeIf { it.isNotBlank() },
+                    error = o.optString("error").takeIf { it.isNotBlank() },
+                    failureReason = o.optString("failureReason")
+                        .takeIf { it.isNotBlank() }
+                        ?.let { value -> runCatching { DownloadFailureReason.valueOf(value) }.getOrNull() },
+                )
+            }.getOrNull()
+            if (item == null || item.id.isBlank() || !seenIds.add(item.id)) {
+                needsRewrite = true
+            } else {
+                add(item)
+            }
+        }
+    }
+    return ParsedDownloadHistory(items = items, needsRewrite = needsRewrite)
 }
 
 /** Live callbacks win by id; restored history then fills the remaining bounded slots. */
@@ -145,7 +186,8 @@ object DownloadHistory {
         ioScope.launch {
             try {
                 val now = System.currentTimeMillis()
-                val rawRestored = load(file).take(MAX_ITEMS)
+                val loaded = load(file)
+                val rawRestored = loaded.items
                 val restored = rawRestored.map { normalizeRestoredDownload(it, now) }
                 synchronized(lock) {
                     val live = _items.value
@@ -156,9 +198,12 @@ object DownloadHistory {
                         mergeRestoredDownloads(live, restored, MAX_ITEMS)
                     }
                     // Do not rewrite an already-sanitized, settled file on every cold start. A
-                    // rewrite is needed only when normalization changed data, a live callback raced
-                    // the restore, or the user cleared history before the restore completed.
-                    if (shouldPersistRestoredDownloadMerge(live, rawRestored, restored, discard)) {
+                    // rewrite is needed only when parsing dropped malformed/excess data,
+                    // normalization changed data, a live callback raced the restore, or the user
+                    // cleared history before the restore completed.
+                    if (loaded.needsRewrite ||
+                        shouldPersistRestoredDownloadMerge(live, rawRestored, restored, discard)
+                    ) {
                         // Publish the merged/sanitized snapshot before unblocking the writer. Because
                         // the channel is conflated, any pre-restore partial snapshot is replaced by it.
                         schedulePersistLocked()
@@ -252,38 +297,13 @@ object DownloadHistory {
         runCatching { writeTextAtomically(file, array.toString()) }
     }
 
-    private fun load(file: File): List<BrowserDownload> {
-        if (!file.isFile) return emptyList()
+    private fun load(file: File): ParsedDownloadHistory {
+        if (!file.isFile) return ParsedDownloadHistory(emptyList(), needsRewrite = false)
         return runCatching {
-            val array = JSONArray(file.readText())
-            buildList {
-                for (index in 0 until minOf(array.length(), MAX_ITEMS)) {
-                    val o = array.getJSONObject(index)
-                    add(
-                        BrowserDownload(
-                            id = o.getString("id"),
-                            name = o.getString("name"),
-                            sourceUrl = o.optString("sourceUrl"),
-                            mime = o.optString("mime", "application/octet-stream"),
-                            status = runCatching { DownloadStatus.valueOf(o.getString("status")) }
-                                .getOrDefault(DownloadStatus.Failed),
-                            startedAt = o.optLong("startedAt"),
-                            finishedAt = o.optLong("finishedAt").takeIf { o.has("finishedAt") },
-                            bytes = o.optLong("bytes"),
-                            location = o.optString("location").takeIf { it.isNotBlank() },
-                            error = o.optString("error").takeIf { it.isNotBlank() },
-                            failureReason = o.optString("failureReason")
-                                .takeIf { it.isNotBlank() }
-                                ?.let { value ->
-                                    runCatching { DownloadFailureReason.valueOf(value) }.getOrNull()
-                                },
-                        ),
-                    )
-                }
-            }
+            parseDownloadHistoryJson(file.readText(), MAX_ITEMS)
         }.getOrElse {
             quarantineCorruptFile(file, File("${file.path}.corrupt"))
-            emptyList()
+            ParsedDownloadHistory(emptyList(), needsRewrite = false)
         }
     }
 }
