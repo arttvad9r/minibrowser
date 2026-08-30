@@ -17,12 +17,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.res.stringResource
+import com.artt.minibrowser.R
 import java.io.File
 
 internal data class BrowserSuggestionUiState(
     val label: String,
     val url: String,
 )
+
+internal enum class BrowserPageLoadErrorUiState { Security, Network, Generic }
 
 internal data class BrowserPageUiState(
     val chrome: BrowserChromeUiState,
@@ -33,7 +37,7 @@ internal data class BrowserPageUiState(
     val showFind: Boolean,
     val showStart: Boolean,
     val inFullscreen: Boolean,
-    val loadError: String?,
+    val loadError: BrowserPageLoadErrorUiState?,
 )
 
 internal data class BrowserPageActions(
@@ -130,7 +134,14 @@ internal fun BrowserPageContent(
             }
             val loadError = state.loadError
             if (!state.showStart && loadError != null) {
-                ErrorOverlay(loadError, actions.onReload)
+                val message = stringResource(
+                    when (loadError) {
+                        BrowserPageLoadErrorUiState.Security -> R.string.page_error_security
+                        BrowserPageLoadErrorUiState.Network -> R.string.page_error_network
+                        BrowserPageLoadErrorUiState.Generic -> R.string.page_error_generic
+                    },
+                )
+                ErrorOverlay(message, actions.onReload)
             }
         }
     }
