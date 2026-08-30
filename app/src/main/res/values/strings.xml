@@ -20,7 +20,6 @@
     <string name="action_allow">Разрешить</string>
     <string name="action_deny">Запретить</string>
     <string name="action_search">Искать</string>
-    <string name="action_share">Поделиться</string>
     <string name="add_bookmark_content_description">Добавить закладку</string>
     <string name="recent_title">Недавние</string>
     <string name="refresh_recent_content_description">Обновить недавние</string>
