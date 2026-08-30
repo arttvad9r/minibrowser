@@ -3,12 +3,14 @@ package com.artt.minibrowser
 import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.collapseHistoryNoise
 import com.artt.minibrowser.data.distinctRecentSites
+import com.artt.minibrowser.data.historyTitleForPersistence
 import com.artt.minibrowser.data.isHistoryUrl
 import com.artt.minibrowser.data.webHistoryEntries
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -40,6 +42,15 @@ class HistoryPolicyTest {
         )
     }
 
+    @Test fun historyTitleSanitizesOnlyUrlShapedCredentials() {
+        assertEquals(
+            "https://example.com/private?q=1#part",
+            historyTitleForPersistence("https://user:secret@example.com/private?q=1#part"),
+        )
+        assertEquals("Обычный заголовок", historyTitleForPersistence("Обычный заголовок"))
+        assertNull(historyTitleForPersistence("   "))
+    }
+
     @Test fun webHistoryFastPathReusesInput() {
         val rows = listOf(
             HistoryEntry("https://example.com/a", "A", 2, 1),
@@ -62,6 +73,27 @@ class HistoryPolicyTest {
 
         assertEquals(
             listOf(HistoryEntry("https://example.com/private?q=1#x", "https://example.com/private?q=1#x", 2, 1)),
+            webHistoryEntries(listOf(row)),
+        )
+    }
+
+    @Test fun webHistoryStripsLegacyCredentialsFromTitleWhenUrlIsAlreadySafe() {
+        val row = HistoryEntry(
+            "https://example.com/private?q=1#x",
+            "https://user:secret@example.com/private?q=1#x",
+            2,
+            1,
+        )
+
+        assertEquals(
+            listOf(
+                HistoryEntry(
+                    "https://example.com/private?q=1#x",
+                    "https://example.com/private?q=1#x",
+                    2,
+                    1,
+                ),
+            ),
             webHistoryEntries(listOf(row)),
         )
     }
