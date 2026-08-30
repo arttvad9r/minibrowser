@@ -214,7 +214,7 @@ internal fun BrowserRoute(
                 iconsDir = iconsDir,
                 browserContent = {
                     GeckoContent(currentTab, Modifier.fillMaxSize())
-                    BrowserPageProgress(currentTab)
+                    BrowserPageProgress(currentTab?.progress ?: -1f)
                 },
                 findContent = if (currentSession != null && currentTab != null) {
                     {
