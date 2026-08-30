@@ -27,16 +27,12 @@ import java.io.File
 
 internal data class BrowserPageUiState(
     val tabs: List<Tab>,
-    val currentId: Long?,
     val currentTab: Tab?,
     val searchEngine: SearchEngine,
     val bookmarked: Boolean,
     val suggestions: List<Suggestion>,
     val adblockStatus: ExtensionLoader.Status?,
-    val adblockEnabled: Boolean,
     val showFind: Boolean,
-    val showSwitcher: Boolean,
-    val showSiteInfo: Boolean,
     val showStart: Boolean,
     val inFullscreen: Boolean,
 )
@@ -62,11 +58,6 @@ internal data class BrowserPageActions(
     val onToggleAdblock: (Boolean) -> Unit,
     val onRetryAdblock: () -> Unit,
     val onTranslate: () -> Unit,
-    val onSelectTab: (Long) -> Unit,
-    val onCloseTab: (Long) -> Unit,
-    val onNewSwitcherTab: () -> Unit,
-    val onDismissSwitcher: () -> Unit,
-    val onDismissSiteInfo: () -> Unit,
 )
 
 /** Browser-page renderer. It receives only display state, UI actions and a start-page slot. */
@@ -84,82 +75,62 @@ internal fun BrowserPageContent(
     val topSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top)
     val bottomSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
 
-    Box(Modifier.fillMaxSize()) {
-        Column(
+    Column(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(horizontalSafeInsets),
+    ) {
+        if (!state.inFullscreen) {
+            Box(Modifier.windowInsetsPadding(topSafeInsets)) {
+                TopBar(
+                    currentTab,
+                    engine = state.searchEngine,
+                    tabCount = state.tabs.size,
+                    bookmarked = state.bookmarked,
+                    iconsDir = iconsDir,
+                    omniboxFocus = omniboxFocus,
+                    suggestions = state.suggestions,
+                    onSuggestionQueryChanged = actions.onSuggestionQueryChanged,
+                    onNavigate = actions.onNavigate,
+                    onExternal = actions.onExternal,
+                    onBack = actions.onBack,
+                    onForward = actions.onForward,
+                    onReload = actions.onReload,
+                    onSiteInfo = actions.onSiteInfo,
+                    onSwitcher = actions.onSwitcher,
+                    onNewTab = actions.onNewTab,
+                    onNewPrivateTab = actions.onNewPrivateTab,
+                    onFind = actions.onFind,
+                    onToggleBookmark = actions.onToggleBookmark,
+                    onBookmarks = actions.onBookmarks,
+                    onHistory = actions.onHistory,
+                    onShare = actions.onShare,
+                    onSettings = actions.onSettings,
+                    onToggleAdblock = actions.onToggleAdblock,
+                    onRetryAdblock = actions.onRetryAdblock,
+                    adblockStatus = state.adblockStatus,
+                    onTranslate = actions.onTranslate,
+                )
+            }
+        }
+        if (state.showFind && currentSession != null && !state.inFullscreen) {
+            key(currentTab.id) {
+                FindBar(currentSession, actions.onCloseFind)
+            }
+        }
+        Box(
             Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(horizontalSafeInsets),
+                .weight(1f)
+                .windowInsetsPadding(bottomSafeInsets),
         ) {
-            if (!state.inFullscreen) {
-                Box(Modifier.windowInsetsPadding(topSafeInsets)) {
-                    TopBar(
-                        currentTab,
-                        engine = state.searchEngine,
-                        tabCount = state.tabs.size,
-                        bookmarked = state.bookmarked,
-                        iconsDir = iconsDir,
-                        omniboxFocus = omniboxFocus,
-                        suggestions = state.suggestions,
-                        onSuggestionQueryChanged = actions.onSuggestionQueryChanged,
-                        onNavigate = actions.onNavigate,
-                        onExternal = actions.onExternal,
-                        onBack = actions.onBack,
-                        onForward = actions.onForward,
-                        onReload = actions.onReload,
-                        onSiteInfo = actions.onSiteInfo,
-                        onSwitcher = actions.onSwitcher,
-                        onNewTab = actions.onNewTab,
-                        onNewPrivateTab = actions.onNewPrivateTab,
-                        onFind = actions.onFind,
-                        onToggleBookmark = actions.onToggleBookmark,
-                        onBookmarks = actions.onBookmarks,
-                        onHistory = actions.onHistory,
-                        onShare = actions.onShare,
-                        onSettings = actions.onSettings,
-                        onToggleAdblock = actions.onToggleAdblock,
-                        onRetryAdblock = actions.onRetryAdblock,
-                        adblockStatus = state.adblockStatus,
-                        onTranslate = actions.onTranslate,
-                    )
-                }
+            GeckoContent(currentTab, Modifier.fillMaxSize())
+            SmoothPageProgress(currentTab)
+            if (state.showStart) {
+                startPageContent()
             }
-            if (state.showFind && currentSession != null && !state.inFullscreen) {
-                key(currentTab.id) {
-                    FindBar(currentSession, actions.onCloseFind)
-                }
+            if (!state.showStart && currentTab?.loadError != null) {
+                ErrorOverlay(currentTab.loadError.orEmpty(), actions.onReload)
             }
-            Box(
-                Modifier
-                    .weight(1f)
-                    .windowInsetsPadding(bottomSafeInsets),
-            ) {
-                GeckoContent(currentTab, Modifier.fillMaxSize())
-                SmoothPageProgress(currentTab)
-                if (state.showStart) {
-                    startPageContent()
-                }
-                if (!state.showStart && currentTab?.loadError != null) {
-                    ErrorOverlay(currentTab.loadError.orEmpty(), actions.onReload)
-                }
-            }
-        }
-        if (state.showSwitcher) {
-            BrowserTabSwitcher(
-                state.tabs,
-                state.currentId,
-                iconsDir,
-                onSelect = actions.onSelectTab,
-                onClose = actions.onCloseTab,
-                onNew = actions.onNewSwitcherTab,
-                onDismiss = actions.onDismissSwitcher,
-            )
-        }
-        if (state.showSiteInfo && currentTab != null) {
-            SiteInfoSheet(
-                currentTab,
-                state.adblockEnabled,
-                actions.onDismissSiteInfo,
-            )
         }
     }
 }
