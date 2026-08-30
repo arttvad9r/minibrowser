@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -72,14 +73,14 @@ internal fun StartPageRoute(
             val hasContent = state.bookmarks.isNotEmpty() || state.recent.isNotEmpty()
             val message = when (operation) {
                 StartPageOperation.Load -> if (hasContent) {
-                    "Не удалось обновить стартовую страницу"
+                    stringResource(R.string.start_page_refresh_error)
                 } else {
-                    "Не удалось загрузить стартовую страницу"
+                    stringResource(R.string.start_page_load_error)
                 }
-                StartPageOperation.RefreshRecent -> "Не удалось обновить недавние"
-                StartPageOperation.Add -> "Не удалось добавить закладку"
-                StartPageOperation.Rename -> "Не удалось переименовать закладку"
-                StartPageOperation.Delete -> "Не удалось удалить закладку"
+                StartPageOperation.RefreshRecent -> stringResource(R.string.recent_refresh_error)
+                StartPageOperation.Add -> stringResource(R.string.bookmark_add_error)
+                StartPageOperation.Rename -> stringResource(R.string.bookmark_rename_error)
+                StartPageOperation.Delete -> stringResource(R.string.bookmark_delete_error)
             }
             val retryable = operation == StartPageOperation.Load ||
                 operation == StartPageOperation.RefreshRecent
@@ -100,7 +101,7 @@ internal fun StartPageRoute(
                 TextButton(
                     onClick = if (retryable) startPageViewModel::retry else startPageViewModel::dismissError,
                 ) {
-                    Text(if (retryable) "Повторить" else "Скрыть")
+                    Text(stringResource(if (retryable) R.string.action_retry else R.string.action_hide))
                 }
             }
         }
