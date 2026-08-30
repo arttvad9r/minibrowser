@@ -57,7 +57,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
-import com.artt.minibrowser.data.Bookmark
 import java.net.URI
 import kotlinx.coroutines.launch
 
@@ -381,17 +380,18 @@ fun BrowserBottomSheet(
     }
 }
 
-/** Действия над закладкой (долгий тап по плитке / overflow в списке закладок). */
+/** Действия над закладкой без зависимости reusable UI от data-layer модели. */
 @Composable
 fun BookmarkActionsSheet(
-    bookmark: Bookmark,
+    bookmarkKey: String,
+    bookmarkTitle: String,
     onDismiss: () -> Unit,
     onOpen: () -> Unit,
     onRename: (String) -> Unit,
     onDelete: () -> Unit,
 ) {
     var renaming by remember { mutableStateOf(false) }
-    var text by remember(bookmark.url) { mutableStateOf(bookmark.title) }
+    var text by remember(bookmarkKey) { mutableStateOf(bookmarkTitle) }
     BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
         Column {
             if (renaming) {
@@ -412,7 +412,7 @@ fun BookmarkActionsSheet(
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { onRename(text.trim().ifBlank { bookmark.title }) }) {
+                    TextButton(onClick = { onRename(text.trim().ifBlank { bookmarkTitle }) }) {
                         Text(stringResource(R.string.action_ok))
                     }
                 }
