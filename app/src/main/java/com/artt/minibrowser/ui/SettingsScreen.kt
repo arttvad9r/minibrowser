@@ -130,6 +130,7 @@ internal fun SettingsScreen(
                         if (state.votStatus == BrowserExtensionUiState.Error) {
                             SettingsRow(
                                 stringResource(R.string.settings_video_translation),
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                                 subtitle = stringResource(R.string.settings_extension_retry_subtitle),
                                 onClick = onRetryVot,
                             )
@@ -159,6 +160,7 @@ internal fun SettingsScreen(
                         if (state.adblockStatus == BrowserExtensionUiState.Error) {
                             SettingsRow(
                                 stringResource(R.string.settings_adblock),
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                                 subtitle = stringResource(R.string.settings_extension_retry_subtitle),
                                 onClick = onRetryAdblock,
                             )

@@ -92,14 +92,58 @@ class SettingsClearDataSemanticsTest {
             )
     }
 
-    private fun settingsState(clearDataFailed: Boolean) = SettingsScreenUiState(
+    @Test
+    fun extensionFailuresArePoliteLiveRegionsWithRetryActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val adblock = context.getString(R.string.settings_adblock)
+        val videoTranslation = context.getString(R.string.settings_video_translation)
+
+        composeRule.setContent {
+            MinibrowserTheme(darkTheme = false) {
+                SettingsScreen(
+                    state = settingsState(
+                        clearDataFailed = false,
+                        adblockStatus = BrowserExtensionUiState.Error,
+                        votStatus = BrowserExtensionUiState.Error,
+                    ),
+                    onBack = {},
+                    onEngine = {},
+                    onTheme = {},
+                    onAdblock = {},
+                    onRetryAdblock = {},
+                    onVot = {},
+                    onRetryVot = {},
+                    onDownloads = {},
+                    onClearData = {},
+                    onTranslateLang = {},
+                )
+            }
+        }
+
+        val politeLiveRegion = SemanticsMatcher.expectValue(
+            SemanticsProperties.LiveRegion,
+            LiveRegionMode.Polite,
+        )
+        composeRule.onNodeWithText(adblock)
+            .assertHasClickAction()
+            .assert(politeLiveRegion)
+        composeRule.onNodeWithText(videoTranslation)
+            .assertHasClickAction()
+            .assert(politeLiveRegion)
+    }
+
+    private fun settingsState(
+        clearDataFailed: Boolean,
+        adblockStatus: BrowserExtensionUiState = BrowserExtensionUiState.Enabled,
+        votStatus: BrowserExtensionUiState = BrowserExtensionUiState.Enabled,
+    ) = SettingsScreenUiState(
         searchEngine = SettingsSearchEngineUiState.Yandex,
         theme = 0,
         adblockEnabled = true,
         votEnabled = true,
         translateTarget = "ru",
-        adblockStatus = BrowserExtensionUiState.Enabled,
-        votStatus = BrowserExtensionUiState.Enabled,
+        adblockStatus = adblockStatus,
+        votStatus = votStatus,
         clearDataInProgress = false,
         clearDataFailed = clearDataFailed,
     )
