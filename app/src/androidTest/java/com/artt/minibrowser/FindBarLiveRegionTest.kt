@@ -4,7 +4,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -12,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.ui.FindBarContent
 import com.artt.minibrowser.ui.FindBarUiState
 import com.artt.minibrowser.ui.MinibrowserTheme
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -42,9 +42,9 @@ class FindBarLiveRegionTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         render(FindBarUiState(query = "new query", current = 2, total = 5, resultsReady = false))
 
-        composeRule
+        val staleCounter = composeRule
             .onNodeWithContentDescription(context.getString(R.string.find_match_position, 2, 5))
-            .assertDoesNotExist()
+        assertTrue(runCatching { staleCounter.fetchSemanticsNode() }.isFailure)
     }
 
     private fun render(state: FindBarUiState) {
