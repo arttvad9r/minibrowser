@@ -18,7 +18,6 @@ import kotlinx.coroutines.launch
 internal data class OmniboxSuggestionsUiState(
     val query: String? = null,
     val suggestions: List<Suggestion> = emptyList(),
-    val isLoading: Boolean = false,
 )
 
 /** Owns the debounced, latest-query-only suggestion pipeline for the omnibox. */
@@ -55,7 +54,7 @@ internal class OmniboxSuggestionsViewModel : ViewModel {
             return
         }
 
-        _uiState.value = OmniboxSuggestionsUiState(query = target, isLoading = true)
+        _uiState.value = OmniboxSuggestionsUiState(query = target)
         searchJob = viewModelScope.launch {
             try {
                 debounce()

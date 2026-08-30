@@ -10,7 +10,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class OmniboxSuggestionsViewModelTest {
@@ -57,12 +56,12 @@ class OmniboxSuggestionsViewModelTest {
 
         viewModel.updateQuery("exa")
         assertEquals(0, searches)
-        assertTrue(viewModel.uiState.value.isLoading)
+        assertEquals(OmniboxSuggestionsUiState(query = "exa"), viewModel.uiState.value)
 
         gate.complete(Unit)
 
         assertEquals(1, searches)
-        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(OmniboxSuggestionsUiState(query = "exa"), viewModel.uiState.value)
     }
 
     @Test
