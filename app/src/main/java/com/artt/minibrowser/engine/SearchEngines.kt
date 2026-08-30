@@ -11,10 +11,13 @@ enum class SearchEngine(val template: String) {
 
 private val TRANSLATION_TARGETS = setOf("ru", "en", "de", "fr")
 
+internal fun normalizeTranslationTarget(target: String?): String? =
+    target?.trim()?.lowercase()?.takeIf { it in TRANSLATION_TARGETS }
+
 // Перевод страницы через Google Translate proxy (translate.goog) — приём лёгких браузеров, без API-ключей.
 // Хост: точки -> "-", существующие "-" -> "--"; язык оригинала auto.
 fun buildTranslateUri(url: String, target: String): String? {
-    val language = target.trim().lowercase().takeIf { it in TRANSLATION_TARGETS } ?: return null
+    val language = normalizeTranslationTarget(target) ?: return null
     if (!isValidWebUri(url)) return null
     val u = runCatching { URI(url) }.getOrNull() ?: return null
     val host = u.host ?: return null

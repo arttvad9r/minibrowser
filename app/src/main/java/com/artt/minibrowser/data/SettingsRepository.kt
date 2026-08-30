@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.artt.minibrowser.engine.SearchEngine
+import com.artt.minibrowser.engine.normalizeTranslationTarget
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -33,16 +34,18 @@ class SettingsRepository(private val context: Context) {
         Prefs(
             searchEngine = p[K.engine]?.let { runCatching { SearchEngine.valueOf(it) }.getOrNull() }
                 ?: SearchEngine.YANDEX,
-            theme = p[K.theme] ?: 0,
+            theme = normalizeThemePreference(p[K.theme]),
             adblockEnabled = p[K.adblock] ?: true,
             votEnabled = p[K.vot] ?: true,
-            translateTarget = p[K.translate] ?: "ru",
+            translateTarget = normalizeTranslationTarget(p[K.translate]) ?: "ru",
         )
     }
 
     suspend fun setSearchEngine(e: SearchEngine) = context.dataStore.edit { it[K.engine] = e.name }
-    suspend fun setTheme(t: Int) = context.dataStore.edit { it[K.theme] = t }
+    suspend fun setTheme(t: Int) = context.dataStore.edit { it[K.theme] = normalizeThemePreference(t) }
     suspend fun setAdblock(b: Boolean) = context.dataStore.edit { it[K.adblock] = b }
     suspend fun setVot(enabled: Boolean) = context.dataStore.edit { it[K.vot] = enabled }
-    suspend fun setTranslateTarget(lang: String) = context.dataStore.edit { it[K.translate] = lang }
+    suspend fun setTranslateTarget(lang: String) = context.dataStore.edit {
+        it[K.translate] = normalizeTranslationTarget(lang) ?: "ru"
+    }
 }
