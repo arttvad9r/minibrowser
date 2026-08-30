@@ -75,8 +75,7 @@ class BookmarksRepository(private val dao: AppDao) {
 
     suspend fun add(url: String, title: String) {
         val bookmark = bookmarkForPersistence(url, title, position = 0) ?: return
-        val nextPosition = dao.maxBookmarkPosition() + 1
-        dao.upsertBookmark(bookmark.copy(position = nextPosition))
+        dao.appendBookmark(bookmark)
     }
 
     suspend fun remove(url: String) {
