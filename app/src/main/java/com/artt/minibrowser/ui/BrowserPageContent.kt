@@ -14,25 +14,23 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.ExtensionLoader
-import com.artt.minibrowser.engine.Tab
 import java.io.File
 
 internal data class BrowserPageUiState(
-    val tabs: List<Tab>,
-    val currentTab: Tab?,
     val chrome: BrowserChromeUiState,
+    val tabCount: Int,
     val bookmarked: Boolean,
     val suggestions: List<Suggestion>,
     val adblockStatus: ExtensionLoader.Status?,
     val showFind: Boolean,
     val showStart: Boolean,
     val inFullscreen: Boolean,
+    val loadError: String?,
 )
 
 internal data class BrowserPageActions(
@@ -59,16 +57,19 @@ internal data class BrowserPageActions(
     val onToggleDesktop: () -> Unit,
 )
 
-/** Browser-page renderer. It receives only display state, UI actions and a start-page slot. */
+/**
+ * Browser-page renderer. Engine-specific content is supplied through slots by the screen route;
+ * this layer itself depends only on display state and UI callbacks.
+ */
 @Composable
 internal fun BrowserPageContent(
     state: BrowserPageUiState,
     actions: BrowserPageActions,
     iconsDir: File,
+    browserContent: @Composable () -> Unit,
+    findContent: (@Composable () -> Unit)?,
     startPageContent: @Composable () -> Unit,
 ) {
-    val currentTab = state.currentTab
-    val currentSession = currentTab?.session
     val omniboxFocus = remember { FocusRequester() }
     val horizontalSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
     val topSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top)
@@ -83,7 +84,7 @@ internal fun BrowserPageContent(
             Box(Modifier.windowInsetsPadding(topSafeInsets)) {
                 TopBar(
                     state.chrome,
-                    tabCount = state.tabs.size,
+                    tabCount = state.tabCount,
                     bookmarked = state.bookmarked,
                     iconsDir = iconsDir,
                     omniboxFocus = omniboxFocus,
@@ -112,23 +113,21 @@ internal fun BrowserPageContent(
                 )
             }
         }
-        if (state.showFind && currentSession != null && !state.inFullscreen) {
-            key(currentTab.id) {
-                FindInPageRoute(currentSession, actions.onCloseFind)
-            }
+        if (state.showFind && !state.inFullscreen) {
+            findContent?.invoke()
         }
         Box(
             Modifier
                 .weight(1f)
                 .windowInsetsPadding(bottomSafeInsets),
         ) {
-            GeckoContent(currentTab, Modifier.fillMaxSize())
-            BrowserPageProgress(currentTab)
+            browserContent()
             if (state.showStart) {
                 startPageContent()
             }
-            if (!state.showStart && currentTab?.loadError != null) {
-                ErrorOverlay(currentTab.loadError.orEmpty(), actions.onReload)
+            val loadError = state.loadError
+            if (!state.showStart && loadError != null) {
+                ErrorOverlay(loadError, actions.onReload)
             }
         }
     }
