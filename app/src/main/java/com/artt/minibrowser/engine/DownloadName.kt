@@ -3,11 +3,26 @@ package com.artt.minibrowser.engine
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
+private const val MAX_FILENAME_CHARS = 120
+private const val MAX_FILENAME_UTF8_BYTES = 240
+
 fun Map<String, String>.header(name: String): String? =
     entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
 
-private fun sanitizeFilenameChars(value: String, maxChars: Int = 120): String = buildString(minOf(value.length, maxChars)) {
+private fun utf8Bytes(codePoint: Int): Int = when {
+    codePoint <= 0x7F -> 1
+    codePoint <= 0x7FF -> 2
+    codePoint <= 0xFFFF -> 3
+    else -> 4
+}
+
+private fun sanitizeFilenameChars(
+    value: String,
+    maxChars: Int = MAX_FILENAME_CHARS,
+    maxUtf8Bytes: Int = MAX_FILENAME_UTF8_BYTES,
+): String = buildString(minOf(value.length, maxChars)) {
     var offset = 0
+    var encodedBytes = 0
     while (offset < value.length) {
         val codePoint = value.codePointAt(offset)
         offset += Character.charCount(codePoint)
@@ -18,13 +33,16 @@ private fun sanitizeFilenameChars(value: String, maxChars: Int = 120): String = 
             type == Character.PARAGRAPH_SEPARATOR.toInt()
         if (unsafe) continue
         val width = Character.charCount(codePoint)
-        if (length + width > maxChars) break
+        val encodedWidth = utf8Bytes(codePoint)
+        if (length + width > maxChars || encodedBytes + encodedWidth > maxUtf8Bytes) break
         appendCodePoint(codePoint)
+        encodedBytes += encodedWidth
     }
 }
 
 fun sanitizeFilename(raw: String?, fallback: String): String {
     val safeFallback = fallback.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        .let(::sanitizeFilenameChars)
         .trim('.', ' ', '_')
         .ifBlank { "file" }
     val candidate = raw.orEmpty()

@@ -5,6 +5,7 @@ import com.artt.minibrowser.engine.parseFilename
 import com.artt.minibrowser.engine.sanitizeFilename
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class DownloadNameTest {
     @Test fun quotedFilename() =
@@ -59,6 +60,21 @@ class DownloadNameTest {
 
         assertEquals("x".repeat(118) + "😀", sanitized)
         assertEquals(120, sanitized.length)
+    }
+
+    @Test fun utf8ByteLimitFitsLegacyFilesystemNames() {
+        val sanitized = sanitizeFilename("😀".repeat(100), "file")
+
+        assertEquals("😀".repeat(60), sanitized)
+        assertEquals(120, sanitized.length)
+        assertTrue(sanitized.toByteArray(Charsets.UTF_8).size <= 240)
+    }
+
+    @Test fun fallbackIsLengthAndByteBoundedToo() {
+        val sanitized = sanitizeFilename(null, "x".repeat(500))
+
+        assertEquals(120, sanitized.length)
+        assertTrue(sanitized.toByteArray(Charsets.UTF_8).size <= 240)
     }
 
     @Test fun headersAreCaseInsensitive() {
