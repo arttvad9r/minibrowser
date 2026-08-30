@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
 import com.artt.minibrowser.R
@@ -49,9 +50,13 @@ class GeckoContextMenuController(
             }
 
             if (labels.isNotEmpty()) {
-                AlertDialog.Builder(activity)
-                    .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
-                    .show()
+                runCatching {
+                    AlertDialog.Builder(activity)
+                        .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
+                        .show()
+                }.onFailure { error ->
+                    Log.w("MinibrowserContext", "Failed to show context menu", error)
+                }
             }
         }
     }
