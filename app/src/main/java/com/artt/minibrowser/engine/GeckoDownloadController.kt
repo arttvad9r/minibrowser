@@ -189,13 +189,22 @@ class GeckoDownloadController(
                 body.closeQuietly()
                 return@runOnUiThread
             }
-            AlertDialog.Builder(activity)
-                .setTitle(activity.getString(R.string.download_confirm_title))
-                .setMessage(name)
-                .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ -> body.closeQuietly() }
-                .setPositiveButton(activity.getString(R.string.action_download)) { _, _ -> begin() }
-                .setOnCancelListener { body.closeQuietly() }
-                .show()
+            runCatching {
+                AlertDialog.Builder(activity)
+                    .setTitle(activity.getString(R.string.download_confirm_title))
+                    .setMessage(name)
+                    .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ -> body.closeQuietly() }
+                    .setPositiveButton(activity.getString(R.string.action_download)) { _, _ ->
+                        runCatching(begin).onFailure { body.closeQuietly() }
+                    }
+                    .setOnCancelListener { body.closeQuietly() }
+                    .show()
+            }.onFailure {
+                // Activity/window state can change after the isDestroyed check but before show().
+                // This body owns Gecko's authenticated response stream, so always close it if no
+                // transfer can take ownership.
+                body.closeQuietly()
+            }
         }
     }
 
