@@ -5,7 +5,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import com.artt.minibrowser.engine.TabManager
 
-/** Keeps Gecko tab visibility, persistence, and background trimming aligned with the host lifecycle. */
+/** Keeps Gecko tab visibility, persistence, background trimming, and shutdown aligned with lifecycle. */
 internal class BrowserTabLifecycleController(
     owner: LifecycleOwner,
     private val tabManager: TabManager,
@@ -30,6 +30,7 @@ internal class BrowserTabLifecycleController(
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
+        tabManager.close()
         lifecycle.removeObserver(this)
     }
 }
