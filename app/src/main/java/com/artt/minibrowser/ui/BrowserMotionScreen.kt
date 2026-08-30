@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -23,6 +24,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * Full-screen app destination over the browser.
@@ -39,6 +41,7 @@ fun BrowserMotionScreen(
     content: @Composable (requestExit: (() -> Unit) -> Unit) -> Unit,
 ) {
     val reveal = remember(fromBottom) { Animatable(if (fromBottom) 0f else 1f) }
+    val scope = rememberCoroutineScope()
     var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
     var predictiveBackActive by remember { mutableStateOf(false) }
     var activeAnimations by remember { mutableIntStateOf(0) }
@@ -84,8 +87,8 @@ fun BrowserMotionScreen(
             predictiveBackActive = false
             onBack()
         } catch (cancelled: CancellationException) {
-            if (fromBottom) animateReveal(1f)
             predictiveBackActive = false
+            if (fromBottom) scope.launch { animateReveal(1f) }
             throw cancelled
         }
     }
