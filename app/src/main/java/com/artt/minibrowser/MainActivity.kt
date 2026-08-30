@@ -80,15 +80,14 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.browser.BrowserActivityRequestController
 import com.artt.minibrowser.browser.BrowserDataViewModel
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
+import com.artt.minibrowser.browser.BrowserWindowController
+import com.artt.minibrowser.browser.BrowserWindowEffects
 import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.OmniboxSuggestionsViewModel
 import com.artt.minibrowser.browser.PageBookmarkViewModel
@@ -174,6 +173,7 @@ class MainActivity : ComponentActivity() {
 
     private val externalNavigation = NavigationController()
     private val activityRequests = BrowserActivityRequestController(this)
+    private val browserWindow by lazy { BrowserWindowController(window) }
 
     private fun openExternalUri(value: String) {
         val external = createSafeExternalIntent(value)
@@ -235,16 +235,6 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(screen, showSwitcher) {
                 if (screen != BrowserScreen.Browser || showSwitcher) focusManager.clearFocus(force = true)
             }
-            // Светлая тема — тёмные иконки системных баров, тёмная — светлые.
-            LaunchedEffect(darkTheme) {
-                val c = WindowCompat.getInsetsController(window, window.decorView)
-                c.isAppearanceLightStatusBars = !darkTheme
-                c.isAppearanceLightNavigationBars = !darkTheme
-            }
-            LaunchedEffect(currentTab?.isPrivate) {
-                if (currentTab?.isPrivate == true) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-                else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-            }
 
             LaunchedEffect(Unit) {
                 externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
@@ -263,19 +253,16 @@ class MainActivity : ComponentActivity() {
                 currentTab?.session?.goBack()
             }
             val inFullscreen = currentTab?.fullscreen == true
+            BrowserWindowEffects(
+                controller = browserWindow,
+                darkTheme = darkTheme,
+                isPrivate = currentTab?.isPrivate == true,
+                inFullscreen = inFullscreen,
+            )
             BackHandler(enabled = inFullscreen) { currentSession?.exitFullScreen() }
             BackHandler(enabled = showFind) {
                 currentSession?.finder?.clear()
                 browserViewModel.showFind(false)
-            }
-            LaunchedEffect(inFullscreen) {
-                val c = WindowCompat.getInsetsController(window, window.decorView)
-                if (inFullscreen) {
-                    c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    c.hide(WindowInsetsCompat.Type.systemBars())
-                } else {
-                    c.show(WindowInsetsCompat.Type.systemBars())
-                }
             }
             val toggleAdblock: (Boolean) -> Unit = settingsViewModel::setAdblock
             val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
