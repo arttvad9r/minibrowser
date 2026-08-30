@@ -281,6 +281,9 @@ object DownloadHistory {
                     )
                 }
             }
-        }.getOrDefault(emptyList())
+        }.getOrElse {
+            quarantineCorruptFile(file, File("${file.path}.corrupt"))
+            emptyList()
+        }
     }
 }
