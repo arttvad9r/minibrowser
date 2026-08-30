@@ -2,10 +2,12 @@ package com.artt.minibrowser
 
 import com.artt.minibrowser.engine.PermissionAction
 import com.artt.minibrowser.engine.contentPermissionAction
+import com.artt.minibrowser.engine.permissionHost
 import com.artt.minibrowser.engine.resolveContentPermissionValue
 import org.mozilla.geckoview.GeckoSession
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class PermissionPolicyTest {
     @Test fun hardDenyOverridesPersistedAllow() {
@@ -34,5 +36,14 @@ class PermissionPolicyTest {
         assertEquals(PermissionAction.PROMPT_DRM, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS))
         assertEquals(PermissionAction.PROMPT_STORAGE_ACCESS, contentPermissionAction(GeckoSession.PermissionDelegate.PERMISSION_STORAGE_ACCESS))
         assertEquals(PermissionAction.DENY, contentPermissionAction(Int.MAX_VALUE))
+    }
+
+    @Test fun permissionHostUsesValidatedIdnPolicy() {
+        assertEquals("пример.рф", permissionHost("https://пример.рф/path"))
+        assertEquals("example.com", permissionHost("https://user:secret@example.com/private"))
+        assertNull(permissionHost("about:blank"))
+        assertNull(permissionHost("file:///tmp/private"))
+        assertNull(permissionHost("not a uri"))
+        assertNull(permissionHost(null))
     }
 }
