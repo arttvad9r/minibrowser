@@ -3,12 +3,15 @@ package com.artt.minibrowser.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.normalizeTranslationTarget
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -33,16 +36,20 @@ class SettingsRepository(context: Context) {
         val translate = stringPreferencesKey("translate_target")
     }
 
-    val prefs: Flow<Prefs> = this.context.dataStore.data.map { p ->
-        Prefs(
-            searchEngine = p[K.engine]?.let { runCatching { SearchEngine.valueOf(it) }.getOrNull() }
-                ?: SearchEngine.YANDEX,
-            theme = normalizeThemePreference(p[K.theme]),
-            adblockEnabled = p[K.adblock] ?: true,
-            votEnabled = p[K.vot] ?: true,
-            translateTarget = normalizeTranslationTarget(p[K.translate]) ?: "ru",
-        )
-    }
+    val prefs: Flow<Prefs> = this.context.dataStore.data
+        .catch { error ->
+            if (error is IOException) emit(emptyPreferences()) else throw error
+        }
+        .map { p ->
+            Prefs(
+                searchEngine = p[K.engine]?.let { runCatching { SearchEngine.valueOf(it) }.getOrNull() }
+                    ?: SearchEngine.YANDEX,
+                theme = normalizeThemePreference(p[K.theme]),
+                adblockEnabled = p[K.adblock] ?: true,
+                votEnabled = p[K.vot] ?: true,
+                translateTarget = normalizeTranslationTarget(p[K.translate]) ?: "ru",
+            )
+        }
 
     suspend fun setSearchEngine(e: SearchEngine) = context.dataStore.edit { it[K.engine] = e.name }
     suspend fun setTheme(t: Int) = context.dataStore.edit { it[K.theme] = normalizeThemePreference(t) }
