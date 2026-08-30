@@ -18,6 +18,10 @@ class SearchEnginesTest {
         assertEquals("https://192.168.0.1:8080", buildLoadUri("192.168.0.1:8080", SearchEngine.GOOGLE))
     @Test fun bareDomainGetsHttps() =
         assertEquals("https://example.com", buildLoadUri("example.com", SearchEngine.GOOGLE))
+    @Test fun bareUnicodeDomainGetsHttps() =
+        assertEquals("https://пример.рф/путь", buildLoadUri("пример.рф/путь", SearchEngine.GOOGLE))
+    @Test fun bareDomainWithQueryGetsHttps() =
+        assertEquals("https://bücher.de?q=1", buildLoadUri("bücher.de?q=1", SearchEngine.GOOGLE))
     @Test fun wordsGoToSearch() =
         assertEquals("https://www.google.com/search?q=%D0%BB%D0%B8%D1%81%D0%B0",
                      buildLoadUri("лиса", SearchEngine.GOOGLE))

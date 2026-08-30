@@ -101,7 +101,10 @@ fun resolveNavigation(input: String): NavigationTarget {
         if (isValidWebUri(candidate)) return NavigationTarget.Web(candidate)
     }
 
-    val hostLike = Regex("^[\\w-]+(\\.[\\w-]+)+(?:\\:\\d+)?(?:/.*)?$").matches(value)
+    val authority = value.substringBefore('/').substringBefore('?').substringBefore('#')
+    val hostLike = authority.contains('.') &&
+        '@' !in authority &&
+        authority.none(Char::isWhitespace)
     if (hostLike) {
         val candidate = "https://$value"
         if (isValidWebUri(candidate)) return NavigationTarget.Web(candidate)
