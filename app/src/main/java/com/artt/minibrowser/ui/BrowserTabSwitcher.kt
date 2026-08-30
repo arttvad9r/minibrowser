@@ -61,11 +61,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
-import com.artt.minibrowser.engine.Tab
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+
+internal data class BrowserTabItemUiState(
+    val id: Long,
+    val url: String,
+    val title: String,
+    val isPrivate: Boolean,
+)
 
 /**
  * Stable adaptive tab overview.
@@ -76,7 +82,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun BrowserTabSwitcher(
-    tabs: List<Tab>,
+    tabs: List<BrowserTabItemUiState>,
     currentId: Long?,
     iconsDir: File,
     onSelect: (Long) -> Unit,
@@ -260,7 +266,7 @@ internal fun tabGridColumnCount(widthDp: Float): Int = when {
 
 @Composable
 private fun BrowserTabCard(
-    tab: Tab,
+    tab: BrowserTabItemUiState,
     isCurrent: Boolean,
     iconsDir: File,
     modifier: Modifier = Modifier,
@@ -375,7 +381,7 @@ private fun BrowserTabCard(
 }
 
 @Composable
-private fun TabPreviewFallback(tab: Tab, host: String, iconsDir: File) {
+private fun TabPreviewFallback(tab: BrowserTabItemUiState, host: String, iconsDir: File) {
     Column(
         Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
