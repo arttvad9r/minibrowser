@@ -22,9 +22,9 @@ import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.engine.Engine
+import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.ui.TabPreviewStore
-import com.artt.minibrowser.ui.clearFaviconCaches
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
             clearTabPreviews = TabPreviewStore::clear,
             clearHistory = { historyRepo.clear() },
             clearBookmarks = { bookmarksRepo.clearAll() },
-            clearFaviconCaches = { clearFaviconCaches(iconsDir) },
+            clearFaviconCaches = { FaviconRepository.clear(iconsDir) },
             clearWebData = {
                 tabManager.clearWebData()
                 Unit
