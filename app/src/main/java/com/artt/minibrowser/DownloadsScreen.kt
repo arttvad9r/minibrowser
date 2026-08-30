@@ -22,6 +22,7 @@ import com.artt.minibrowser.ui.DownloadStatusUiState
 import com.artt.minibrowser.ui.DownloadsScreenContent
 import com.artt.minibrowser.ui.DownloadsScreenUiState
 import java.io.File
+import java.net.URI
 
 /** Downloads stays in the same Compose navigation layer as Settings/History/Bookmarks. */
 @Composable
@@ -54,7 +55,7 @@ private fun BrowserDownload.toUiState(): DownloadItemUiState = DownloadItemUiSta
     startedAt = startedAt,
     finishedAt = finishedAt,
     bytes = bytes,
-    canOpen = status == DownloadStatus.Completed && !location.isNullOrBlank(),
+    canOpen = status == DownloadStatus.Completed && location?.let(::isSupportedDownloadLocation) == true,
     failureReason = failureReason.toUiState(),
 )
 
@@ -70,8 +71,17 @@ private fun DownloadFailureReason?.toUiState(): DownloadFailureUiState = when (t
     null -> DownloadFailureUiState.Unknown
 }
 
+internal fun isSupportedDownloadLocation(value: String): Boolean = runCatching {
+    val uri = URI(value)
+    when (uri.scheme?.lowercase()) {
+        "content" -> !uri.rawAuthority.isNullOrBlank()
+        "file" -> !uri.path.isNullOrBlank()
+        else -> false
+    }
+}.getOrDefault(false)
+
 private fun openDownload(context: Context, item: BrowserDownload) {
-    val location = item.location ?: return
+    val location = item.location?.takeIf(::isSupportedDownloadLocation) ?: return
     val stored = runCatching { Uri.parse(location) }.getOrNull() ?: return
     val uri = runCatching {
         if (stored.scheme == "file") {
