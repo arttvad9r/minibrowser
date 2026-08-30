@@ -1,14 +1,14 @@
 package com.artt.minibrowser
 
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.ui.Favicon
 import com.artt.minibrowser.ui.MinibrowserTheme
 import java.io.File
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,8 +32,11 @@ class FaviconSemanticsTest {
             }
         }
 
-        composeRule
-            .onNodeWithText("I", useUnmergedTree = true)
-            .assertDoesNotExist()
+        assertTrue(
+            composeRule
+                .onAllNodesWithText("I", useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isEmpty(),
+        )
     }
 }
