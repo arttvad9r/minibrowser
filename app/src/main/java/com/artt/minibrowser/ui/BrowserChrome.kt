@@ -66,7 +66,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import com.artt.minibrowser.R
-import com.artt.minibrowser.data.Suggestion
 import java.io.File
 
 @Composable
@@ -76,7 +75,7 @@ internal fun TopBar(
     bookmarked: Boolean,
     iconsDir: File,
     omniboxFocus: FocusRequester,
-    suggestions: List<Suggestion>,
+    suggestions: List<BrowserSuggestionUiState>,
     onSuggestionQueryChanged: (String?) -> Unit,
     onSubmitQuery: (String) -> Unit,
     adblockStatus: BrowserExtensionUiState,
@@ -322,7 +321,7 @@ internal fun TopBar(
 }
 
 @Composable
-private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
+private fun SuggestionRow(s: BrowserSuggestionUiState, iconsDir: File, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
