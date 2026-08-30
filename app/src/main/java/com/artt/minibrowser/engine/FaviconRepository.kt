@@ -45,11 +45,11 @@ internal object FaviconRepository {
         iconsDir: File,
         expectedGeneration: Long,
     ): Bitmap? = withContext(Dispatchers.IO) {
+        if (expectedGeneration != _generation.value) return@withContext null
         cached(request)?.let { return@withContext it }
         val origin = request.origin ?: return@withContext null
         val file = FaviconFetcher.fetch(origin, iconsDir)
         val bitmap = file.takeIf(File::exists)?.let(::decodeSampledFavicon) ?: return@withContext null
-        if (expectedGeneration != _generation.value) return@withContext null
         if (!putIfCurrent(request.key, bitmap, expectedGeneration)) return@withContext null
         bitmap
     }
