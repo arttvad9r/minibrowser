@@ -253,11 +253,18 @@ internal fun sameOriginFaviconRedirect(current: URL, location: String?): URL? {
     if (location.isNullOrBlank()) return null
     val next = runCatching { URL(current, location) }.getOrNull() ?: return null
     if (!current.protocol.equals(next.protocol, ignoreCase = true)) return null
-    if (!current.host.equals(next.host, ignoreCase = true)) return null
+    if (canonicalFaviconHost(current.host) != canonicalFaviconHost(next.host)) return null
     if (effectivePort(current) != effectivePort(next)) return null
     if (!next.userInfo.isNullOrBlank()) return null
     return next
 }
+
+private fun canonicalFaviconHost(host: String): String? = runCatching {
+    val value = host.trim().removePrefix("[").removeSuffix("]")
+    if (value.isBlank()) return@runCatching null
+    if (value.contains(':')) value.lowercase()
+    else IDN.toASCII(value, IDN.USE_STD3_ASCII_RULES).lowercase()
+}.getOrNull()
 
 private fun effectivePort(url: URL): Int = if (url.port >= 0) url.port else url.defaultPort
 
