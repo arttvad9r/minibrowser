@@ -54,7 +54,7 @@ internal object FaviconRepository {
         bitmap
     }
 
-    fun clear(iconsDir: File) {
+    suspend fun clear(iconsDir: File) = withContext(Dispatchers.IO) {
         _generation.value += 1L
         synchronized(memoryCache) { memoryCache.evictAll() }
         FaviconFetcher.clear(iconsDir)
