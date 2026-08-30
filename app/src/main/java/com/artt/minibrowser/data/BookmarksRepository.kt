@@ -1,11 +1,12 @@
 package com.artt.minibrowser.data
 
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
+import com.artt.minibrowser.net.sanitizeWebUriUserInfoInText
 import com.artt.minibrowser.net.webUriHost
 import kotlinx.coroutines.CancellationException
 
 internal fun bookmarkTitleForPersistence(title: String): String =
-    sanitizeWebUriForPersistence(title) ?: title
+    sanitizeWebUriUserInfoInText(title)
 
 internal fun bookmarkForPersistence(url: String, title: String, position: Int): Bookmark? {
     val safeUrl = sanitizeWebUriForPersistence(url) ?: return null
