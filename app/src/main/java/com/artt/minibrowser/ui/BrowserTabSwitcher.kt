@@ -1,6 +1,6 @@
 package com.artt.minibrowser.ui
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -62,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
 import com.artt.minibrowser.engine.Tab
 import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.collect
 
 /**
  * Stable adaptive tab overview.
@@ -83,12 +85,13 @@ fun BrowserTabSwitcher(
     val reveal = remember { Animatable(0f) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var switchTarget by remember { mutableStateOf<Long?>(null) }
+    var predictiveBackActive by remember { mutableStateOf(false) }
     var activeAnimations by remember { mutableIntStateOf(0) }
     val overviewCurrentId = remember { currentId }
     val closeSwitcherDescription = stringResource(R.string.close_tab_switcher_content_description)
     val newTabTitle = stringResource(R.string.new_tab_title)
 
-    HighFrameRateDuringMotion(activeAnimations > 0)
+    HighFrameRateDuringMotion(activeAnimations > 0 || predictiveBackActive)
 
     DisposableEffect(Unit) {
         TabPreviewStore.setOverviewVisible(true)
@@ -127,18 +130,33 @@ fun BrowserTabSwitcher(
     }
 
     fun requestExit(action: () -> Unit) {
-        if (pendingAction != null || switchTarget != null) return
+        if (pendingAction != null || switchTarget != null || predictiveBackActive) return
         pendingAction = action
     }
 
     fun activateAndExit(id: Long) {
-        if (pendingAction != null || switchTarget != null) return
+        if (pendingAction != null || switchTarget != null || predictiveBackActive) return
         switchTarget = id
         onSelect(id)
     }
 
-    val inputEnabled = pendingAction == null && switchTarget == null
-    BackHandler(enabled = inputEnabled) { requestExit(onDismiss) }
+    val backEnabled = pendingAction == null && switchTarget == null
+    val inputEnabled = backEnabled && !predictiveBackActive
+    PredictiveBackHandler(enabled = backEnabled) { progress ->
+        predictiveBackActive = true
+        try {
+            progress.collect { event ->
+                reveal.snapTo(predictiveBackReveal(event.progress))
+            }
+            reveal.snapTo(0f)
+            predictiveBackActive = false
+            onDismiss()
+        } catch (cancelled: CancellationException) {
+            animateReveal(1f)
+            predictiveBackActive = false
+            throw cancelled
+        }
+    }
 
     val density = LocalDensity.current
     val travelPx = with(density) { 28.dp.toPx() }
