@@ -29,6 +29,8 @@ private data class SavedDownload(val location: String, val bytes: Long)
 
 internal fun shouldPersistDownloadHistory(isPrivate: Boolean): Boolean = !isPrivate
 
+internal fun isMediaStorePublishSuccessful(updatedRows: Int): Boolean = updatedRows > 0
+
 /** Writes one legacy download and guarantees that a failed copy never leaves a partial file. */
 internal fun writeLegacyDownload(file: File, input: InputStream): Long {
     try {
@@ -124,12 +126,13 @@ private object DownloadIo {
         try {
             val bytes = resolver.openOutputStream(uri, "w")?.use { output -> input.copyTo(output) }
                 ?: error("Unable to open download output")
-            resolver.update(
+            val updatedRows = resolver.update(
                 uri,
                 ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) },
                 null,
                 null,
             )
+            if (!isMediaStorePublishSuccessful(updatedRows)) error("Unable to publish download")
             return SavedDownload(uri.toString(), bytes)
         } catch (error: Throwable) {
             resolver.delete(uri, null, null)
@@ -180,7 +183,7 @@ class GeckoDownloadController(
 
         val begin = { ensureStorageAccessAndSave(body, name, mime, response.uri, persistHistory) }
         if (response.skipConfirmation) {
-            begin()
+            runCatching(begin).onFailure { body.closeQuietly() }
             return
         }
 
