@@ -7,9 +7,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import java.util.regex.Pattern
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+
+private val TAB_COUNT_DESCRIPTION = Pattern.compile("^\\d+ (?:вкладка|вкладки|вкладок)$")
 
 @RunWith(AndroidJUnit4::class)
 @LargeTest
@@ -45,7 +48,7 @@ class BaselineProfileGenerator {
             device.waitForIdle()
 
             clickDescription(device, "Новая вкладка")
-            clickDescriptionContains(device, "вклад")
+            clickTabSwitcher(device)
             device.pressBack()
             device.waitForIdle()
 
@@ -74,9 +77,9 @@ class BaselineProfileGenerator {
         device.waitForIdle()
     }
 
-    private fun clickDescriptionContains(device: UiDevice, descriptionPart: String) {
-        val target = checkNotNull(device.wait(Until.findObject(By.descContains(descriptionPart)), 3_000)) {
-            "Missing UI element with content description containing: $descriptionPart"
+    private fun clickTabSwitcher(device: UiDevice) {
+        val target = checkNotNull(device.wait(Until.findObject(By.desc(TAB_COUNT_DESCRIPTION)), 3_000)) {
+            "Missing tab switcher with plural tab-count content description"
         }
         target.click()
         device.waitForIdle()
