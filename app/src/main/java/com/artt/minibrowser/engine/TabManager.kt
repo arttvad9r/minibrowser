@@ -549,9 +549,10 @@ class TabManager(
                     if (continuation.isActive) continuation.resume(Unit)
                 },
                 { error ->
-                    Log.e("MinibrowserTabs", "Failed to clear web data", error)
+                    val failure = error ?: IllegalStateException("Gecko storage clear failed")
+                    Log.e("MinibrowserTabs", "Failed to clear web data", failure)
                     restoreBlankTab()
-                    if (continuation.isActive) continuation.resumeWithException(error)
+                    if (continuation.isActive) continuation.resumeWithException(failure)
                 },
             )
         }
