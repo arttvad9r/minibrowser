@@ -128,6 +128,23 @@ class StartPageViewModelTest {
     }
 
     @Test
+    fun invalidAddDoesNotReachRepository() {
+        var addRequests = 0
+        val viewModel = startPageViewModel(
+            addBookmark = { _, _ -> addRequests++ },
+        )
+        viewModel.refresh()
+
+        viewModel.add("https://", "Broken")
+
+        assertEquals(0, addRequests)
+        assertEquals(
+            StartPageUiState(isLoading = false, error = StartPageOperation.Add),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
     fun addDuringInitialRefreshWaitsAndPreservesRecentContent() {
         val gate = CompletableDeferred<Unit>()
         val recent = listOf(HistoryEntry("https://recent.example", "Recent", 10L, 1))

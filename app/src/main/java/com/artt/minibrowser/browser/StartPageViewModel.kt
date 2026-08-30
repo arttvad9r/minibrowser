@@ -9,6 +9,7 @@ import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
+import com.artt.minibrowser.engine.isValidWebUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -113,7 +114,9 @@ internal class StartPageViewModel : ViewModel {
     }
 
     fun add(url: String, title: String) = mutateBookmarks(StartPageOperation.Add) {
-        addBookmark(url, title)
+        val target = url.trim()
+        require(isValidWebUri(target)) { "Bookmark URL must be HTTP(S) with a host" }
+        addBookmark(target, title)
     }
 
     fun rename(url: String, title: String) = mutateBookmarks(StartPageOperation.Rename) {
