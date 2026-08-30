@@ -311,9 +311,14 @@ fun SettingsRow(
 
 /** Строка выбора: минимум 48dp; при крупном шрифте строка может расширяться по высоте. */
 @Composable
-fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
+fun ChoiceRow(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .heightIn(min = 48.dp)
