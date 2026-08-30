@@ -52,6 +52,9 @@ private fun sanitizePersistedSessionUrl(value: String?): String? = when {
     else -> sanitizeWebUriForPersistence(value)
 }
 
+private fun sanitizePersistedTitle(value: String): String =
+    sanitizeWebUriForPersistence(value) ?: value
+
 internal fun sanitizePersistedBrowserState(state: PersistedBrowserState): PersistedBrowserState {
     val seenIds = mutableSetOf<Long>()
     val tabs = state.tabs.mapNotNull { tab ->
@@ -60,20 +63,19 @@ internal fun sanitizePersistedBrowserState(state: PersistedBrowserState): Persis
             tab.url.equals("about:blank", ignoreCase = true) -> "about:blank"
             else -> sanitizeWebUriForPersistence(tab.url)
         } ?: return@mapNotNull null
+        val safeTitle = sanitizePersistedTitle(tab.title)
 
-        var normalized = if (safeUrl == tab.url) {
+        var normalized = if (safeUrl == tab.url && safeTitle == tab.title) {
             tab
         } else {
-            tab.copy(
-                url = safeUrl,
-                title = if (tab.title == tab.url) safeUrl else tab.title,
-            )
+            tab.copy(url = safeUrl, title = safeTitle)
         }
 
         val safeSessionStateUrl = sanitizePersistedSessionUrl(tab.sessionStateUrl)
-        if (safeUrl != tab.url || safeSessionStateUrl != tab.sessionStateUrl) {
-            // Gecko session state is opaque and can contain the original URL. If credentials were
-            // removed from either persisted URL, discard that snapshot and reload the sanitized URL.
+        if (safeUrl != tab.url || safeTitle != tab.title || safeSessionStateUrl != tab.sessionStateUrl) {
+            // Gecko session state is opaque and can contain the original URL/title. If credentials
+            // were removed from any persisted browser metadata, discard that snapshot and reload
+            // the sanitized URL instead of retaining the opaque sensitive copy on disk.
             normalized = normalized.copy(sessionState = null, sessionStateUrl = null)
         }
 
