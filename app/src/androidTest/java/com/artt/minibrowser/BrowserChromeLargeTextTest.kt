@@ -4,6 +4,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -32,6 +36,7 @@ class BrowserChromeLargeTextTest {
     fun omniboxSuggestionRemainsUsableWithLargeText() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val searchDescription = context.getString(R.string.search_content_description)
+        val tabsDescription = context.resources.getQuantityString(R.plurals.tabs_count, 1, 1)
         val suggestionTitle = "Очень длинная подсказка из истории браузера"
 
         composeRule.setContent {
@@ -77,6 +82,11 @@ class BrowserChromeLargeTextTest {
                 }
             }
         }
+
+        composeRule
+            .onNodeWithContentDescription(tabsDescription)
+            .assertHasClickAction()
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
 
         composeRule.onNodeWithContentDescription(searchDescription).performClick()
         composeRule
