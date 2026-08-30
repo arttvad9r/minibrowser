@@ -47,9 +47,8 @@ internal fun performancePolicyFor(
         totalMemoryBytes < 10L * GIB -> 12L * MIB
         else -> 16L * MIB
     }
-    // Never let reconstructible previews consume more than roughly one sixteenth of the app heap.
-    // Keep a small floor so the switcher can still retain at least a couple of downscaled cards.
-    val heapPreviewBudget = (appHeapBytes / 16L).coerceAtLeast(4L * MIB)
+    // Reconstructible previews must never consume more than one sixteenth of the app heap.
+    val heapPreviewBudget = appHeapBytes.coerceAtLeast(0L) / 16L
     val previewBytes = minOf(ramPreviewBudget, heapPreviewBudget)
     val backgroundPreviewBytes = minOf(previewBytes / 2L, 4L * MIB)
 
