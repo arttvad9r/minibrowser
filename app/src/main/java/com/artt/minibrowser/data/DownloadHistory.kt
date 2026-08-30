@@ -23,7 +23,7 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.util.UUID
 
 enum class DownloadStatus { Downloading, Completed, Failed }
-enum class DownloadFailureReason { Interrupted }
+enum class DownloadFailureReason { Interrupted, SaveFailed }
 
 data class BrowserDownload(
     val id: String,
@@ -39,6 +39,7 @@ data class BrowserDownload(
     val failureReason: DownloadFailureReason? = null,
 )
 
+// Read-only migration sentinel from the pre-structured history format. Never shown directly.
 private const val LEGACY_INTERRUPTED_ERROR = "Загрузка была прервана"
 
 /** Keep only the origin for display; signed download URLs frequently contain credentials in query parameters. */
@@ -50,20 +51,22 @@ internal fun downloadSourceForHistory(value: String): String = runCatching {
 
 internal fun normalizeRestoredDownload(item: BrowserDownload, now: Long): BrowserDownload {
     val sanitized = item.copy(sourceUrl = downloadSourceForHistory(item.sourceUrl))
-    return when {
-        sanitized.status == DownloadStatus.Downloading -> sanitized.copy(
+    return when (sanitized.status) {
+        DownloadStatus.Downloading -> sanitized.copy(
             status = DownloadStatus.Failed,
             finishedAt = now,
             error = null,
             failureReason = DownloadFailureReason.Interrupted,
         )
-        sanitized.status == DownloadStatus.Failed &&
-            sanitized.failureReason == null &&
-            sanitized.error == LEGACY_INTERRUPTED_ERROR -> sanitized.copy(
-                error = null,
-                failureReason = DownloadFailureReason.Interrupted,
-            )
-        else -> sanitized
+        DownloadStatus.Failed -> sanitized.copy(
+            error = null,
+            failureReason = sanitized.failureReason ?: if (sanitized.error == LEGACY_INTERRUPTED_ERROR) {
+                DownloadFailureReason.Interrupted
+            } else {
+                DownloadFailureReason.SaveFailed
+            },
+        )
+        DownloadStatus.Completed -> sanitized
     }
 }
 
@@ -193,13 +196,13 @@ object DownloadHistory {
         }
     }
 
-    fun fail(id: String, error: String) {
+    fun fail(id: String) {
         update(id) {
             it.copy(
                 status = DownloadStatus.Failed,
                 finishedAt = System.currentTimeMillis(),
-                error = error,
-                failureReason = null,
+                error = null,
+                failureReason = DownloadFailureReason.SaveFailed,
             )
         }
     }

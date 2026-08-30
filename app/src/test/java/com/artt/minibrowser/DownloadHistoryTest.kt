@@ -87,6 +87,32 @@ class DownloadHistoryTest {
         )
     }
 
+    @Test fun legacyTechnicalFailureMigratesWithoutPersistingDiagnosticText() {
+        val restored = BrowserDownload(
+            id = "failed",
+            name = "failed.zip",
+            sourceUrl = "https://example.com",
+            mime = "application/zip",
+            status = DownloadStatus.Failed,
+            startedAt = 10L,
+            finishedAt = 20L,
+            error = "/storage/emulated/0/Download/private-name.zip: permission denied",
+        )
+
+        val normalized = normalizeRestoredDownload(restored, now = 42L)
+
+        assertEquals(DownloadFailureReason.SaveFailed, normalized.failureReason)
+        assertNull(normalized.error)
+        assertTrue(
+            shouldPersistRestoredDownloadMerge(
+                live = emptyList(),
+                rawRestored = listOf(restored),
+                normalizedRestored = listOf(normalized),
+                discardRestoredHistory = false,
+            ),
+        )
+    }
+
     @Test fun liveDownloadWinsWhenRestoreCompletesLater() {
         val live = BrowserDownload(
             id = "same",

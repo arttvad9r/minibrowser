@@ -95,13 +95,8 @@ private object DownloadIo {
                         toast(appContext, appContext.getString(R.string.download_saved, name))
                     }
                 },
-                onFailure = { error ->
-                    historyId?.let {
-                        DownloadHistory.fail(
-                            it,
-                            error.localizedMessage ?: appContext.getString(R.string.download_save_error),
-                        )
-                    }
+                onFailure = {
+                    historyId?.let { DownloadHistory.fail(it) }
                     withContext(Dispatchers.Main) {
                         toast(appContext, appContext.getString(R.string.download_failed_toast))
                     }

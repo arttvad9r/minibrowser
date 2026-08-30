@@ -211,7 +211,8 @@ private fun DownloadCard(
                 DownloadStatus.Failed -> {
                     val failure = when (item.failureReason) {
                         DownloadFailureReason.Interrupted -> stringResource(R.string.download_failure_interrupted)
-                        null -> item.error ?: stringResource(R.string.download_failed_default)
+                        DownloadFailureReason.SaveFailed -> stringResource(R.string.download_save_error)
+                        null -> stringResource(R.string.download_failed_default)
                     }
                     stringResource(R.string.download_failed_subtitle, failure)
                 }
