@@ -51,6 +51,7 @@ import com.artt.minibrowser.data.DownloadStatus
 import com.artt.minibrowser.data.formatDownloadSize
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BrowserMotionScreen
+import com.artt.minibrowser.ui.CenteredSinglePane
 import com.artt.minibrowser.ui.EmptyState
 import com.artt.minibrowser.ui.Radius
 import com.artt.minibrowser.ui.softClickable
@@ -93,46 +94,48 @@ private fun DownloadsScreen(
     var showClearConfirm by remember { mutableStateOf(false) }
 
     BrowserMotionScreen(onBack = onBack) { requestExit ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-        ) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        CenteredSinglePane {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
             ) {
-                IconButton(onClick = { requestExit(onBack) }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
-                }
-                Text(
-                    stringResource(R.string.downloads_title),
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                if (downloads.isNotEmpty()) {
-                    TextButton(onClick = { showClearConfirm = true }) {
-                        Text(stringResource(R.string.action_clear))
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { requestExit(onBack) }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
+                    }
+                    Text(
+                        stringResource(R.string.downloads_title),
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    if (downloads.isNotEmpty()) {
+                        TextButton(onClick = { showClearConfirm = true }) {
+                            Text(stringResource(R.string.action_clear))
+                        }
                     }
                 }
-            }
 
-            if (downloads.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    EmptyState(
-                        AppIcons.Download,
-                        stringResource(R.string.downloads_empty_title),
-                        stringResource(R.string.downloads_empty_subtitle),
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(downloads, key = { it.id }) { item ->
-                        DownloadCard(item, dateFormat) { onOpen(item) }
+                if (downloads.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        EmptyState(
+                            AppIcons.Download,
+                            stringResource(R.string.downloads_empty_title),
+                            stringResource(R.string.downloads_empty_subtitle),
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(downloads, key = { it.id }) { item ->
+                            DownloadCard(item, dateFormat) { onOpen(item) }
+                        }
                     }
                 }
             }

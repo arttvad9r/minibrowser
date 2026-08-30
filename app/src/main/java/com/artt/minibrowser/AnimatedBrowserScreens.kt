@@ -51,6 +51,7 @@ import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BookmarkActionsSheet
 import com.artt.minibrowser.ui.BrowserMotionScreen
+import com.artt.minibrowser.ui.CenteredSinglePane
 import com.artt.minibrowser.ui.EmptyState
 import com.artt.minibrowser.ui.Favicon
 import com.artt.minibrowser.ui.hostOf
@@ -101,99 +102,101 @@ private fun HistoryScreen(
     val timeFormat = remember { DateFormat.getTimeInstance(DateFormat.SHORT) }
 
     BrowserMotionScreen(onBack = onBack) { requestExit ->
-        Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = { requestExit(onBack) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
-                }
-                Text(
-                    stringResource(R.string.history_title),
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                if (state is HistoryUiState.Content && state.entries.isNotEmpty()) {
-                    TextButton(onClick = { confirmClear = true }) {
-                        Text(
-                            stringResource(R.string.action_clear),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+        CenteredSinglePane {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { requestExit(onBack) }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
                     }
-                }
-            }
-
-            when (state) {
-                HistoryUiState.Loading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                HistoryUiState.Empty -> {
-                    EmptyState(
-                        AppIcons.History,
-                        stringResource(R.string.history_empty_title),
-                        stringResource(R.string.history_empty_subtitle),
+                    Text(
+                        stringResource(R.string.history_title),
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge,
                     )
-                }
-                is HistoryUiState.Error -> {
-                    val title = when (state.operation) {
-                        HistoryOperation.Load -> stringResource(R.string.history_load_error)
-                        HistoryOperation.Clear -> stringResource(R.string.history_clear_error)
-                    }
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            EmptyState(AppIcons.History, title, stringResource(R.string.retry_hint))
-                            TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
+                    if (state is HistoryUiState.Content && state.entries.isNotEmpty()) {
+                        TextButton(onClick = { confirmClear = true }) {
+                            Text(
+                                stringResource(R.string.action_clear),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
-                is HistoryUiState.Content -> {
-                    val groups = remember(state.entries) { motionGroupByDay(state.entries) }
-                    LazyColumn(Modifier.fillMaxSize()) {
-                        groups.forEach { (group, groupEntries) ->
-                            item(key = "header_${group.name}") {
-                                val label = when (group) {
-                                    HistoryDayGroup.Today -> stringResource(R.string.history_today)
-                                    HistoryDayGroup.Yesterday -> stringResource(R.string.history_yesterday)
-                                    HistoryDayGroup.Earlier -> stringResource(R.string.history_earlier)
-                                }
-                                Text(
-                                    label,
-                                    Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+
+                when (state) {
+                    HistoryUiState.Loading -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    HistoryUiState.Empty -> {
+                        EmptyState(
+                            AppIcons.History,
+                            stringResource(R.string.history_empty_title),
+                            stringResource(R.string.history_empty_subtitle),
+                        )
+                    }
+                    is HistoryUiState.Error -> {
+                        val title = when (state.operation) {
+                            HistoryOperation.Load -> stringResource(R.string.history_load_error)
+                            HistoryOperation.Clear -> stringResource(R.string.history_clear_error)
+                        }
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                EmptyState(AppIcons.History, title, stringResource(R.string.retry_hint))
+                                TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
                             }
-                            items(groupEntries, key = { it.url }) { entry ->
-                                Row(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clickable { requestExit { onOpen(entry.url) } }
-                                        .padding(horizontal = 20.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Favicon(entry.url, iconsDir, 28.dp)
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            entry.title.ifBlank { entry.url },
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                        Text(
-                                            stringResource(
-                                                R.string.history_entry_subtitle,
-                                                hostOf(entry.url),
-                                                timeFormat.format(Date(entry.visitedAt)),
-                                            ),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                        }
+                    }
+                    is HistoryUiState.Content -> {
+                        val groups = remember(state.entries) { motionGroupByDay(state.entries) }
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            groups.forEach { (group, groupEntries) ->
+                                item(key = "header_${group.name}") {
+                                    val label = when (group) {
+                                        HistoryDayGroup.Today -> stringResource(R.string.history_today)
+                                        HistoryDayGroup.Yesterday -> stringResource(R.string.history_yesterday)
+                                        HistoryDayGroup.Earlier -> stringResource(R.string.history_earlier)
+                                    }
+                                    Text(
+                                        label,
+                                        Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                items(groupEntries, key = { it.url }) { entry ->
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable { requestExit { onOpen(entry.url) } }
+                                            .padding(horizontal = 20.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Favicon(entry.url, iconsDir, 28.dp)
+                                        Spacer(Modifier.width(12.dp))
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                entry.title.ifBlank { entry.url },
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            Text(
+                                                stringResource(
+                                                    R.string.history_entry_subtitle,
+                                                    hostOf(entry.url),
+                                                    timeFormat.format(Date(entry.visitedAt)),
+                                                ),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -266,110 +269,112 @@ private fun BookmarksScreen(
     var selected by remember { mutableStateOf<Bookmark?>(null) }
 
     BrowserMotionScreen(onBack = onBack) { requestExit ->
-        Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = { requestExit(onBack) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
-                }
-                Text(
-                    stringResource(R.string.bookmarks_title),
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
-
-            when {
-                state.isLoading && state.bookmarks.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+        CenteredSinglePane {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { requestExit(onBack) }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
                     }
-                }
-                state.error == BookmarksOperation.Load && state.bookmarks.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            EmptyState(
-                                AppIcons.Star,
-                                stringResource(R.string.bookmarks_load_error),
-                                stringResource(R.string.retry_hint),
-                            )
-                            TextButton(onClick = onRetryLoad) { Text(stringResource(R.string.action_retry)) }
-                        }
-                    }
-                }
-                state.bookmarks.isEmpty() -> {
-                    EmptyState(
-                        AppIcons.Star,
-                        stringResource(R.string.bookmarks_empty_title),
-                        stringResource(R.string.bookmarks_empty_subtitle),
+                    Text(
+                        stringResource(R.string.bookmarks_title),
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleLarge,
                     )
                 }
-                else -> {
-                    val visibleError = state.error
-                    if (visibleError != null) {
-                        val message = when (visibleError) {
-                            BookmarksOperation.Load -> stringResource(R.string.bookmarks_refresh_error)
-                            BookmarksOperation.Rename -> stringResource(R.string.bookmark_rename_error)
-                            BookmarksOperation.Delete -> stringResource(R.string.bookmark_delete_error)
+
+                when {
+                    state.isLoading && state.bookmarks.isEmpty() -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
                         }
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                message,
-                                Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            val retryable = visibleError == BookmarksOperation.Load
-                            TextButton(onClick = if (retryable) onRetryLoad else onDismissError) {
-                                Text(
-                                    stringResource(
-                                        if (retryable) R.string.action_retry else R.string.action_hide,
-                                    ),
+                    }
+                    state.error == BookmarksOperation.Load && state.bookmarks.isEmpty() -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                EmptyState(
+                                    AppIcons.Star,
+                                    stringResource(R.string.bookmarks_load_error),
+                                    stringResource(R.string.retry_hint),
                                 )
+                                TextButton(onClick = onRetryLoad) { Text(stringResource(R.string.action_retry)) }
                             }
                         }
                     }
-                    LazyColumn(Modifier.fillMaxSize()) {
-                        items(state.bookmarks, key = { it.url }) { bookmark ->
+                    state.bookmarks.isEmpty() -> {
+                        EmptyState(
+                            AppIcons.Star,
+                            stringResource(R.string.bookmarks_empty_title),
+                            stringResource(R.string.bookmarks_empty_subtitle),
+                        )
+                    }
+                    else -> {
+                        val visibleError = state.error
+                        if (visibleError != null) {
+                            val message = when (visibleError) {
+                                BookmarksOperation.Load -> stringResource(R.string.bookmarks_refresh_error)
+                                BookmarksOperation.Rename -> stringResource(R.string.bookmark_rename_error)
+                                BookmarksOperation.Delete -> stringResource(R.string.bookmark_delete_error)
+                            }
                             Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable { requestExit { onOpen(bookmark.url) } }
-                                    .padding(horizontal = 20.dp, vertical = 6.dp),
+                                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Favicon(bookmark.url, iconsDir, 40.dp)
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
+                                Text(
+                                    message,
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                val retryable = visibleError == BookmarksOperation.Load
+                                TextButton(onClick = if (retryable) onRetryLoad else onDismissError) {
                                     Text(
-                                        bookmark.title.ifBlank { bookmark.host },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                    )
-                                    Text(
-                                        hostOf(bookmark.url).ifBlank { bookmark.url },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        stringResource(
+                                            if (retryable) R.string.action_retry else R.string.action_hide,
+                                        ),
                                     )
                                 }
-                                IconButton(
-                                    onClick = { selected = bookmark },
-                                    modifier = Modifier.size(48.dp),
+                            }
+                        }
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            items(state.bookmarks, key = { it.url }) { bookmark ->
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable { requestExit { onOpen(bookmark.url) } }
+                                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Icon(
-                                        Icons.Filled.MoreVert,
-                                        stringResource(R.string.actions_content_description),
-                                        Modifier.size(20.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                    Favicon(bookmark.url, iconsDir, 40.dp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            bookmark.title.ifBlank { bookmark.host },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            hostOf(bookmark.url).ifBlank { bookmark.url },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { selected = bookmark },
+                                        modifier = Modifier.size(48.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.MoreVert,
+                                            stringResource(R.string.actions_content_description),
+                                            Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
                                 }
                             }
                         }
