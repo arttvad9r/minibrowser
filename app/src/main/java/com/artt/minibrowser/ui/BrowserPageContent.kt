@@ -57,6 +57,7 @@ internal data class BrowserPageActions(
     val onToggleAdblock: (Boolean) -> Unit,
     val onRetryAdblock: () -> Unit,
     val onTranslate: () -> Unit,
+    val onToggleDesktop: () -> Unit,
 )
 
 /** Browser-page renderer. It receives only display state, UI actions and a start-page slot. */
@@ -109,6 +110,7 @@ internal fun BrowserPageContent(
                     onRetryAdblock = actions.onRetryAdblock,
                     adblockStatus = state.adblockStatus,
                     onTranslate = actions.onTranslate,
+                    onToggleDesktop = actions.onToggleDesktop,
                 )
             }
         }
