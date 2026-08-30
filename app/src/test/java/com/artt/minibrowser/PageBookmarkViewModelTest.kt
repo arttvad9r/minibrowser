@@ -44,6 +44,26 @@ class PageBookmarkViewModelTest {
     }
 
     @Test
+    fun malformedHttpUrlDoesNotTouchStorage() {
+        var checks = 0
+        var additions = 0
+        val viewModel = pageBookmarkViewModel(
+            checkBookmarked = {
+                checks++
+                false
+            },
+            addBookmark = { _, _ -> additions++ },
+        )
+
+        viewModel.sync("https://")
+        viewModel.toggle("https://", "Broken")
+
+        assertEquals(0, checks)
+        assertEquals(0, additions)
+        assertEquals(PageBookmarkUiState(), viewModel.uiState.value)
+    }
+
+    @Test
     fun syncPublishesBookmarkedState() {
         val viewModel = pageBookmarkViewModel(checkBookmarked = { true })
 

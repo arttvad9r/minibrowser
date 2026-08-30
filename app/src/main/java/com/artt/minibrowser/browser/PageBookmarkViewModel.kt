@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.artt.minibrowser.data.BookmarksRepository
+import com.artt.minibrowser.engine.isValidWebUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -55,7 +56,7 @@ internal class PageBookmarkViewModel : ViewModel {
 
     fun sync(url: String?) {
         syncJob?.cancel()
-        val target = url?.takeIf(::isBookmarkableUrl)
+        val target = url?.takeIf(::isValidWebUri)
         if (target == null) {
             _uiState.value = PageBookmarkUiState()
             return
@@ -86,7 +87,7 @@ internal class PageBookmarkViewModel : ViewModel {
     }
 
     fun toggle(url: String?, title: String?) {
-        val target = url?.takeIf(::isBookmarkableUrl) ?: return
+        val target = url?.takeIf(::isValidWebUri) ?: return
         if (toggleJob?.isActive == true) return
 
         syncJob?.cancel()
@@ -136,6 +137,3 @@ internal class PageBookmarkViewModel : ViewModel {
         }
     }
 }
-
-private fun isBookmarkableUrl(url: String): Boolean =
-    url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)
