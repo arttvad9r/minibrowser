@@ -6,10 +6,20 @@ import org.junit.Test
 
 class BrowserActivityRequestControllerTest {
     @Test
-    fun acceptedMimeTypesFiltersInvalidValuesAndDuplicates() {
+    fun acceptedMimeTypesNormalizesAndFiltersInvalidValues() {
         assertArrayEquals(
-            arrayOf("image/png", "text/plain"),
-            acceptedMimeTypes(arrayOf("", "image/png", "invalid", "image/png", "text/plain")),
+            arrayOf("image/png", "text/plain", "image/*"),
+            acceptedMimeTypes(
+                arrayOf(
+                    "",
+                    " IMAGE/PNG ",
+                    "invalid",
+                    "image/png",
+                    "text/plain",
+                    "text/",
+                    "image/*",
+                ),
+            ),
         )
     }
 
@@ -17,7 +27,7 @@ class BrowserActivityRequestControllerTest {
     fun acceptedMimeTypesFallsBackToWildcard() {
         assertArrayEquals(
             arrayOf("*/*"),
-            acceptedMimeTypes(arrayOf("", "invalid")),
+            acceptedMimeTypes(arrayOf("", "invalid", "text/")),
         )
     }
 }
