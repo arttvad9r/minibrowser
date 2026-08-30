@@ -10,10 +10,19 @@ class DownloadNameTest {
     @Test fun quotedFilename() =
         assertEquals("report.pdf", parseFilename("attachment; filename=\"report.pdf\"", "file"))
 
+    @Test fun plainFilenameParameterIsCaseInsensitive() =
+        assertEquals("report.pdf", parseFilename("attachment; FILENAME=\"report.pdf\"", "file"))
+
     @Test fun rfc5987Utf8() =
         assertEquals(
             "отчет.pdf",
             parseFilename("attachment; filename*=UTF-8''%D0%BE%D1%82%D1%87%D0%B5%D1%82.pdf", "file"),
+        )
+
+    @Test fun rfc5987LanguageTagIsAccepted() =
+        assertEquals(
+            "отчет.pdf",
+            parseFilename("attachment; filename*=UTF-8'ru'%D0%BE%D1%82%D1%87%D0%B5%D1%82.pdf", "file"),
         )
 
     @Test fun malformedRfc5987FallsBackInsteadOfThrowing() =
