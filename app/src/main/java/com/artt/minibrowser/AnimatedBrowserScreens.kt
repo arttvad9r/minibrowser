@@ -359,6 +359,11 @@ private fun BookmarksScreen(
                         }
                         LazyColumn(Modifier.fillMaxSize()) {
                             items(state.bookmarks, key = { it.url }) { bookmark ->
+                                val bookmarkActionLabel = bookmark.title.ifBlank {
+                                    bookmark.host.ifBlank { hostOf(bookmark.url).ifBlank { bookmark.url } }
+                                }
+                                val actionsDescription =
+                                    "${stringResource(R.string.actions_content_description)}: $bookmarkActionLabel"
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
@@ -389,7 +394,7 @@ private fun BookmarksScreen(
                                     ) {
                                         Icon(
                                             Icons.Filled.MoreVert,
-                                            stringResource(R.string.actions_content_description),
+                                            actionsDescription,
                                             Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
