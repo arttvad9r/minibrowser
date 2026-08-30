@@ -133,7 +133,9 @@ fun BrowserTextField(
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier,
+        modifier = modifier.semantics {
+            if (placeholder.isNotEmpty()) contentDescription = placeholder
+        },
         singleLine = true,
         textStyle = textStyle.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.onSurface),
@@ -142,6 +144,7 @@ fun BrowserTextField(
                 if (value.isEmpty() && placeholder.isNotEmpty()) {
                     Text(
                         placeholder,
+                        Modifier.clearAndSetSemantics { },
                         style = textStyle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
