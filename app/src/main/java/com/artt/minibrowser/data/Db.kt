@@ -102,6 +102,12 @@ data class Bookmark(
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertBookmark(b: Bookmark)
 
+    @Transaction
+    suspend fun appendBookmark(bookmark: Bookmark) {
+        val nextPosition = maxBookmarkPosition() + 1
+        upsertBookmark(bookmark.copy(position = nextPosition))
+    }
+
     @Query("DELETE FROM bookmarks WHERE url = :url")
     suspend fun deleteBookmark(url: String)
 
