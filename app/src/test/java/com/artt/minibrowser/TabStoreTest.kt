@@ -41,6 +41,56 @@ class TabStoreTest {
         dir.deleteRecursively()
     }
 
+    @Test fun persistenceStripsCredentialsAndDropsBoundGeckoState() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "tabs-credentials-${System.nanoTime()}")
+        val credentialUrl = "https://user:secret@example.com/private?q=1#x"
+        TabStore.saveState(
+            dir,
+            PersistedBrowserState(
+                selectedId = 1,
+                tabs = listOf(
+                    PersistedTab(
+                        id = 1,
+                        url = credentialUrl,
+                        title = credentialUrl,
+                        sessionState = "opaque-session-secret",
+                        sessionStateUrl = credentialUrl,
+                    ),
+                ),
+            ),
+        )
+
+        val persisted = File(dir, "open_tabs.json").readText()
+        assertFalse(persisted.contains("user:secret"))
+        assertFalse(persisted.contains("opaque-session-secret"))
+
+        val tab = TabStore.loadState(dir).tabs.single()
+        assertEquals("https://example.com/private?q=1#x", tab.url)
+        assertEquals("https://example.com/private?q=1#x", tab.title)
+        assertNull(tab.sessionState)
+        assertNull(tab.sessionStateUrl)
+        dir.deleteRecursively()
+    }
+
+    @Test fun legacyCredentialStateIsSanitizedAndRewritten() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "tabs-credential-legacy-${System.nanoTime()}").apply { mkdirs() }
+        val target = File(dir, "open_tabs.json")
+        target.writeText(
+            """{"selectedId":1,"tabs":[{"id":1,"url":"https://user:secret@example.com/a","title":"Page","sessionState":"opaque-secret","sessionStateUrl":"https://user:secret@example.com/a"}]}""",
+        )
+
+        val tab = TabStore.loadState(dir).tabs.single()
+
+        assertEquals("https://example.com/a", tab.url)
+        assertEquals("Page", tab.title)
+        assertNull(tab.sessionState)
+        assertNull(tab.sessionStateUrl)
+        val rewritten = target.readText()
+        assertFalse(rewritten.contains("user:secret"))
+        assertFalse(rewritten.contains("opaque-secret"))
+        dir.deleteRecursively()
+    }
+
     @Test fun replacingExistingStateLeavesOnlyCompleteNewJson() {
         val dir = File(System.getProperty("java.io.tmpdir"), "tabs-replace-${System.nanoTime()}")
         val first = PersistedBrowserState(1, listOf(PersistedTab(1, "https://one.example", "One")))

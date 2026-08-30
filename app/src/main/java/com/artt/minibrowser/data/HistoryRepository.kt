@@ -1,25 +1,42 @@
 package com.artt.minibrowser.data
 
 import com.artt.minibrowser.net.isValidWebUri
+import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import java.net.URI
 
 private val HISTORY_WHITESPACE = Regex("\\s+")
 
-internal fun isHistoryUrl(url: String): Boolean = isValidWebUri(url.trim())
+internal fun isHistoryUrl(url: String): Boolean = sanitizeWebUriForPersistence(url) != null
 
 /**
- * Normal writes already reject non-web URLs. Reuse the Room result directly in that common case;
- * allocate a filtered copy only when an old/legacy database actually contains an internal row.
+ * Normal writes already sanitize web URLs. Reuse the Room result directly in that common case;
+ * allocate a cleaned copy only when an old/legacy database contains an unsafe or credential URL.
  */
 internal fun webHistoryEntries(entries: List<HistoryEntry>): List<HistoryEntry> {
     var result: ArrayList<HistoryEntry>? = null
     for (index in entries.indices) {
         val entry = entries[index]
-        if (isHistoryUrl(entry.url)) {
-            result?.add(entry)
-        } else if (result == null) {
-            result = ArrayList(entries.size - 1)
-            for (retainedIndex in 0 until index) result.add(entries[retainedIndex])
+        val safeUrl = sanitizeWebUriForPersistence(entry.url)
+        when {
+            safeUrl == null -> {
+                if (result == null) {
+                    result = ArrayList(entries.size - 1)
+                    for (retainedIndex in 0 until index) result.add(entries[retainedIndex])
+                }
+            }
+            safeUrl == entry.url -> result?.add(entry)
+            else -> {
+                if (result == null) {
+                    result = ArrayList(entries.size)
+                    for (retainedIndex in 0 until index) result.add(entries[retainedIndex])
+                }
+                result.add(
+                    entry.copy(
+                        url = safeUrl,
+                        title = if (entry.title == entry.url) safeUrl else entry.title,
+                    ),
+                )
+            }
         }
     }
     return result ?: entries
@@ -122,8 +139,16 @@ internal fun mergeSuggestions(
         }
     }
     for (suggestion in history) {
-        if (isValidWebUri(suggestion.url) && seenUrls.add(suggestion.url)) {
-            result += suggestion
+        val safeUrl = sanitizeWebUriForPersistence(suggestion.url) ?: continue
+        if (seenUrls.add(safeUrl)) {
+            result += if (safeUrl == suggestion.url) {
+                suggestion
+            } else {
+                suggestion.copy(
+                    label = if (suggestion.label == suggestion.url) safeUrl else suggestion.label,
+                    url = safeUrl,
+                )
+            }
             if (result.size == limit) break
         }
     }
@@ -132,14 +157,15 @@ internal fun mergeSuggestions(
 
 class HistoryRepository(private val dao: AppDao) {
     suspend fun record(url: String, title: String?) {
-        if (!isHistoryUrl(url)) return
-        dao.recordVisit(url, title, System.currentTimeMillis())
+        val safeUrl = sanitizeWebUriForPersistence(url) ?: return
+        dao.recordVisit(safeUrl, title, System.currentTimeMillis())
     }
 
     // Заголовок приходит после onVisited — обновляем только существующую запись, визит не дублируем.
     suspend fun updateTitle(url: String, title: String?) {
-        if (!isHistoryUrl(url) || title.isNullOrBlank()) return
-        dao.updateHistoryTitle(url, title)
+        val safeUrl = sanitizeWebUriForPersistence(url) ?: return
+        if (title.isNullOrBlank()) return
+        dao.updateHistoryTitle(safeUrl, title)
     }
 
     suspend fun suggest(q: String): List<Suggestion> {

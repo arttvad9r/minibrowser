@@ -1,7 +1,7 @@
 package com.artt.minibrowser.data
 
 import android.os.Trace
-import com.artt.minibrowser.net.isValidWebUri
+import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -45,15 +45,38 @@ private inline fun <T> tracedTabStoreLoad(block: () -> T): T {
     }
 }
 
+private fun sanitizePersistedSessionUrl(value: String?): String? = when {
+    value == null -> null
+    value.isEmpty() -> ""
+    value.equals("about:blank", ignoreCase = true) -> "about:blank"
+    else -> sanitizeWebUriForPersistence(value)
+}
+
 internal fun sanitizePersistedBrowserState(state: PersistedBrowserState): PersistedBrowserState {
     val seenIds = mutableSetOf<Long>()
     val tabs = state.tabs.mapNotNull { tab ->
-        val normalized = when {
-            tab.url.isEmpty() -> tab
-            tab.url.equals("about:blank", ignoreCase = true) -> tab.copy(url = "about:blank")
-            isValidWebUri(tab.url) -> tab
-            else -> null
+        val safeUrl = when {
+            tab.url.isEmpty() -> ""
+            tab.url.equals("about:blank", ignoreCase = true) -> "about:blank"
+            else -> sanitizeWebUriForPersistence(tab.url)
         } ?: return@mapNotNull null
+
+        var normalized = if (safeUrl == tab.url) {
+            tab
+        } else {
+            tab.copy(
+                url = safeUrl,
+                title = if (tab.title == tab.url) safeUrl else tab.title,
+            )
+        }
+
+        val safeSessionStateUrl = sanitizePersistedSessionUrl(tab.sessionStateUrl)
+        if (safeUrl != tab.url || safeSessionStateUrl != tab.sessionStateUrl) {
+            // Gecko session state is opaque and can contain the original URL. If credentials were
+            // removed from either persisted URL, discard that snapshot and reload the sanitized URL.
+            normalized = normalized.copy(sessionState = null, sessionStateUrl = null)
+        }
+
         normalized.takeIf { it.id > 0L && seenIds.add(it.id) }
     }
     val selectedId = state.selectedId?.takeIf { selected -> tabs.any { it.id == selected } }
@@ -109,9 +132,10 @@ object TabStore {
         dir.mkdirs()
         val target = File(dir, FILE_NAME)
         val temp = File(dir, "$FILE_NAME.tmp")
+        val sanitized = sanitizePersistedBrowserState(state)
         try {
             FileOutputStream(temp).use { output ->
-                output.write(json.encodeToString(PersistedBrowserState.serializer(), state).toByteArray())
+                output.write(json.encodeToString(PersistedBrowserState.serializer(), sanitized).toByteArray())
                 output.fd.sync()
             }
             runCatching {

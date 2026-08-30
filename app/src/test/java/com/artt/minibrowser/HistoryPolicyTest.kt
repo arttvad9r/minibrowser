@@ -5,6 +5,7 @@ import com.artt.minibrowser.data.collapseHistoryNoise
 import com.artt.minibrowser.data.distinctRecentSites
 import com.artt.minibrowser.data.isHistoryUrl
 import com.artt.minibrowser.data.webHistoryEntries
+import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -28,6 +29,17 @@ class HistoryPolicyTest {
         assertFalse(isHistoryUrl(""))
     }
 
+    @Test fun persistenceStripsHttpUserInfoWithoutReencodingTheRest() {
+        assertEquals(
+            "https://example.com:443/a%20b?q=%2F#part",
+            sanitizeWebUriForPersistence(" https://user:secret@example.com:443/a%20b?q=%2F#part "),
+        )
+        assertEquals(
+            "https://пример.рф/путь?q=1#часть",
+            sanitizeWebUriForPersistence("https://user:secret@пример.рф/путь?q=1#часть"),
+        )
+    }
+
     @Test fun webHistoryFastPathReusesInput() {
         val rows = listOf(
             HistoryEntry("https://example.com/a", "A", 2, 1),
@@ -42,6 +54,16 @@ class HistoryPolicyTest {
         val malformed = HistoryEntry("https://", "Broken", 2, 1)
         val last = HistoryEntry("https://example.com/b", "B", 1, 1)
         assertEquals(listOf(first, last), webHistoryEntries(listOf(first, internal, malformed, last)))
+    }
+
+    @Test fun webHistoryStripsLegacyCredentialsFromUrlAndDefaultTitle() {
+        val credentialUrl = "https://user:secret@example.com/private?q=1#x"
+        val row = HistoryEntry(credentialUrl, credentialUrl, 2, 1)
+
+        assertEquals(
+            listOf(HistoryEntry("https://example.com/private?q=1#x", "https://example.com/private?q=1#x", 2, 1)),
+            webHistoryEntries(listOf(row)),
+        )
     }
 
     @Test fun collapsesFastSameSiteSameTitleNavigationNoise() {

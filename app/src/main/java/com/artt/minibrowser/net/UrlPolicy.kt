@@ -34,3 +34,29 @@ internal fun isValidWebUri(value: String): Boolean {
     val authority = webAuthority(value) ?: return false
     return authority.port == -1 || authority.port in 1..65535
 }
+
+/**
+ * History and other automatic persistence must never retain HTTP user-info credentials. Preserve
+ * the rest of the raw URL byte-for-byte so Unicode paths and already-escaped query/fragment data
+ * are not decoded and re-encoded as a side effect of privacy sanitization.
+ */
+internal fun sanitizeWebUriForPersistence(value: String): String? {
+    val trimmed = value.trim()
+    if (!isValidWebUri(trimmed)) return null
+    val uri = runCatching { URI(trimmed) }.getOrNull() ?: return null
+    if (uri.rawUserInfo == null) return trimmed
+
+    val rawAuthority = uri.rawAuthority ?: return null
+    val userInfoEnd = rawAuthority.lastIndexOf('@')
+    if (userInfoEnd < 0) return trimmed
+    val schemeEnd = trimmed.indexOf("://")
+    if (schemeEnd < 0) return null
+    val authorityStart = schemeEnd + 3
+    if (!trimmed.regionMatches(authorityStart, rawAuthority, 0, rawAuthority.length)) return null
+
+    return trimmed.replaceRange(
+        authorityStart,
+        authorityStart + rawAuthority.length,
+        rawAuthority.substring(userInfoEnd + 1),
+    )
+}
