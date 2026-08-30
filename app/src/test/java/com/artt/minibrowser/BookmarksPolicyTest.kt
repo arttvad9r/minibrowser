@@ -1,10 +1,12 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.data.Bookmark
+import com.artt.minibrowser.data.bookmarkForPersistence
 import com.artt.minibrowser.data.mergeSuggestions
 import com.artt.minibrowser.data.webBookmarks
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 
 class BookmarksPolicyTest {
@@ -23,6 +25,21 @@ class BookmarksPolicyTest {
         val script = Bookmark("javascript:alert(1)", "Script", "", 3)
 
         assertEquals(listOf(safe), webBookmarks(listOf(safe, hostless, script)))
+    }
+
+    @Test fun newCredentialBookmarkIsSanitizedBeforePersistence() {
+        val rawUrl = "https://user:secret@example.com/private?q=1#section"
+
+        assertEquals(
+            Bookmark(
+                url = "https://example.com/private?q=1#section",
+                title = "https://example.com/private?q=1#section",
+                host = "example.com",
+                position = 4,
+            ),
+            bookmarkForPersistence(rawUrl, rawUrl, position = 4),
+        )
+        assertNull(bookmarkForPersistence("javascript:alert(1)", "Script", position = 4))
     }
 
     @Test fun credentialLegacyBookmarkIsSanitizedBeforeUi() {
