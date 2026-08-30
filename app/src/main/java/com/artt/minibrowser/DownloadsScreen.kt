@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,7 @@ internal fun MotionDownloadsScreen(onBack: () -> Unit) {
     val factory = remember(applicationContext) {
         DownloadsViewModel.factory(
             downloads = DownloadHistory.items,
+            restoreCompleted = DownloadHistory.restoreCompleted,
             initialize = { DownloadHistory.init(applicationContext) },
             clearHistory = DownloadHistory::clear,
         )
@@ -120,22 +122,30 @@ private fun DownloadsScreen(
                     }
                 }
 
-                if (downloads.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        EmptyState(
-                            AppIcons.Download,
-                            stringResource(R.string.downloads_empty_title),
-                            stringResource(R.string.downloads_empty_subtitle),
-                        )
+                when {
+                    state.isRestoring -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(downloads, key = { it.id }) { item ->
-                            DownloadCard(item, dateFormat) { onOpen(item) }
+                    downloads.isEmpty() -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            EmptyState(
+                                AppIcons.Download,
+                                stringResource(R.string.downloads_empty_title),
+                                stringResource(R.string.downloads_empty_subtitle),
+                            )
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(downloads, key = { it.id }) { item ->
+                                DownloadCard(item, dateFormat) { onOpen(item) }
+                            }
                         }
                     }
                 }

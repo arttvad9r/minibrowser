@@ -10,10 +10,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 internal data class DownloadsUiState(
     val downloads: List<BrowserDownload> = emptyList(),
+    val isRestoring: Boolean = false,
 )
 
 /** Owns the UI-facing download-history state without coupling the renderer to its global store. */
@@ -24,38 +26,41 @@ internal class DownloadsViewModel : ViewModel {
 
     constructor(
         downloads: StateFlow<List<BrowserDownload>>,
+        restoreCompleted: StateFlow<Boolean>,
         initialize: () -> Unit,
         clearHistory: () -> Unit,
     ) : super() {
         this.clearHistory = clearHistory
-        _uiState = MutableStateFlow(DownloadsUiState(downloads.value))
+        _uiState = MutableStateFlow(downloadsUiState(downloads.value, restoreCompleted.value))
         uiState = _uiState.asStateFlow()
         initialize()
-        observe(downloads, viewModelScope)
+        observe(downloads, restoreCompleted, viewModelScope)
     }
 
     internal constructor(
         downloads: StateFlow<List<BrowserDownload>>,
+        restoreCompleted: StateFlow<Boolean>,
         initialize: () -> Unit,
         clearHistory: () -> Unit,
         viewModelScope: CoroutineScope,
     ) : super(viewModelScope) {
         this.clearHistory = clearHistory
-        _uiState = MutableStateFlow(DownloadsUiState(downloads.value))
+        _uiState = MutableStateFlow(downloadsUiState(downloads.value, restoreCompleted.value))
         uiState = _uiState.asStateFlow()
         initialize()
-        observe(downloads, viewModelScope)
+        observe(downloads, restoreCompleted, viewModelScope)
     }
 
     fun clear() = clearHistory()
 
     private fun observe(
         downloads: StateFlow<List<BrowserDownload>>,
+        restoreCompleted: StateFlow<Boolean>,
         scope: CoroutineScope,
     ) {
         scope.launch {
-            downloads.collect { items ->
-                _uiState.value = DownloadsUiState(downloads = items)
+            combine(downloads, restoreCompleted, ::downloadsUiState).collect { state ->
+                _uiState.value = state
             }
         }
     }
@@ -63,12 +68,14 @@ internal class DownloadsViewModel : ViewModel {
     companion object {
         fun factory(
             downloads: StateFlow<List<BrowserDownload>>,
+            restoreCompleted: StateFlow<Boolean>,
             initialize: () -> Unit,
             clearHistory: () -> Unit,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 DownloadsViewModel(
                     downloads = downloads,
+                    restoreCompleted = restoreCompleted,
                     initialize = initialize,
                     clearHistory = clearHistory,
                 )
@@ -76,3 +83,11 @@ internal class DownloadsViewModel : ViewModel {
         }
     }
 }
+
+private fun downloadsUiState(
+    downloads: List<BrowserDownload>,
+    restoreCompleted: Boolean,
+): DownloadsUiState = DownloadsUiState(
+    downloads = downloads,
+    isRestoring = !restoreCompleted && downloads.isEmpty(),
+)

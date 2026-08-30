@@ -22,11 +22,24 @@ class DownloadsViewModelTest {
     }
 
     @Test
-    fun initialItemsAreExposedImmediately() {
+    fun emptyHistoryIsRestoringUntilStoreRestoreCompletes() {
+        val restored = MutableStateFlow(false)
+        val viewModel = downloadsViewModel(restoreCompleted = restored)
+
+        assertEquals(DownloadsUiState(isRestoring = true), viewModel.uiState.value)
+
+        restored.value = true
+
+        assertEquals(DownloadsUiState(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun liveItemsAreExposedImmediatelyWhileRestoreIsRunning() {
         val item = download("one")
         val source = MutableStateFlow(listOf(item))
+        val restored = MutableStateFlow(false)
 
-        val viewModel = downloadsViewModel(downloads = source)
+        val viewModel = downloadsViewModel(downloads = source, restoreCompleted = restored)
 
         assertEquals(DownloadsUiState(listOf(item)), viewModel.uiState.value)
     }
@@ -43,6 +56,19 @@ class DownloadsViewModelTest {
     }
 
     @Test
+    fun restoredItemsReplaceLoadingState() {
+        val source = MutableStateFlow(emptyList<BrowserDownload>())
+        val restored = MutableStateFlow(false)
+        val viewModel = downloadsViewModel(downloads = source, restoreCompleted = restored)
+        val item = download("restored")
+
+        source.value = listOf(item)
+        restored.value = true
+
+        assertEquals(DownloadsUiState(listOf(item)), viewModel.uiState.value)
+    }
+
+    @Test
     fun clearDelegatesToStore() {
         var clears = 0
         val viewModel = downloadsViewModel(clearHistory = { clears++ })
@@ -54,10 +80,12 @@ class DownloadsViewModelTest {
 
     private fun downloadsViewModel(
         downloads: MutableStateFlow<List<BrowserDownload>> = MutableStateFlow(emptyList()),
+        restoreCompleted: MutableStateFlow<Boolean> = MutableStateFlow(true),
         initialize: () -> Unit = {},
         clearHistory: () -> Unit = {},
     ): DownloadsViewModel = DownloadsViewModel(
         downloads = downloads,
+        restoreCompleted = restoreCompleted,
         initialize = initialize,
         clearHistory = clearHistory,
         viewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),

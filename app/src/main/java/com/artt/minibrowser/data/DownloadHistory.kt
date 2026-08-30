@@ -122,6 +122,8 @@ object DownloadHistory {
     private val lock = Any()
     private val _items = MutableStateFlow<List<BrowserDownload>>(emptyList())
     val items: StateFlow<List<BrowserDownload>> = _items.asStateFlow()
+    private val _restoreCompleted = MutableStateFlow(false)
+    val restoreCompleted: StateFlow<Boolean> = _restoreCompleted.asStateFlow()
     private var storeFile: File? = null
     private var discardRestoredHistory = false
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -163,6 +165,7 @@ object DownloadHistory {
                     }
                 }
             } finally {
+                _restoreCompleted.value = true
                 restoreComplete.complete(Unit)
             }
         }
