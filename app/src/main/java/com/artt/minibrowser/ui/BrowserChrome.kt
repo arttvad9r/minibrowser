@@ -67,18 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Suggestion
-import com.artt.minibrowser.engine.ExtensionLoader
-import com.artt.minibrowser.engine.SecurityState
 import java.io.File
-
-internal data class BrowserChromeUiState(
-    val url: String = "",
-    val isPrivate: Boolean = false,
-    val securityState: SecurityState = SecurityState.Unknown,
-    val canGoBack: Boolean = false,
-    val canGoForward: Boolean = false,
-    val desktop: Boolean = false,
-)
 
 @Composable
 internal fun TopBar(
@@ -90,7 +79,7 @@ internal fun TopBar(
     suggestions: List<Suggestion>,
     onSuggestionQueryChanged: (String?) -> Unit,
     onSubmitQuery: (String) -> Unit,
-    adblockStatus: ExtensionLoader.Status?,
+    adblockStatus: BrowserExtensionUiState,
     onToggleAdblock: (Boolean) -> Unit,
     onRetryAdblock: () -> Unit,
     onNavigate: (String) -> Unit,
@@ -201,7 +190,7 @@ internal fun TopBar(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            if (state.securityState == SecurityState.Secure) {
+                            if (state.securityState == BrowserSecurityUiState.Secure) {
                                 Icon(
                                     Icons.Filled.Lock,
                                     null,
@@ -368,7 +357,7 @@ private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
 private fun MenuSheet(
     state: BrowserChromeUiState,
     bookmarked: Boolean,
-    adblockStatus: ExtensionLoader.Status?,
+    adblockStatus: BrowserExtensionUiState,
     onDismiss: () -> Unit,
     onNewTab: () -> Unit,
     onNewPrivateTab: () -> Unit,
@@ -459,7 +448,7 @@ private fun MenuSheet(
         )
         MenuDivider()
         when (adblockStatus) {
-            null, ExtensionLoader.Status.Installing ->
+            BrowserExtensionUiState.Installing ->
                 SheetRow(
                     AppIcons.Shield,
                     stringResource(R.string.settings_adblock),
@@ -471,7 +460,7 @@ private fun MenuSheet(
                         )
                     },
                 )
-            ExtensionLoader.Status.Error ->
+            BrowserExtensionUiState.Error ->
                 SheetRow(
                     AppIcons.Shield,
                     stringResource(R.string.settings_adblock),
@@ -483,7 +472,7 @@ private fun MenuSheet(
                     },
                     onClick = { dismissThen(onRetryAdblock) },
                 )
-            ExtensionLoader.Status.Enabled ->
+            BrowserExtensionUiState.Enabled ->
                 ToggleRow(
                     AppIcons.Shield,
                     stringResource(R.string.settings_adblock),
@@ -491,7 +480,7 @@ private fun MenuSheet(
                     onToggleAdblock,
                     subtitle = stringResource(R.string.settings_adblock_subtitle),
                 )
-            ExtensionLoader.Status.Disabled ->
+            BrowserExtensionUiState.Disabled ->
                 ToggleRow(
                     AppIcons.Shield,
                     stringResource(R.string.settings_adblock),
@@ -545,10 +534,10 @@ internal fun SiteInfoSheet(
     val newTabTitle = stringResource(R.string.new_tab_title)
     val host = hostOf(state.url).ifBlank { state.url.ifBlank { newTabTitle } }
     val message = when (state.securityState) {
-        SecurityState.Secure -> stringResource(R.string.security_secure)
-        SecurityState.Exception -> stringResource(R.string.security_exception)
-        SecurityState.Insecure -> stringResource(R.string.security_insecure)
-        SecurityState.Unknown -> stringResource(R.string.security_unknown)
+        BrowserSecurityUiState.Secure -> stringResource(R.string.security_secure)
+        BrowserSecurityUiState.Exception -> stringResource(R.string.security_exception)
+        BrowserSecurityUiState.Insecure -> stringResource(R.string.security_insecure)
+        BrowserSecurityUiState.Unknown -> stringResource(R.string.security_unknown)
     }
     BrowserBottomSheet(onDismissRequest = onDismiss) {
         Text(host, style = MaterialTheme.typography.titleMedium)
