@@ -34,7 +34,7 @@ class InteractionBenchmark {
             },
         ) {
             val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            clickDescription(device, "Вкладки")
+            clickDescriptionContains(device, "вклад")
             device.pressBack()
             device.waitForIdle()
         }
@@ -64,6 +64,14 @@ class InteractionBenchmark {
     private fun clickDescription(device: UiDevice, description: String) {
         val target = checkNotNull(device.wait(Until.findObject(By.desc(description)), 3_000)) {
             "Missing UI element with content description: $description"
+        }
+        target.click()
+        device.waitForIdle()
+    }
+
+    private fun clickDescriptionContains(device: UiDevice, descriptionPart: String) {
+        val target = checkNotNull(device.wait(Until.findObject(By.descContains(descriptionPart)), 3_000)) {
+            "Missing UI element with content description containing: $descriptionPart"
         }
         target.click()
         device.waitForIdle()
