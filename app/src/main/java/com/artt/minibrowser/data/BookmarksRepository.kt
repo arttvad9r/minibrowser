@@ -16,12 +16,19 @@ private fun sanitizedBookmark(entry: Bookmark): Bookmark? {
 
 /** Drops malformed rows and strips HTTP user-info before stored bookmarks reach browser UI. */
 internal fun webBookmarks(entries: List<Bookmark>): List<Bookmark> {
+    val canonicalUrls = HashSet<String>()
+    entries.forEach { entry ->
+        val safe = sanitizedBookmark(entry)
+        if (safe === entry) canonicalUrls += entry.url
+    }
+
     var result: ArrayList<Bookmark>? = null
     val seenUrls = HashSet<String>()
     for (index in entries.indices) {
         val entry = entries[index]
         val safe = sanitizedBookmark(entry)
-        val keep = safe != null && seenUrls.add(safe.url)
+        val shadowedByCanonical = safe != null && safe !== entry && safe.url in canonicalUrls
+        val keep = safe != null && !shadowedByCanonical && seenUrls.add(safe.url)
         if (result == null && safe === entry && keep) continue
 
         if (result == null) {
