@@ -66,7 +66,10 @@ internal fun downloadSourceForHistory(value: String): String = runCatching {
 }.getOrDefault("")
 
 internal fun normalizeRestoredDownload(item: BrowserDownload, now: Long): BrowserDownload {
-    val sanitized = item.copy(sourceUrl = downloadSourceForHistory(item.sourceUrl))
+    val sanitized = item.copy(
+        sourceUrl = downloadSourceForHistory(item.sourceUrl),
+        mime = normalizeDownloadMime(item.mime),
+    )
     return when (sanitized.status) {
         DownloadStatus.Downloading -> sanitized.copy(
             status = DownloadStatus.Failed,
@@ -233,7 +236,7 @@ object DownloadHistory {
             id = id,
             name = name,
             sourceUrl = downloadSourceForHistory(sourceUrl),
-            mime = mime,
+            mime = normalizeDownloadMime(mime),
             status = DownloadStatus.Downloading,
             startedAt = System.currentTimeMillis(),
         )
