@@ -140,7 +140,11 @@ internal fun mergeSuggestions(
         val safeUrl = sanitizeWebUriForPersistence(suggestion.url) ?: continue
         val safeLabel = historyTitleForPersistence(suggestion.label) ?: suggestion.label
         if (seenUrls.add(safeUrl)) {
-            result += suggestion.copy(label = safeLabel, url = safeUrl)
+            result += if (safeUrl == suggestion.url && safeLabel == suggestion.label) {
+                suggestion
+            } else {
+                suggestion.copy(label = safeLabel, url = safeUrl)
+            }
             if (result.size == limit) break
         }
     }
