@@ -65,3 +65,23 @@ internal fun sanitizeWebUriForPersistence(value: String): String? {
         rawAuthority.substring(userInfoEnd + 1),
     )
 }
+
+/**
+ * Sanitizes URL-shaped user-visible text without normalizing ordinary titles. Leading/trailing
+ * whitespace and every non-credential character stay byte-for-byte unchanged; only HTTP(S)
+ * user-info is removed when the trimmed text is itself a valid web URI containing credentials.
+ */
+internal fun sanitizeWebUriUserInfoInText(value: String): String {
+    val first = value.indexOfFirst { !it.isWhitespace() }
+    if (first < 0) return value
+    val last = value.indexOfLast { !it.isWhitespace() }
+    val candidate = value.substring(first, last + 1)
+    val sanitized = sanitizeWebUriForPersistence(candidate) ?: return value
+    if (sanitized == candidate) return value
+
+    return buildString(value.length - candidate.length + sanitized.length) {
+        append(value, 0, first)
+        append(sanitized)
+        append(value, last + 1, value.length)
+    }
+}
