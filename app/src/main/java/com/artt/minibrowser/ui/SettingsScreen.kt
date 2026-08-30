@@ -42,7 +42,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.artt.minibrowser.MotionDownloadsScreen
 import com.artt.minibrowser.R
 
 private val translationLanguageCodes = listOf("ru", "en", "de", "fr")
@@ -74,13 +73,13 @@ internal fun SettingsScreen(
     onRetryAdblock: () -> Unit,
     onVot: (Boolean) -> Unit,
     onRetryVot: () -> Unit,
+    onDownloads: () -> Unit,
     onClearData: (withBookmarks: Boolean) -> Unit,
     onTranslateLang: (String) -> Unit,
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
-    var showDownloads by remember { mutableStateOf(false) }
 
     BrowserMotionScreen(onBack = onBack, fromBottom = true) { requestExit ->
         CenteredSinglePane(maxWidth = 720.dp) {
@@ -145,7 +144,7 @@ internal fun SettingsScreen(
                         SettingsRow(
                             stringResource(R.string.downloads_title),
                             subtitle = stringResource(R.string.settings_downloads_subtitle),
-                            onClick = { showDownloads = true },
+                            onClick = onDownloads,
                             trailing = { PickerChevron() },
                         )
                     }
@@ -241,10 +240,6 @@ internal fun SettingsScreen(
                 }
             },
         )
-    }
-
-    if (showDownloads) {
-        MotionDownloadsScreen(onBack = { showDownloads = false })
     }
 }
 
