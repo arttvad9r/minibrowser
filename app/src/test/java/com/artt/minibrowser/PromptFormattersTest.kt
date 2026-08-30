@@ -12,6 +12,7 @@ import com.artt.minibrowser.engine.parseMonthValue
 import com.artt.minibrowser.engine.parseTimeValue
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -24,6 +25,18 @@ class PromptFormattersTest {
         assertEquals("2026-08-25T09:05", formatDateTimeLocal(date, LocalTime.of(9, 5)))
         assertEquals("2026-08", formatMonthValue(date))
         assertEquals("2026-W35", formatIsoWeekValue(date))
+    }
+
+    @Test fun machineReadableValuesIgnoreDefaultLocaleDigits() {
+        val previous = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar-EG"))
+            assertEquals("09:05", formatTimeValue(LocalTime.of(9, 5)))
+            assertEquals("2026-08", formatMonthValue(date))
+            assertEquals("2026-W35", formatIsoWeekValue(date))
+        } finally {
+            Locale.setDefault(previous)
+        }
     }
 
     @Test fun parsesTypeSpecificDateTimeValues() {

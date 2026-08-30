@@ -8,15 +8,16 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
 import java.time.temporal.ChronoField
 import java.time.temporal.WeekFields
+import java.util.Locale
 
 private val DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE
-private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm")
+private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT)
 private val TIME_INPUT_FORMAT = DateTimeFormatterBuilder()
     .appendPattern("HH:mm")
     .optionalStart().appendPattern(":ss")
     .optionalStart().appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
     .optionalEnd().optionalEnd()
-    .toFormatter()
+    .toFormatter(Locale.ROOT)
 
 internal fun formatDateValue(date: LocalDate): String = date.format(DATE_FORMAT)
 
@@ -25,11 +26,16 @@ internal fun formatTimeValue(time: LocalTime): String = time.format(TIME_FORMAT)
 internal fun formatDateTimeLocal(date: LocalDate, time: LocalTime): String =
     "${formatDateValue(date)}T${formatTimeValue(time)}"
 
-internal fun formatMonthValue(date: LocalDate): String = "%04d-%02d".format(date.year, date.monthValue)
+internal fun formatMonthValue(date: LocalDate): String =
+    "%04d-%02d".format(Locale.ROOT, date.year, date.monthValue)
 
 internal fun formatIsoWeekValue(date: LocalDate): String {
     val fields = WeekFields.ISO
-    return "%04d-W%02d".format(date.get(fields.weekBasedYear()), date.get(fields.weekOfWeekBasedYear()))
+    return "%04d-W%02d".format(
+        Locale.ROOT,
+        date.get(fields.weekBasedYear()),
+        date.get(fields.weekOfWeekBasedYear()),
+    )
 }
 
 internal fun parseDateValue(value: String?): LocalDate? = runCatching { LocalDate.parse(value ?: "") }.getOrNull()
