@@ -64,51 +64,25 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
 import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SecurityState
-import com.artt.minibrowser.engine.Tab
-import org.mozilla.geckoview.GeckoView
 import java.io.File
 
-@Composable
-internal fun GeckoContent(
-    tab: Tab?,
-    modifier: Modifier = Modifier,
-) {
-    val session = tab?.session
-    val tabId = tab?.id
-    val url = tab?.url.orEmpty()
-    val isPrivate = tab?.isPrivate == true
-    val pageSettled = tab != null && tab.progress < 0f &&
-        (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true))
-
-    AndroidView(
-        factory = { context -> GeckoView(context) },
-        update = { view ->
-            if (view.session !== session) {
-                TabPreviewStore.captureBeforeSessionSwap(view)
-                view.releaseSession()
-                session?.let(view::setSession)
-            }
-            TabPreviewStore.maybeCapture(
-                view = view,
-                tabId = tabId,
-                url = url,
-                isPrivate = isPrivate,
-                pageSettled = pageSettled,
-            )
-        },
-        modifier = modifier,
-    )
-}
+internal data class BrowserChromeUiState(
+    val url: String = "",
+    val isPrivate: Boolean = false,
+    val securityState: SecurityState = SecurityState.Unknown,
+    val canGoBack: Boolean = false,
+    val canGoForward: Boolean = false,
+    val desktop: Boolean = false,
+)
 
 @Composable
 internal fun TopBar(
-    tab: Tab?,
+    state: BrowserChromeUiState,
     tabCount: Int,
     bookmarked: Boolean,
     iconsDir: File,
@@ -140,7 +114,7 @@ internal fun TopBar(
     var focused by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var fieldSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
-    val rawUrl = tab?.url ?: ""
+    val rawUrl = state.url
     val newTab = rawUrl.isBlank() || rawUrl == "about:blank"
     val shown = if (focused) text else (if (newTab) "" else rawUrl)
     val focusManager = LocalFocusManager.current
@@ -199,7 +173,7 @@ internal fun TopBar(
                         },
                 ) {
                     if (leadingIsSearch) {
-                        if (tab?.isPrivate == true) {
+                        if (state.isPrivate) {
                             Icon(
                                 AppIcons.Incognito,
                                 null,
@@ -219,7 +193,7 @@ internal fun TopBar(
                             horizontalArrangement = Arrangement.spacedBy(2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            if (tab?.isPrivate == true) {
+                            if (state.isPrivate) {
                                 Icon(
                                     AppIcons.Incognito,
                                     null,
@@ -227,7 +201,7 @@ internal fun TopBar(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            if (tab?.securityState == SecurityState.Secure) {
+                            if (state.securityState == SecurityState.Secure) {
                                 Icon(
                                     Icons.Filled.Lock,
                                     null,
@@ -335,7 +309,7 @@ internal fun TopBar(
 
     if (menuOpen) {
         MenuSheet(
-            tab = tab,
+            state = state,
             bookmarked = bookmarked,
             adblockStatus = adblockStatus,
             onDismiss = { menuOpen = false },
@@ -392,7 +366,7 @@ private fun SuggestionRow(s: Suggestion, iconsDir: File, onClick: () -> Unit) {
 
 @Composable
 private fun MenuSheet(
-    tab: Tab?,
+    state: BrowserChromeUiState,
     bookmarked: Boolean,
     adblockStatus: ExtensionLoader.Status?,
     onDismiss: () -> Unit,
@@ -412,7 +386,7 @@ private fun MenuSheet(
     onSettings: () -> Unit,
     onToggleDesktop: () -> Unit,
 ) {
-    val httpPage = tab?.url?.startsWith("http") == true
+    val httpPage = state.url.startsWith("http")
     BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
         Row(
             Modifier
@@ -425,13 +399,13 @@ private fun MenuSheet(
             MenuNavigationAction(
                 Icons.AutoMirrored.Filled.ArrowBack,
                 stringResource(R.string.action_back),
-                tab?.canGoBack == true,
+                state.canGoBack,
                 Modifier.weight(1f),
             ) { dismissThen(onBack) }
             MenuNavigationAction(
                 Icons.AutoMirrored.Filled.ArrowForward,
                 stringResource(R.string.action_forward),
-                tab?.canGoForward == true,
+                state.canGoForward,
                 Modifier.weight(1f),
             ) { dismissThen(onForward) }
             MenuNavigationAction(
@@ -463,11 +437,11 @@ private fun MenuSheet(
             enabled = httpPage,
             onClick = { dismissThen(onFind) },
         )
-        tab?.takeIf { httpPage }?.let { currentTab ->
+        if (httpPage) {
             ToggleRow(
                 AppIcons.Desktop,
                 stringResource(R.string.desktop_site),
-                currentTab.desktop,
+                state.desktop,
                 onChecked = { dismissThen(onToggleDesktop) },
             )
         }
@@ -563,10 +537,14 @@ private fun MenuDivider() {
 }
 
 @Composable
-internal fun SiteInfoSheet(tab: Tab, adblockEnabled: Boolean, onDismiss: () -> Unit) {
+internal fun SiteInfoSheet(
+    state: BrowserChromeUiState,
+    adblockEnabled: Boolean,
+    onDismiss: () -> Unit,
+) {
     val newTabTitle = stringResource(R.string.new_tab_title)
-    val host = hostOf(tab.url).ifBlank { tab.url.ifBlank { newTabTitle } }
-    val message = when (tab.securityState) {
+    val host = hostOf(state.url).ifBlank { state.url.ifBlank { newTabTitle } }
+    val message = when (state.securityState) {
         SecurityState.Secure -> stringResource(R.string.security_secure)
         SecurityState.Exception -> stringResource(R.string.security_exception)
         SecurityState.Insecure -> stringResource(R.string.security_insecure)
