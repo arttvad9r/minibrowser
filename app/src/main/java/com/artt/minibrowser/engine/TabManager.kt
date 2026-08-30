@@ -706,7 +706,7 @@ class TabManager(
                 if (BuildConfig.DEBUG) {
                     Log.d(
                         "MinibrowserNavigation",
-                        "load uri=${request.uri} target=${request.target} trigger=${request.triggerUri} userGesture=${request.hasUserGesture} redirect=${request.isRedirect}",
+                        "load uri=${navigationDebugLabel(request.uri)} target=${request.target} trigger=${navigationDebugLabel(request.triggerUri)} userGesture=${request.hasUserGesture} redirect=${request.isRedirect}",
                     )
                 }
                 if (isAllowedWebUri(request.uri) || request.uri == "about:blank") {
@@ -737,7 +737,9 @@ class TabManager(
 
             // target="_blank"/window.open — GeckoView loads the URI into the returned session.
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
-                if (BuildConfig.DEBUG) Log.d("MinibrowserNavigation", "new session uri=$uri")
+                if (BuildConfig.DEBUG) {
+                    Log.d("MinibrowserNavigation", "new session uri=${navigationDebugLabel(uri)}")
+                }
                 return GeckoResult.fromValue(newWindowSession(tab.isPrivate))
             }
         }
