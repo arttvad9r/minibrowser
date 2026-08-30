@@ -1,12 +1,15 @@
 package com.artt.minibrowser
 
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.StartPage
 import java.io.File
@@ -50,5 +53,42 @@ class StartPageSemanticsTest {
             .onNodeWithContentDescription(addBookmark)
             .assertIsDisplayed()
             .assertHasClickAction()
+    }
+
+    @Test
+    fun showAllHistoryKeepsMinimumTouchTarget() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val showAllHistory = context.getString(R.string.show_all_history)
+
+        composeRule.setContent {
+            MinibrowserTheme(darkTheme = false) {
+                StartPage(
+                    bookmarks = emptyList(),
+                    iconsDir = File(context.cacheDir, "test-icons"),
+                    recent = listOf(
+                        HistoryEntry(
+                            url = "https://example.com",
+                            title = "Example",
+                            visitedAt = 1L,
+                            visits = 1,
+                        ),
+                    ),
+                    isPrivate = false,
+                    onOpen = {},
+                    onAllBookmarks = {},
+                    onAllHistory = {},
+                    onRefreshRecent = {},
+                    onRename = { _, _ -> },
+                    onDelete = {},
+                    onAdd = { _, _ -> },
+                )
+            }
+        }
+
+        composeRule
+            .onNodeWithText(showAllHistory)
+            .assertIsDisplayed()
+            .assertHasClickAction()
+            .assertHeightIsAtLeast(48.dp)
     }
 }
