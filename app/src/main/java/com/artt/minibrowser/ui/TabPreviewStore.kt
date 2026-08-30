@@ -42,6 +42,7 @@ object TabPreviewStore {
     private var generation = 0
     private var overviewVisible = false
 
+    private var hostView = WeakReference<GeckoView>(null)
     private var currentView = WeakReference<GeckoView>(null)
     private var currentTabId: Long? = null
     private var currentUrl: String = ""
@@ -96,6 +97,17 @@ object TabPreviewStore {
     }
 
     fun attach(view: GeckoView, tabId: Long?, url: String, isPrivate: Boolean) {
+        val previousHost = hostView.get()
+        if (previousHost !== view) {
+            // Tab ids are monotonic only inside one TabManager. A recreated Activity can restore a
+            // lower max id and later reuse a tombstoned id from the previous host. A new GeckoView
+            // marks that host boundary. Invalidate every old compositor callback before releasing
+            // the tombstones so a late bitmap cannot be published into a reused id.
+            generation++
+            inFlight.clear()
+            removedTabs.clear()
+            hostView = WeakReference(view)
+        }
         currentView = WeakReference(view)
         currentTabId = tabId
         currentUrl = url
@@ -189,8 +201,8 @@ object TabPreviewStore {
 
     /**
      * Drops every preview and invalidates callbacks from captures that started before this call.
-     * Known old tab ids stay blocked for the rest of this process so a final old-UI Compose pass
-     * cannot start a fresh post-clear capture before TabManager finishes closing those sessions.
+     * Known old tab ids stay blocked for the lifetime of the current GeckoView host so a final old-UI
+     * Compose pass cannot start a fresh post-clear capture before TabManager closes those sessions.
      */
     fun clear() {
         generation++
