@@ -59,4 +59,32 @@
     <string name="download_unavailable">Файл больше недоступен</string>
     <string name="open_file_chooser_title">Открыть файл</string>
     <string name="no_app_to_open_file">Нет приложения для открытия файла</string>
+
+    <string name="settings_title">Настройки</string>
+    <string name="settings_group_search">Поиск</string>
+    <string name="settings_search_engine">Поисковая система</string>
+    <string name="settings_group_appearance">Внешний вид</string>
+    <string name="settings_group_translation">Перевод</string>
+    <string name="settings_translation_language">Язык перевода</string>
+    <string name="settings_video_translation">Перевод видео</string>
+    <string name="settings_extension_retry_subtitle">Ошибка запуска · Нажмите, чтобы повторить</string>
+    <string name="settings_video_translation_subtitle">VOT · перевод видео с поддерживаемых сайтов</string>
+    <string name="settings_group_files">Файлы</string>
+    <string name="settings_downloads_subtitle">История файлов, скачанных через Minibrowser</string>
+    <string name="settings_group_privacy">Конфиденциальность</string>
+    <string name="settings_adblock">Блокировка рекламы</string>
+    <string name="settings_adblock_subtitle">Блокирует рекламу и трекеры</string>
+    <string name="settings_clear_data">Очистить данные</string>
+    <string name="settings_clear_data_in_progress">Очистка данных…</string>
+    <string name="settings_clear_data_failed">Не удалось полностью очистить данные · Нажмите, чтобы повторить</string>
+    <string name="settings_clear_data_subtitle">История, cookies, данные сайтов и кэш</string>
+    <string name="settings_clear_data_dialog_message">Будут удалены:\n• история посещений;\n• cookies и данные сайтов;\n• кэш браузера;\n• кэш иконок.\n\nВозможно, потребуется снова войти в аккаунты на сайтах.</string>
+    <string name="settings_clear_bookmarks">Также удалить все закладки</string>
+    <string name="theme_system">Системная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="language_russian" translatable="false">Русский</string>
+    <string name="language_english" translatable="false">English</string>
+    <string name="language_german" translatable="false">Deutsch</string>
+    <string name="language_french" translatable="false">Français</string>
 </resources>
