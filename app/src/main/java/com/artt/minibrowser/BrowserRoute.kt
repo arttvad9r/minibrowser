@@ -41,6 +41,7 @@ import com.artt.minibrowser.ui.BrowserPageContent
 import com.artt.minibrowser.ui.BrowserPageProgress
 import com.artt.minibrowser.ui.BrowserPageUiState
 import com.artt.minibrowser.ui.BrowserSecurityUiState
+import com.artt.minibrowser.ui.BrowserSuggestionUiState
 import com.artt.minibrowser.ui.BrowserTabItemUiState
 import com.artt.minibrowser.ui.BrowserTabSwitcher
 import com.artt.minibrowser.ui.FindInPageRoute
@@ -165,12 +166,18 @@ internal fun BrowserRoute(
             isPrivate = tab.isPrivate,
         )
     }
+    val suggestionItems = omniboxSuggestionsUi.suggestions.map { suggestion ->
+        BrowserSuggestionUiState(
+            label = suggestion.label,
+            url = suggestion.url,
+        )
+    }
 
     val pageState = BrowserPageUiState(
         chrome = chromeState,
         tabCount = tabs.size,
         bookmarked = bookmarked,
-        suggestions = omniboxSuggestionsUi.suggestions,
+        suggestions = suggestionItems,
         adblockStatus = chromeAdblockStatus,
         showFind = showFind,
         showStart = showStart,
