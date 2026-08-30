@@ -2,6 +2,7 @@ package com.artt.minibrowser.browser
 
 import android.content.Intent
 import androidx.activity.ComponentActivity
+import com.artt.minibrowser.R
 import com.artt.minibrowser.engine.createSafeExternalIntent
 import com.artt.minibrowser.engine.safeExternalFallbackUrl
 
@@ -13,7 +14,9 @@ internal class BrowserIntentController(
     fun openExternalUri(value: String) {
         val external = createSafeExternalIntent(value)
         if (external != null && external.resolveActivity(activity.packageManager) != null) {
-            activity.startActivity(Intent.createChooser(external, "Открыть с помощью"))
+            activity.startActivity(
+                Intent.createChooser(external, activity.getString(R.string.external_chooser_title)),
+            )
             return
         }
         safeExternalFallbackUrl(value)?.let(loadFallback)
@@ -27,7 +30,7 @@ internal class BrowserIntentController(
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, url)
                 },
-                "Поделиться",
+                activity.getString(R.string.share_chooser_title),
             ),
         )
     }
