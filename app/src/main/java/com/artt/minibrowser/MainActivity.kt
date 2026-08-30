@@ -84,6 +84,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.browser.BrowserActivityRequestController
 import com.artt.minibrowser.browser.BrowserDataViewModel
+import com.artt.minibrowser.browser.BrowserIntentController
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.BrowserWindowController
@@ -106,9 +107,7 @@ import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
-import com.artt.minibrowser.engine.createSafeExternalIntent
 import com.artt.minibrowser.engine.formatFindCounter
-import com.artt.minibrowser.engine.safeExternalFallbackUrl
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BrowserBottomSheet
 import com.artt.minibrowser.ui.BrowserTabSwitcher
@@ -174,14 +173,8 @@ class MainActivity : ComponentActivity() {
     private val externalNavigation = NavigationController()
     private val activityRequests = BrowserActivityRequestController(this)
     private val browserWindow by lazy { BrowserWindowController(window) }
-
-    private fun openExternalUri(value: String) {
-        val external = createSafeExternalIntent(value)
-        if (external != null && external.resolveActivity(packageManager) != null) {
-            startActivity(Intent.createChooser(external, "Открыть с помощью"))
-            return
-        }
-        safeExternalFallbackUrl(value)?.let { fallback ->
+    private val browserIntents by lazy {
+        BrowserIntentController(this) { fallback ->
             if (::tabManager.isInitialized) {
                 (tabManager.current() ?: tabManager.newTab(null)).session.loadUri(fallback)
             }
@@ -268,19 +261,7 @@ class MainActivity : ComponentActivity() {
             val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
             val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
             val retryVot: () -> Unit = settingsViewModel::retryVot
-            val onShare: () -> Unit = {
-                currentTab?.url?.let { u ->
-                    startActivity(
-                        Intent.createChooser(
-                            Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, u)
-                            },
-                            "Поделиться",
-                        ),
-                    )
-                }
-            }
+            val onShare: () -> Unit = { browserIntents.shareUrl(currentTab?.url) }
 
             MinibrowserTheme(darkTheme = darkTheme) {
                 Box(
@@ -309,7 +290,7 @@ class MainActivity : ComponentActivity() {
                                         onNavigate = { uri ->
                                             (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
                                         },
-                                        onExternal = ::openExternalUri,
+                                        onExternal = browserIntents::openExternalUri,
                                         onBack = { currentSession?.goBack() },
                                         onForward = { currentSession?.goForward() },
                                         onReload = { currentSession?.reload() },
