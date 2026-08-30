@@ -37,6 +37,7 @@ class StartPageSemanticsTest {
         val bookmarks = context.getString(R.string.bookmarks_title)
         val showAllBookmarks = context.getString(R.string.show_all_bookmarks_content_description)
         val addBookmark = context.getString(R.string.add_bookmark_content_description)
+        val heading = SemanticsMatcher.expectValue(SemanticsProperties.Heading, Unit)
 
         composeRule.setContent {
             MinibrowserTheme(darkTheme = false) {
@@ -57,7 +58,9 @@ class StartPageSemanticsTest {
         }
 
         composeRule.onNodeWithText(appName).assertIsDisplayed()
-        composeRule.onNodeWithText(bookmarks).assertIsDisplayed()
+        composeRule.onNodeWithText(bookmarks)
+            .assertIsDisplayed()
+            .assert(heading)
         composeRule
             .onNodeWithContentDescription(showAllBookmarks)
             .assertIsDisplayed()
@@ -120,6 +123,7 @@ class StartPageSemanticsTest {
     fun recentActionsKeepMinimumTouchTargets() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val showAllHistory = context.getString(R.string.show_all_history)
+        val recentHeading = context.getString(R.string.recent_title)
         val recentTitle = "Example"
 
         composeRule.setContent {
@@ -146,6 +150,10 @@ class StartPageSemanticsTest {
         }
 
         val buttonRole = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+        val heading = SemanticsMatcher.expectValue(SemanticsProperties.Heading, Unit)
+        composeRule.onNodeWithText(recentHeading)
+            .assertIsDisplayed()
+            .assert(heading)
         composeRule
             .onNodeWithText(recentTitle)
             .assertIsDisplayed()
