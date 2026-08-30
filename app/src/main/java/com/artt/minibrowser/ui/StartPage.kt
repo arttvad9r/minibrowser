@@ -357,7 +357,7 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
                 Text(stringResource(R.string.action_cancel))
             }
             Button(
-                onClick = { onAdd(normalizeUrl(url), title.trim()) },
+                onClick = { onAdd(url, title.trim()) },
                 enabled = url.isNotBlank(),
                 modifier = Modifier.weight(1f),
                 colors = ButtonDefaults.buttonColors(
@@ -391,9 +391,4 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit, plac
             unfocusedContainerColor = MaterialTheme.colorScheme.surface,
         ),
     )
-}
-
-private fun normalizeUrl(q: String): String {
-    val s = q.trim()
-    return if (s.startsWith("http://") || s.startsWith("https://")) s else "https://$s"
 }
