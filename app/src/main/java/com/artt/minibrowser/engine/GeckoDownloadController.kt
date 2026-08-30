@@ -15,10 +15,10 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.artt.minibrowser.R
 import com.artt.minibrowser.data.DownloadHistory
+import com.artt.minibrowser.data.normalizeDownloadMime
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,34 +28,9 @@ import org.mozilla.geckoview.WebResponse
 
 private data class SavedDownload(val location: String, val bytes: Long)
 
-private const val DEFAULT_DOWNLOAD_MIME = "application/octet-stream"
-private const val MIME_TOKEN_PUNCTUATION = "!#$&^_.+-"
-
 internal fun shouldPersistDownloadHistory(isPrivate: Boolean): Boolean = !isPrivate
 
 internal fun isMediaStorePublishSuccessful(updatedRows: Int): Boolean = updatedRows > 0
-
-internal fun normalizeDownloadMime(value: String?): String {
-    val candidate = value
-        ?.substringBefore(';')
-        ?.trim()
-        ?.lowercase(Locale.ROOT)
-        .orEmpty()
-    val slash = candidate.indexOf('/')
-    if (slash <= 0 || slash != candidate.lastIndexOf('/') || slash == candidate.lastIndex) {
-        return DEFAULT_DOWNLOAD_MIME
-    }
-
-    fun validToken(token: String): Boolean = token.isNotEmpty() && token.all { char ->
-        char in 'a'..'z' || char in '0'..'9' || char in MIME_TOKEN_PUNCTUATION
-    }
-
-    return if (validToken(candidate.substring(0, slash)) && validToken(candidate.substring(slash + 1))) {
-        candidate
-    } else {
-        DEFAULT_DOWNLOAD_MIME
-    }
-}
 
 /** Writes one legacy download and guarantees that a failed copy never leaves a partial file. */
 internal fun writeLegacyDownload(file: File, input: InputStream): Long {
