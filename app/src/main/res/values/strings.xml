@@ -11,6 +11,10 @@
     <string name="action_cancel">Отмена</string>
     <string name="action_retry">Повторить</string>
     <string name="action_hide">Скрыть</string>
+    <string name="action_open">Открыть</string>
+    <string name="action_rename">Переименовать</string>
+    <string name="action_delete">Удалить</string>
+    <string name="action_ok">ОК</string>
     <string name="add_bookmark_content_description">Добавить закладку</string>
     <string name="recent_title">Недавние</string>
     <string name="refresh_recent_content_description">Обновить недавние</string>
