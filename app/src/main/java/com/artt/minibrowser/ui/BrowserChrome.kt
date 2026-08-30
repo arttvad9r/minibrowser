@@ -57,8 +57,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -561,6 +564,7 @@ internal fun SiteInfoSheet(
 
 @Composable
 internal fun ErrorOverlay(message: String, onRetry: () -> Unit) {
+    val errorHint = stringResource(R.string.page_error_hint)
     Column(
         Modifier
             .fillMaxSize()
@@ -569,10 +573,18 @@ internal fun ErrorOverlay(message: String, onRetry: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(message, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Text(
+            message,
+            modifier = Modifier.semantics {
+                liveRegion = LiveRegionMode.Polite
+                error(errorHint)
+            },
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(6.dp))
         Text(
-            stringResource(R.string.page_error_hint),
+            errorHint,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
