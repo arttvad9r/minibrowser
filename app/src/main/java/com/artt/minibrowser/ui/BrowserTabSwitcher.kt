@@ -51,12 +51,15 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.artt.minibrowser.R
 import com.artt.minibrowser.engine.Tab
 import java.io.File
 
@@ -82,6 +85,8 @@ fun BrowserTabSwitcher(
     var switchTarget by remember { mutableStateOf<Long?>(null) }
     var activeAnimations by remember { mutableIntStateOf(0) }
     val overviewCurrentId = remember { currentId }
+    val closeSwitcherDescription = stringResource(R.string.close_tab_switcher_content_description)
+    val newTabTitle = stringResource(R.string.new_tab_title)
 
     HighFrameRateDuringMotion(activeAnimations > 0)
 
@@ -159,12 +164,12 @@ fun BrowserTabSwitcher(
                 IconButton(
                     onClick = { requestExit(onDismiss) },
                     enabled = inputEnabled,
-                    modifier = Modifier.semantics { contentDescription = "Закрыть переключатель вкладок" },
+                    modifier = Modifier.semantics { contentDescription = closeSwitcherDescription },
                 ) {
                     Icon(AppIcons.ChevronDown, null)
                 }
                 Text(
-                    "${tabs.size} ${tabsPlural(tabs.size)}",
+                    pluralStringResource(R.plurals.tabs_count, tabs.size, tabs.size),
                     Modifier.weight(1f),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium,
@@ -172,14 +177,14 @@ fun BrowserTabSwitcher(
                 IconButton(
                     onClick = { requestExit(onNew) },
                     enabled = inputEnabled,
-                    modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
+                    modifier = Modifier.semantics { contentDescription = newTabTitle },
                 ) {
                     Icon(Icons.Filled.Add, null)
                 }
             }
 
             when (tabs.size) {
-                0 -> EmptyState(AppIcons.Globe, "Нет открытых вкладок")
+                0 -> EmptyState(AppIcons.Globe, stringResource(R.string.no_open_tabs))
                 1 -> {
                     val tab = tabs.first()
                     Box(
@@ -232,12 +237,6 @@ internal fun tabGridColumnCount(widthDp: Float): Int = when {
     else -> 2
 }
 
-private fun tabsPlural(n: Int) = when {
-    n % 10 == 1 && n % 100 != 11 -> "вкладка"
-    n % 10 in 2..4 && (n % 100 < 12 || n % 100 > 14) -> "вкладки"
-    else -> "вкладок"
-}
-
 @Composable
 private fun BrowserTabCard(
     tab: Tab,
@@ -249,6 +248,8 @@ private fun BrowserTabCard(
 ) {
     val host = hostOf(tab.url)
     val preview = if (tab.isPrivate) null else TabPreviewStore[tab.id]
+    val closeTabDescription = stringResource(R.string.close_tab_content_description)
+    val newTabTitle = stringResource(R.string.new_tab_title)
     val borderColor = when {
         isCurrent -> MaterialTheme.colorScheme.primary
         tab.isPrivate -> MaterialTheme.colorScheme.outline
@@ -271,7 +272,7 @@ private fun BrowserTabCard(
         if (tab.isPrivate) {
             Box(Modifier.fillMaxWidth().height(48.dp)) {
                 Text(
-                    "Приватная вкладка",
+                    stringResource(R.string.private_tab_title),
                     Modifier.align(Alignment.Center),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -284,7 +285,7 @@ private fun BrowserTabCard(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .size(48.dp)
-                        .semantics { contentDescription = "Закрыть вкладку" },
+                        .semantics { contentDescription = closeTabDescription },
                 ) {
                     Icon(
                         Icons.Filled.Close,
@@ -301,10 +302,13 @@ private fun BrowserTabCard(
             ) {
                 Favicon(if (host.isNotBlank()) tab.url else host, iconsDir, 17.dp)
                 Spacer(Modifier.width(7.dp))
+                val displayTitle = when {
+                    tab.title.isNotBlank() -> tab.title
+                    tab.url.isBlank() || tab.url == "about:blank" -> newTabTitle
+                    else -> host.ifBlank { tab.url }
+                }
                 Text(
-                    tab.title.ifBlank {
-                        if (tab.url.isBlank() || tab.url == "about:blank") "Новая вкладка" else host.ifBlank { tab.url }
-                    },
+                    displayTitle,
                     Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -313,7 +317,7 @@ private fun BrowserTabCard(
                 )
                 IconButton(
                     onClick = onClose,
-                    modifier = Modifier.size(48.dp).semantics { contentDescription = "Закрыть вкладку" },
+                    modifier = Modifier.size(48.dp).semantics { contentDescription = closeTabDescription },
                 ) {
                     Icon(
                         Icons.Filled.Close,
@@ -376,8 +380,8 @@ private fun TabPreviewFallback(tab: Tab, host: String, iconsDir: File) {
         Spacer(Modifier.height(8.dp))
         Text(
             when {
-                tab.isPrivate -> "Приватный режим"
-                host.isBlank() -> "Новая вкладка"
+                tab.isPrivate -> stringResource(R.string.private_mode_title)
+                host.isBlank() -> stringResource(R.string.new_tab_title)
                 else -> host.removePrefix("www.")
             },
             maxLines = 1,
