@@ -26,6 +26,7 @@ import java.io.File
 internal data class BrowserPageUiState(
     val tabs: List<Tab>,
     val currentTab: Tab?,
+    val chrome: BrowserChromeUiState,
     val bookmarked: Boolean,
     val suggestions: List<Suggestion>,
     val adblockStatus: ExtensionLoader.Status?,
@@ -81,7 +82,7 @@ internal fun BrowserPageContent(
         if (!state.inFullscreen) {
             Box(Modifier.windowInsetsPadding(topSafeInsets)) {
                 TopBar(
-                    currentTab,
+                    state.chrome,
                     tabCount = state.tabs.size,
                     bookmarked = state.bookmarked,
                     iconsDir = iconsDir,
