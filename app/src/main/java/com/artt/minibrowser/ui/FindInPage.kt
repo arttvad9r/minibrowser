@@ -44,9 +44,11 @@ internal fun FindInPageRoute(
     session: GeckoSession,
     onClose: () -> Unit,
 ) {
-    var query by remember(session) { mutableStateOf("") }
-    var current by remember(session) { mutableIntStateOf(0) }
-    var total by remember(session) { mutableIntStateOf(0) }
+    // BrowserPageContent keys this route by tab id. Keep the query/results stable if crash recovery
+    // swaps the GeckoSession inside the same logical tab, matching the pre-extraction behavior.
+    var query by remember { mutableStateOf("") }
+    var current by remember { mutableIntStateOf(0) }
+    var total by remember { mutableIntStateOf(0) }
 
     val find: (Boolean) -> Unit = { backward ->
         if (query.isBlank()) {
