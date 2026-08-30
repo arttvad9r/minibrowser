@@ -83,6 +83,18 @@ class BrowserDataViewModelTest {
     }
 
     @Test
+    fun clearingStateLastsUntilFaviconCleanupCompletes() {
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = browserDataViewModel(clearFaviconCaches = { gate.await() })
+
+        viewModel.clear(withBookmarks = false)
+
+        assertEquals(BrowserDataStatus.Clearing, viewModel.uiState.value.status)
+        gate.complete(Unit)
+        assertEquals(BrowserDataStatus.Idle, viewModel.uiState.value.status)
+    }
+
+    @Test
     fun webDataFailureStopsPersistentStoreCleanup() {
         val events = mutableListOf<String>()
         val viewModel = browserDataViewModel(
