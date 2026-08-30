@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -130,7 +131,7 @@ internal fun TopBar(
         Box(
             Modifier
                 .weight(1f)
-                .height(52.dp)
+                .heightIn(min = 52.dp)
                 .onGloballyPositioned { fieldSize = it.size },
         ) {
             Row(
@@ -243,7 +244,6 @@ internal fun TopBar(
                 val suggestionsWidth = with(density) {
                     (fieldSize.width + 48.dp.roundToPx() + 48.dp.roundToPx() + 48.dp.roundToPx() + 8.dp.roundToPx()).toDp()
                 }
-                val suggestionsHeight = (suggestions.size * 56 + 8).coerceAtMost(176).dp
                 Popup(
                     alignment = Alignment.TopStart,
                     offset = IntOffset(0, fieldSize.height + offsetY),
@@ -252,7 +252,7 @@ internal fun TopBar(
                     Column(
                         Modifier
                             .width(suggestionsWidth)
-                            .height(suggestionsHeight)
+                            .heightIn(max = 176.dp)
                             .clip(Radius.card)
                             .background(MaterialTheme.colorScheme.surface)
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
@@ -325,7 +325,7 @@ private fun SuggestionRow(s: BrowserSuggestionUiState, iconsDir: File, onClick: 
     Row(
         Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .heightIn(min = 56.dp)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
