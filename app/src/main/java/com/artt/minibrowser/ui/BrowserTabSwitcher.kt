@@ -57,6 +57,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -101,6 +102,7 @@ internal fun BrowserTabSwitcher(
     val overviewCurrentId = remember { currentId }
     val closeSwitcherDescription = stringResource(R.string.close_tab_switcher_content_description)
     val newTabTitle = stringResource(R.string.new_tab_title)
+    val overviewPaneTitle = stringResource(R.string.tabs_content_description)
 
     HighFrameRateDuringMotion(activeAnimations > 0 || predictiveBackActive)
 
@@ -175,7 +177,8 @@ internal fun BrowserTabSwitcher(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .semantics { paneTitle = overviewPaneTitle },
     ) {
         Column(
             Modifier

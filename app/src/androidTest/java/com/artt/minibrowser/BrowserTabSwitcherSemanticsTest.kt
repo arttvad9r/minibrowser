@@ -1,9 +1,13 @@
 package com.artt.minibrowser
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -23,10 +27,11 @@ class BrowserTabSwitcherSemanticsTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun tabCardsExposeSelectionAndCloseActionNamesItsTab() {
+    fun tabCardsExposePaneSelectionAndCloseActionNamesItsTab() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val currentTitle = "Current tab"
         val otherTitle = "Other tab"
+        val paneTitle = context.getString(R.string.tabs_content_description)
         val closeDescription = context.getString(R.string.close_named_tab_content_description, currentTitle)
 
         composeRule.setContent {
@@ -57,6 +62,11 @@ class BrowserTabSwitcherSemanticsTest {
         }
 
         composeRule.onNodeWithText(currentTitle)
+            .assert(
+                hasAnyAncestor(
+                    SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, paneTitle),
+                ),
+            )
             .assertIsSelected()
             .assertHasClickAction()
         composeRule.onNodeWithText(otherTitle)
