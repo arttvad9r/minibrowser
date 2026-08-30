@@ -35,6 +35,7 @@ import com.artt.minibrowser.ui.BrowserChromeUiState
 import com.artt.minibrowser.ui.BrowserPageActions
 import com.artt.minibrowser.ui.BrowserPageContent
 import com.artt.minibrowser.ui.BrowserPageUiState
+import com.artt.minibrowser.ui.BrowserTabItemUiState
 import com.artt.minibrowser.ui.BrowserTabSwitcher
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.SettingsScreen
@@ -129,6 +130,14 @@ internal fun BrowserRoute(
         canGoForward = currentTab?.canGoForward == true,
         desktop = currentTab?.desktop == true,
     )
+    val tabItems = tabs.map { tab ->
+        BrowserTabItemUiState(
+            id = tab.id,
+            url = tab.url,
+            title = tab.title,
+            isPrivate = tab.isPrivate,
+        )
+    }
 
     val pageState = BrowserPageUiState(
         tabs = tabs,
@@ -273,7 +282,7 @@ internal fun BrowserRoute(
             }
             if (showSwitcher) {
                 BrowserTabSwitcher(
-                    tabs,
+                    tabItems,
                     currentId,
                     iconsDir,
                     onSelect = { tabManager.select(it) },
