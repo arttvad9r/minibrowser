@@ -12,6 +12,7 @@ import kotlin.test.assertTrue
 class UrlPolicyTest {
     @Test fun acceptsNormalHttpPorts() {
         assertTrue(isValidWebUri("https://example.com"))
+        assertTrue(isValidWebUri("HTTPS://example.com/path"))
         assertTrue(isValidWebUri("https://example.com:443/path"))
         assertTrue(isValidWebUri("http://localhost:8080/test"))
         assertTrue(isValidWebUri("https://example.com:65535/path"))
