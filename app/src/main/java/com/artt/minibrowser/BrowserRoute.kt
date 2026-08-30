@@ -36,6 +36,7 @@ import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
 import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.toggleDesktopMode
+import com.artt.minibrowser.net.isValidWebUri
 import com.artt.minibrowser.ui.BrowserChromeUiState
 import com.artt.minibrowser.ui.BrowserExtensionUiState
 import com.artt.minibrowser.ui.BrowserPageActions
@@ -145,6 +146,7 @@ internal fun BrowserRoute(
     val settingsVotStatus = settingsUi.votStatus.toExtensionUiState()
     val chromeState = BrowserChromeUiState(
         url = currentTab?.url.orEmpty(),
+        isWebPage = currentTab?.url?.let(::isValidWebUri) == true,
         isPrivate = currentTab?.isPrivate == true,
         securityState = chromeSecurityState,
         canGoBack = currentTab?.canGoBack == true,
