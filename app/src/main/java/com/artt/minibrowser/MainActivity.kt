@@ -30,7 +30,6 @@ class MainActivity : ComponentActivity() {
     private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private lateinit var tabManager: TabManager
-    private lateinit var tabLifecycle: BrowserTabLifecycleController
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
         ViewModelProvider(
@@ -95,7 +94,7 @@ class MainActivity : ComponentActivity() {
             permissionRequester = activityRequests::requestPermissions,
             filePicker = activityRequests::pickFiles,
         )
-        tabLifecycle = BrowserTabLifecycleController(this, tabManager)
+        BrowserTabLifecycleController(this, tabManager)
 
         setContent {
             BrowserRoute(
@@ -118,7 +117,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         activityRequests.cancelAll()
-        if (::tabManager.isInitialized) tabManager.close()
         super.onDestroy()
     }
 }
