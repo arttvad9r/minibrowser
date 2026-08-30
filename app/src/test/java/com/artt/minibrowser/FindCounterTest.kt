@@ -11,8 +11,9 @@ class FindCounterTest {
         assertEquals("2/2", formatFindCounter(2, 2))
     }
 
-    @Test fun hidesUnknownOrEmptyResults() {
-        assertEquals("", formatFindCounter(0, 0))
+    @Test fun showsZeroMatchesAndHidesInvalidResults() {
+        assertEquals("0/0", formatFindCounter(0, 0))
         assertEquals("", formatFindCounter(0, -1))
+        assertEquals("", formatFindCounter(-1, 0))
     }
 }

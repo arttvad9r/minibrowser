@@ -24,7 +24,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
@@ -35,10 +37,11 @@ internal data class FindBarUiState(
     val query: String = "",
     val current: Int = 0,
     val total: Int = 0,
+    val resultsReady: Boolean = false,
 )
 
 internal fun formatFindCounter(current: Int, total: Int): String =
-    if (current > 0 && total > 0) "$current/$total" else ""
+    if (current >= 0 && total >= 0) "$current/$total" else ""
 
 /** Owns Gecko finder interaction while keeping [FindBarContent] state/callback driven. */
 @Composable
@@ -51,19 +54,25 @@ internal fun FindInPageRoute(
     var query by remember { mutableStateOf("") }
     var current by remember { mutableIntStateOf(0) }
     var total by remember { mutableIntStateOf(0) }
+    var resultsReady by remember { mutableStateOf(false) }
 
     val find: (Boolean) -> Unit = { backward ->
         if (query.isBlank()) {
             session.finder.clear()
             current = 0
             total = 0
+            resultsReady = false
         } else {
+            val requestedQuery = query
             session.finder.find(
-                query,
+                requestedQuery,
                 if (backward) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD,
             ).accept { result ->
-                current = result?.current ?: 0
-                total = result?.total ?: 0
+                if (query == requestedQuery) {
+                    current = result?.current ?: 0
+                    total = result?.total ?: 0
+                    resultsReady = true
+                }
             }
         }
     }
@@ -74,8 +83,18 @@ internal fun FindInPageRoute(
     }
 
     FindBarContent(
-        state = FindBarUiState(query = query, current = current, total = total),
-        onQueryChange = { query = it },
+        state = FindBarUiState(
+            query = query,
+            current = current,
+            total = total,
+            resultsReady = resultsReady,
+        ),
+        onQueryChange = {
+            query = it
+            current = 0
+            total = 0
+            resultsReady = false
+        },
         onPrevious = { find(true) },
         onNext = { find(false) },
         onClose = {
@@ -115,9 +134,10 @@ internal fun FindBarContent(
                 Modifier.weight(1f),
                 placeholder = stringResource(R.string.find_on_page),
             )
-            if (state.total > 0) {
+            if (state.resultsReady) {
                 Text(
                     formatFindCounter(state.current, state.total),
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
