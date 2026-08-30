@@ -1,5 +1,6 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.data.isSupportedDownloadLocation
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
