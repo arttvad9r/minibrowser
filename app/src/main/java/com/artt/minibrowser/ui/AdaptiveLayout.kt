@@ -34,3 +34,26 @@ internal fun CenteredSinglePane(
         )
     }
 }
+
+/**
+ * Keeps browser controls comfortably bounded on tablets and desktop-sized windows while leaving
+ * Gecko/start-page content free to use the entire window width.
+ */
+@Composable
+internal fun CenteredBrowserChrome(
+    modifier: Modifier = Modifier,
+    maxWidth: Dp = 960.dp,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Box(
+            modifier = Modifier
+                .widthIn(max = maxWidth)
+                .fillMaxWidth(),
+            content = content,
+        )
+    }
+}
