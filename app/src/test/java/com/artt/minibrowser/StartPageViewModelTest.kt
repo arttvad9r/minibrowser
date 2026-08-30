@@ -5,10 +5,10 @@ import com.artt.minibrowser.browser.StartPageUiState
 import com.artt.minibrowser.browser.StartPageViewModel
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.HistoryEntry
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.awaitCancellation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -128,6 +128,44 @@ class StartPageViewModelTest {
     }
 
     @Test
+    fun addDuringInitialRefreshWaitsAndPreservesRecentContent() {
+        val gate = CompletableDeferred<Unit>()
+        val recent = listOf(HistoryEntry("https://recent.example", "Recent", 10L, 1))
+        val added = Bookmark("https://added.example", "Added", "added.example", 1)
+        var bookmarks = emptyList<Bookmark>()
+        var addRequest: Pair<String, String>? = null
+        val viewModel = startPageViewModel(
+            loadBookmarks = { bookmarks },
+            loadRecent = {
+                gate.await()
+                recent
+            },
+            addBookmark = { url, title ->
+                addRequest = url to title
+                bookmarks = listOf(added)
+            },
+        )
+
+        viewModel.refresh()
+        viewModel.add(added.url, added.title)
+
+        assertEquals(null, addRequest)
+        assertEquals(StartPageUiState(), viewModel.uiState.value)
+
+        gate.complete(Unit)
+
+        assertEquals(added.url to added.title, addRequest)
+        assertEquals(
+            StartPageUiState(
+                bookmarks = listOf(added),
+                recent = recent,
+                isLoading = false,
+            ),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
     fun renameAndDeleteReloadBookmarks() {
         val original = Bookmark("https://example.com", "Original", "example.com", 1)
         val renamed = original.copy(title = "Renamed")
@@ -202,7 +240,8 @@ class StartPageViewModelTest {
     }
 
     @Test
-    fun bookmarkMutationCancelsInFlightFullRefreshSoStaleSnapshotCannotWin() {
+    fun bookmarkMutationRunsAfterInFlightFullRefreshSoStaleSnapshotCannotWin() {
+        val gate = CompletableDeferred<Unit>()
         val bookmark = Bookmark("https://example.com", "Example", "example.com", 1)
         val recent = listOf(HistoryEntry("https://recent.example", "Recent", 10L, 1))
         var bookmarkLoads = 0
@@ -215,7 +254,8 @@ class StartPageViewModelTest {
             },
             loadRecent = {
                 recentLoads++
-                if (recentLoads == 1) recent else awaitCancellation()
+                if (recentLoads == 2) gate.await()
+                recent
             },
             deleteBookmark = { deleted = true },
         )
@@ -226,6 +266,9 @@ class StartPageViewModelTest {
         assertEquals(2, recentLoads)
 
         viewModel.delete(bookmark.url)
+        assertEquals(false, deleted)
+
+        gate.complete(Unit)
 
         assertEquals(true, deleted)
         assertEquals(3, bookmarkLoads)

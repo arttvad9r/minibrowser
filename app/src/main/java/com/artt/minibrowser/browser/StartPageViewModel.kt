@@ -11,10 +11,11 @@ import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 internal enum class StartPageOperation { Load, RefreshRecent, Add, Rename, Delete }
 
@@ -31,7 +32,7 @@ internal class StartPageViewModel : ViewModel {
     private val addBookmark: suspend (String, String) -> Unit
     private val renameBookmark: suspend (String, String) -> Unit
     private val deleteBookmark: suspend (String) -> Unit
-    private var operationJob: Job? = null
+    private val operationMutex = Mutex()
 
     constructor(
         bookmarksRepository: BookmarksRepository,
@@ -63,48 +64,50 @@ internal class StartPageViewModel : ViewModel {
     val uiState = _uiState.asStateFlow()
 
     fun refresh() {
-        operationJob?.cancel()
-        operationJob = viewModelScope.launch {
-            val previous = _uiState.value
-            _uiState.value = previous.copy(
-                isLoading = previous.bookmarks.isEmpty() && previous.recent.isEmpty(),
-                error = null,
-            )
-            try {
-                val bookmarks = loadBookmarks()
-                val recent = loadRecent()
-                _uiState.value = StartPageUiState(
-                    bookmarks = bookmarks,
-                    recent = recent,
-                    isLoading = false,
+        viewModelScope.launch {
+            operationMutex.withLock {
+                val previous = _uiState.value
+                _uiState.value = previous.copy(
+                    isLoading = previous.bookmarks.isEmpty() && previous.recent.isEmpty(),
+                    error = null,
                 )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Throwable) {
-                _uiState.value = previous.copy(isLoading = false, error = StartPageOperation.Load)
+                try {
+                    val bookmarks = loadBookmarks()
+                    val recent = loadRecent()
+                    _uiState.value = StartPageUiState(
+                        bookmarks = bookmarks,
+                        recent = recent,
+                        isLoading = false,
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    _uiState.value = previous.copy(isLoading = false, error = StartPageOperation.Load)
+                }
             }
         }
     }
 
     fun refreshRecent() {
-        operationJob?.cancel()
-        operationJob = viewModelScope.launch {
-            val previous = _uiState.value
-            _uiState.value = previous.copy(error = null)
-            try {
-                val recent = loadRecent()
-                _uiState.value = previous.copy(
-                    recent = recent,
-                    isLoading = false,
-                    error = null,
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Throwable) {
-                _uiState.value = previous.copy(
-                    isLoading = false,
-                    error = StartPageOperation.RefreshRecent,
-                )
+        viewModelScope.launch {
+            operationMutex.withLock {
+                val previous = _uiState.value
+                _uiState.value = previous.copy(error = null)
+                try {
+                    val recent = loadRecent()
+                    _uiState.value = previous.copy(
+                        recent = recent,
+                        isLoading = false,
+                        error = null,
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    _uiState.value = previous.copy(
+                        isLoading = false,
+                        error = StartPageOperation.RefreshRecent,
+                    )
+                }
             }
         }
     }
@@ -137,36 +140,37 @@ internal class StartPageViewModel : ViewModel {
         operation: StartPageOperation,
         mutation: suspend () -> Unit,
     ) {
-        operationJob?.cancel()
-        operationJob = viewModelScope.launch {
-            val previous = _uiState.value
-            _uiState.value = previous.copy(error = null)
-            try {
-                mutation()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Throwable) {
-                _uiState.value = previous.copy(
-                    isLoading = false,
-                    error = operation,
-                )
-                return@launch
-            }
+        viewModelScope.launch {
+            operationMutex.withLock {
+                val previous = _uiState.value
+                _uiState.value = previous.copy(error = null)
+                try {
+                    mutation()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    _uiState.value = previous.copy(
+                        isLoading = false,
+                        error = operation,
+                    )
+                    return@withLock
+                }
 
-            try {
-                val bookmarks = loadBookmarks()
-                _uiState.value = previous.copy(
-                    bookmarks = bookmarks,
-                    isLoading = false,
-                    error = null,
-                )
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Throwable) {
-                _uiState.value = previous.copy(
-                    isLoading = false,
-                    error = StartPageOperation.Load,
-                )
+                try {
+                    val bookmarks = loadBookmarks()
+                    _uiState.value = previous.copy(
+                        bookmarks = bookmarks,
+                        isLoading = false,
+                        error = null,
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    _uiState.value = previous.copy(
+                        isLoading = false,
+                        error = StartPageOperation.Load,
+                    )
+                }
             }
         }
     }
