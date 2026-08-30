@@ -737,10 +737,11 @@ class TabManager(
             }
 
             // target="_blank"/window.open — GeckoView loads the URI into the returned session.
-            override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
+            override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
                 if (BuildConfig.DEBUG) {
                     Log.d("MinibrowserNavigation", "new session uri=${navigationDebugLabel(uri)}")
                 }
+                if (!isAllowedPopupTarget(uri)) return null
                 return GeckoResult.fromValue(newWindowSession(tab.isPrivate))
             }
         }
