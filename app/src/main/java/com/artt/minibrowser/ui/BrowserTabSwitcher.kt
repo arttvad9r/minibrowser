@@ -285,7 +285,7 @@ private fun BrowserTabCard(
         tab.url.isBlank() || tab.url == "about:blank" -> newTabTitle
         else -> host.ifBlank { tab.url }
     }
-    val closeTabDescription = "${stringResource(R.string.close_tab_content_description)}: $displayTitle"
+    val closeTabDescription = stringResource(R.string.close_named_tab_content_description, displayTitle)
     val borderColor = when {
         isCurrent -> MaterialTheme.colorScheme.primary
         tab.isPrivate -> MaterialTheme.colorScheme.outline
