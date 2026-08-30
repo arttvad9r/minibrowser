@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,9 +35,12 @@ import com.artt.minibrowser.engine.toggleDesktopMode
 import com.artt.minibrowser.ui.BrowserChromeUiState
 import com.artt.minibrowser.ui.BrowserPageActions
 import com.artt.minibrowser.ui.BrowserPageContent
+import com.artt.minibrowser.ui.BrowserPageProgress
 import com.artt.minibrowser.ui.BrowserPageUiState
 import com.artt.minibrowser.ui.BrowserTabItemUiState
 import com.artt.minibrowser.ui.BrowserTabSwitcher
+import com.artt.minibrowser.ui.FindInPageRoute
+import com.artt.minibrowser.ui.GeckoContent
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.SettingsScreen
 import com.artt.minibrowser.ui.SiteInfoSheet
@@ -140,15 +144,15 @@ internal fun BrowserRoute(
     }
 
     val pageState = BrowserPageUiState(
-        tabs = tabs,
-        currentTab = currentTab,
         chrome = chromeState,
+        tabCount = tabs.size,
         bookmarked = bookmarked,
         suggestions = omniboxSuggestionsUi.suggestions,
         adblockStatus = adblockStatus,
         showFind = showFind,
         showStart = showStart,
         inFullscreen = inFullscreen,
+        loadError = currentTab?.loadError,
     )
     val pageActions = BrowserPageActions(
         onSuggestionQueryChanged = omniboxSuggestionsViewModel::updateQuery,
@@ -208,6 +212,19 @@ internal fun BrowserRoute(
                 state = pageState,
                 actions = pageActions,
                 iconsDir = iconsDir,
+                browserContent = {
+                    GeckoContent(currentTab, Modifier.fillMaxSize())
+                    BrowserPageProgress(currentTab)
+                },
+                findContent = if (currentSession != null && currentTab != null) {
+                    {
+                        key(currentTab.id) {
+                            FindInPageRoute(currentSession, pageActions.onCloseFind)
+                        }
+                    }
+                } else {
+                    null
+                },
                 startPageContent = {
                     if (currentTab?.isPrivate == true) {
                         StartPage(
