@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -36,8 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -292,7 +292,7 @@ private fun HorizontalDividerThin() {
 
 /** Выбор темы без отдельной цветовой анимации: состояние меняется одним кадром. */
 @Composable
-private fun ThemeSelector(selected: Int, onSelect: (Int) -> Unit) {
+internal fun ThemeSelector(selected: Int, onSelect: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ThemeOption(
             stringResource(R.string.theme_system),
@@ -339,9 +339,12 @@ private fun ThemeOption(
             .clip(Radius.button)
             .background(background)
             .border(width = 1.dp, color = border, shape = Radius.button)
-            .softClickable { onSelect(value) }
-            .padding(vertical = 11.dp)
-            .semantics { contentDescription = label },
+            .selectable(
+                selected = isSelected,
+                role = Role.RadioButton,
+                onClick = { onSelect(value) },
+            )
+            .padding(vertical = 11.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurface)
