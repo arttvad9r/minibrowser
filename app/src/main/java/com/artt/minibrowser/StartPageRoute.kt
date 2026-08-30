@@ -17,6 +17,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -100,26 +103,41 @@ internal fun StartPageRoute(
             }
             val retryable = operation == StartPageOperation.Load ||
                 operation == StartPageOperation.RefreshRecent
-            Row(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.errorContainer)
-                    .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    message,
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                )
-                TextButton(
-                    onClick = if (retryable) startPageViewModel::retry else startPageViewModel::dismissError,
-                ) {
-                    Text(stringResource(if (retryable) R.string.action_retry else R.string.action_hide))
-                }
-            }
+            StartPageErrorBanner(
+                message = message,
+                actionLabel = stringResource(if (retryable) R.string.action_retry else R.string.action_hide),
+                onAction = if (retryable) startPageViewModel::retry else startPageViewModel::dismissError,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+    }
+}
+
+/** Transient Start-page failures are announced without merging the separate recovery action. */
+@Composable
+internal fun StartPageErrorBanner(
+    message: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            message,
+            Modifier
+                .weight(1f)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+        )
+        TextButton(onClick = onAction) {
+            Text(actionLabel)
         }
     }
 }
