@@ -12,6 +12,8 @@ internal class BrowserIntentController(
     private val loadFallback: (String) -> Unit,
 ) {
     fun openExternalUri(value: String) {
+        if (activity.isFinishing || activity.isDestroyed) return
+
         val external = createSafeExternalIntent(value)
         val launched = external != null &&
             external.resolveActivity(activity.packageManager) != null &&
@@ -21,13 +23,15 @@ internal class BrowserIntentController(
                 )
                 true
             }.getOrDefault(false)
-        if (launched) return
+        if (launched || activity.isFinishing || activity.isDestroyed) return
 
         safeExternalFallbackUrl(value)?.let(loadFallback)
     }
 
     fun shareUrl(value: String?) {
         val url = value ?: return
+        if (activity.isFinishing || activity.isDestroyed) return
+
         runCatching {
             activity.startActivity(
                 Intent.createChooser(
