@@ -1,7 +1,7 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.data.normalizeDownloadMime
 import com.artt.minibrowser.engine.isMediaStorePublishSuccessful
-import com.artt.minibrowser.engine.normalizeDownloadMime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
