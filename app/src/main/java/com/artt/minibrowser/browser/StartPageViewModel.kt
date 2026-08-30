@@ -134,6 +134,17 @@ internal class StartPageViewModel : ViewModel {
         viewModelScope.launch {
             try {
                 mutation()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = operation,
+                )
+                return@launch
+            }
+
+            try {
                 val bookmarks = loadBookmarks()
                 _uiState.value = _uiState.value.copy(
                     bookmarks = bookmarks,
@@ -145,7 +156,7 @@ internal class StartPageViewModel : ViewModel {
             } catch (_: Throwable) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = operation,
+                    error = StartPageOperation.Load,
                 )
             }
         }
