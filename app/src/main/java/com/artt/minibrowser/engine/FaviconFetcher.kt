@@ -194,8 +194,9 @@ internal fun faviconOrigin(pageUrlOrHost: String): String? = runCatching {
         ?: return@runCatching null
     val host = webUriHost(safeInput) ?: return@runCatching null
     val networkHost = if (host.contains(':')) host else IDN.toASCII(host, IDN.USE_STD3_ASCII_RULES)
+    val explicitPort = uri.toURL().port
     val defaultPort = if (scheme == "https") 443 else 80
-    val port = if (uri.port == defaultPort) -1 else uri.port
+    val port = if (explicitPort == defaultPort) -1 else explicitPort
     URI(scheme, null, networkHost, port, null, null, null).toASCIIString()
 }.getOrNull()
 
