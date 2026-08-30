@@ -295,10 +295,16 @@ internal fun BrowserRoute(
                         onRetryAdblock = retryAdblock,
                         onVot = toggleVot,
                         onRetryVot = retryVot,
+                        onDownloads = { browserViewModel.screen(BrowserScreen.Downloads) },
                         onClearData = browserDataViewModel::clear,
                         onTranslateLang = settingsViewModel::setTranslateTarget,
                     )
                 }
+            }
+            if (screen == BrowserScreen.Downloads) Box(Modifier.fillMaxSize()) {
+                MotionDownloadsScreen(
+                    onBack = { browserViewModel.screen(BrowserScreen.Settings) },
+                )
             }
             if (screen == BrowserScreen.History) Box(Modifier.fillMaxSize()) {
                 MotionHistoryScreen(
