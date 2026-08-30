@@ -24,8 +24,11 @@ import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.SettingsViewModel
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
+import com.artt.minibrowser.engine.NavigationTarget
 import com.artt.minibrowser.engine.TabManager
+import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
+import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.toggleDesktopMode
 import com.artt.minibrowser.ui.BrowserPageActions
 import com.artt.minibrowser.ui.BrowserPageContent
@@ -120,7 +123,6 @@ internal fun BrowserRoute(
     val pageState = BrowserPageUiState(
         tabs = tabs,
         currentTab = currentTab,
-        searchEngine = prefs.searchEngine,
         bookmarked = bookmarked,
         suggestions = omniboxSuggestionsUi.suggestions,
         adblockStatus = adblockStatus,
@@ -130,10 +132,20 @@ internal fun BrowserRoute(
     )
     val pageActions = BrowserPageActions(
         onSuggestionQueryChanged = omniboxSuggestionsViewModel::updateQuery,
+        onSubmitQuery = { query ->
+            when (val target = resolveNavigation(query)) {
+                is NavigationTarget.External -> browserIntents.openExternalUri(target.uri)
+                is NavigationTarget.Web,
+                is NavigationTarget.Internal,
+                is NavigationTarget.Search,
+                -> (currentTab ?: tabManager.newTab(null)).session.loadUri(
+                    buildLoadUri(query, prefs.searchEngine),
+                )
+            }
+        },
         onNavigate = { uri ->
             (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
         },
-        onExternal = browserIntents::openExternalUri,
         onBack = { currentSession?.goBack() },
         onForward = { currentSession?.goForward() },
         onReload = { currentSession?.reload() },
