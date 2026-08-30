@@ -38,6 +38,12 @@ class DownloadNameTest {
     @Test fun nullDispositionFallsBack() =
         assertEquals("file", parseFilename(null, "file"))
 
+    @Test fun unicodeFallbackIsPreserved() =
+        assertEquals("отчёт.pdf", parseFilename(null, "отчёт.pdf"))
+
+    @Test fun fallbackKeepsTraversalAndUnicodeControlProtections() =
+        assertEquals("секрет.pdf", sanitizeFilename(null, "../секрет\u202E.pdf"))
+
     @Test fun sanitizesTraversalAndSeparators() {
         assertEquals("secret.txt", sanitizeFilename("../../secret.txt", "file"))
         assertEquals("foo_bar.txt", sanitizeFilename("..\\foo/bar.txt", "file"))
@@ -71,8 +77,9 @@ class DownloadNameTest {
     }
 
     @Test fun fallbackIsLengthAndByteBoundedToo() {
-        val sanitized = sanitizeFilename(null, "x".repeat(500))
+        val sanitized = sanitizeFilename(null, "😀".repeat(100))
 
+        assertEquals("😀".repeat(60), sanitized)
         assertEquals(120, sanitized.length)
         assertTrue(sanitized.toByteArray(Charsets.UTF_8).size <= 240)
     }

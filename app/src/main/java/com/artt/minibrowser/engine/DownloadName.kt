@@ -40,17 +40,16 @@ private fun sanitizeFilenameChars(
     }
 }
 
+private fun sanitizeFilenameValue(value: String): String = value
+    .replace('\\', '_')
+    .replace('/', '_')
+    .replace("..", "")
+    .let(::sanitizeFilenameChars)
+    .trim('.', ' ', '_')
+
 fun sanitizeFilename(raw: String?, fallback: String): String {
-    val safeFallback = fallback.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        .let(::sanitizeFilenameChars)
-        .trim('.', ' ', '_')
-        .ifBlank { "file" }
-    val candidate = raw.orEmpty()
-        .replace('\\', '_')
-        .replace('/', '_')
-        .replace("..", "")
-        .let(::sanitizeFilenameChars)
-        .trim('.', ' ', '_')
+    val safeFallback = sanitizeFilenameValue(fallback).ifBlank { "file" }
+    val candidate = sanitizeFilenameValue(raw.orEmpty())
     return candidate.ifBlank { safeFallback }
 }
 

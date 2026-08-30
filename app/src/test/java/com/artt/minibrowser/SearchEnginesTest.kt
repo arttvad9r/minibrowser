@@ -29,6 +29,16 @@ class SearchEnginesTest {
         assertEquals("http://localhost:8080/x", buildLoadUri("http://localhost:8080/x", SearchEngine.GOOGLE))
     @Test fun shorthandLocalhostUsesHttp() =
         assertEquals("http://localhost:8080/x", buildLoadUri("localhost:8080/x", SearchEngine.GOOGLE))
+    @Test fun shorthandLocalhostKeepsQueryAndFragment() {
+        assertEquals(
+            "http://localhost:8080?debug=1",
+            buildLoadUri("localhost:8080?debug=1", SearchEngine.GOOGLE),
+        )
+        assertEquals(
+            "http://localhost:8080#section",
+            buildLoadUri("localhost:8080#section", SearchEngine.GOOGLE),
+        )
+    }
     @Test fun shorthandInvalidPortsFallBackToSearch() {
         assertEquals(
             "https://www.google.com/search?q=example.com%3A99999",
@@ -54,6 +64,12 @@ class SearchEnginesTest {
             "https://example-com.translate.goog/a?b=1&_x_tr_sl=auto&_x_tr_tl=de&_x_tr_hl=de#section-2",
             buildTranslateUri("https://example.com/a?b=1#section-2", "de"),
         )
+    @Test fun translateUriConvertsUnicodeHostAndPreservesRawUrlParts() {
+        assertEquals(
+            "https://xn----e1afmkfd-xn----p1ai.translate.goog/путь?keep=1&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en#часть",
+            buildTranslateUri("https://пример.рф/путь?keep=1&_x_tr_tl=fr#часть", "en"),
+        )
+    }
     @Test fun translateUriDropsConflictingControlQuery() {
         assertEquals(
             "https://example-com.translate.goog/a?keep=1&_x_tr_sl=auto&_x_tr_tl=ru&_x_tr_hl=ru#section",

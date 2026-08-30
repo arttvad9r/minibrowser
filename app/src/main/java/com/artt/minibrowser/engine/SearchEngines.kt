@@ -1,5 +1,6 @@
 package com.artt.minibrowser.engine
 
+import java.net.IDN
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -26,6 +27,17 @@ private fun isTranslatableHost(host: String): Boolean =
         !host.endsWith(".localhost", ignoreCase = true) &&
         !host.endsWith(".local", ignoreCase = true)
 
+private fun translationHost(uri: URI): String? {
+    val host = (uri.host ?: runCatching { uri.toURL().host }.getOrNull())
+        ?.trimEnd('.')
+        ?.takeIf(::isTranslatableHost)
+        ?: return null
+    return runCatching { IDN.toASCII(host, IDN.USE_STD3_ASCII_RULES) }
+        .getOrNull()
+        ?.lowercase()
+        ?.takeIf(::isTranslatableHost)
+}
+
 private fun translateQueryKey(segment: String): String {
     val rawKey = segment.substringBefore('=')
     return runCatching {
@@ -48,7 +60,7 @@ fun buildTranslateUri(url: String, target: String): String? {
     val language = normalizeTranslationTarget(target) ?: return null
     if (!isValidWebUri(url)) return null
     val u = runCatching { URI(url) }.getOrNull() ?: return null
-    val host = u.host?.trimEnd('.')?.takeIf(::isTranslatableHost) ?: return null
+    val host = translationHost(u) ?: return null
     val defaultPort = if (u.scheme.equals("https", ignoreCase = true)) 443 else 80
     if (u.port != -1 && u.port != defaultPort) return null
     if (host.equals("translate.goog", ignoreCase = true) || host.endsWith(".translate.goog", ignoreCase = true)) {
