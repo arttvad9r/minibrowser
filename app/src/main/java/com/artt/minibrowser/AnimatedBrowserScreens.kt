@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -106,12 +107,19 @@ private fun HistoryScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { requestExit(onBack) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
                 }
-                Text("История", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    stringResource(R.string.history_title),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                )
                 if (state is HistoryUiState.Content && state.entries.isNotEmpty()) {
                     TextButton(onClick = { confirmClear = true }) {
-                        Text("Очистить", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            stringResource(R.string.action_clear),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -123,25 +131,34 @@ private fun HistoryScreen(
                     }
                 }
                 HistoryUiState.Empty -> {
-                    EmptyState(AppIcons.History, "История пуста", "Посещённые страницы появятся здесь.")
+                    EmptyState(
+                        AppIcons.History,
+                        stringResource(R.string.history_empty_title),
+                        stringResource(R.string.history_empty_subtitle),
+                    )
                 }
                 is HistoryUiState.Error -> {
                     val title = when (state.operation) {
-                        HistoryOperation.Load -> "Не удалось загрузить историю"
-                        HistoryOperation.Clear -> "Не удалось очистить историю"
+                        HistoryOperation.Load -> stringResource(R.string.history_load_error)
+                        HistoryOperation.Clear -> stringResource(R.string.history_clear_error)
                     }
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            EmptyState(AppIcons.History, title, "Повторите попытку.")
-                            TextButton(onClick = onRetry) { Text("Повторить") }
+                            EmptyState(AppIcons.History, title, stringResource(R.string.retry_hint))
+                            TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
                         }
                     }
                 }
                 is HistoryUiState.Content -> {
                     val groups = remember(state.entries) { motionGroupByDay(state.entries) }
                     LazyColumn(Modifier.fillMaxSize()) {
-                        groups.forEach { (label, groupEntries) ->
-                            item(key = "header_$label") {
+                        groups.forEach { (group, groupEntries) ->
+                            item(key = "header_${group.name}") {
+                                val label = when (group) {
+                                    HistoryDayGroup.Today -> stringResource(R.string.history_today)
+                                    HistoryDayGroup.Yesterday -> stringResource(R.string.history_yesterday)
+                                    HistoryDayGroup.Earlier -> stringResource(R.string.history_earlier)
+                                }
                                 Text(
                                     label,
                                     Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp),
@@ -167,7 +184,11 @@ private fun HistoryScreen(
                                             style = MaterialTheme.typography.bodyMedium,
                                         )
                                         Text(
-                                            "${hostOf(entry.url)} · ${timeFormat.format(Date(entry.visitedAt))}",
+                                            stringResource(
+                                                R.string.history_entry_subtitle,
+                                                hostOf(entry.url),
+                                                timeFormat.format(Date(entry.visitedAt)),
+                                            ),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             style = MaterialTheme.typography.bodySmall,
@@ -186,10 +207,12 @@ private fun HistoryScreen(
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Очистить историю?") },
-            text = { Text("Список посещённых страниц будет удалён. Это действие нельзя отменить.") },
+            title = { Text(stringResource(R.string.history_clear_dialog_title)) },
+            text = { Text(stringResource(R.string.history_clear_dialog_message)) },
             dismissButton = {
-                TextButton(onClick = { confirmClear = false }) { Text("Отмена") }
+                TextButton(onClick = { confirmClear = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
             confirmButton = {
                 TextButton(
@@ -197,7 +220,7 @@ private fun HistoryScreen(
                         confirmClear = false
                         onClear()
                     },
-                ) { Text("Очистить") }
+                ) { Text(stringResource(R.string.action_clear)) }
             },
         )
     }
@@ -249,9 +272,13 @@ private fun BookmarksScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { requestExit(onBack) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
                 }
-                Text("Закладки", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    stringResource(R.string.bookmarks_title),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                )
             }
 
             when {
@@ -263,21 +290,29 @@ private fun BookmarksScreen(
                 state.error == BookmarksOperation.Load && state.bookmarks.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            EmptyState(AppIcons.Star, "Не удалось загрузить закладки", "Повторите попытку.")
-                            TextButton(onClick = onRetryLoad) { Text("Повторить") }
+                            EmptyState(
+                                AppIcons.Star,
+                                stringResource(R.string.bookmarks_load_error),
+                                stringResource(R.string.retry_hint),
+                            )
+                            TextButton(onClick = onRetryLoad) { Text(stringResource(R.string.action_retry)) }
                         }
                     }
                 }
                 state.bookmarks.isEmpty() -> {
-                    EmptyState(AppIcons.Star, "Закладок пока нет", "Сохранённые страницы появятся здесь.")
+                    EmptyState(
+                        AppIcons.Star,
+                        stringResource(R.string.bookmarks_empty_title),
+                        stringResource(R.string.bookmarks_empty_subtitle),
+                    )
                 }
                 else -> {
                     val visibleError = state.error
                     if (visibleError != null) {
                         val message = when (visibleError) {
-                            BookmarksOperation.Load -> "Не удалось обновить закладки"
-                            BookmarksOperation.Rename -> "Не удалось переименовать закладку"
-                            BookmarksOperation.Delete -> "Не удалось удалить закладку"
+                            BookmarksOperation.Load -> stringResource(R.string.bookmarks_refresh_error)
+                            BookmarksOperation.Rename -> stringResource(R.string.bookmark_rename_error)
+                            BookmarksOperation.Delete -> stringResource(R.string.bookmark_delete_error)
                         }
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
@@ -289,10 +324,13 @@ private fun BookmarksScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
-                            TextButton(
-                                onClick = if (visibleError == BookmarksOperation.Load) onRetryLoad else onDismissError,
-                            ) {
-                                Text(if (visibleError == BookmarksOperation.Load) "Повторить" else "Скрыть")
+                            val retryable = visibleError == BookmarksOperation.Load
+                            TextButton(onClick = if (retryable) onRetryLoad else onDismissError) {
+                                Text(
+                                    stringResource(
+                                        if (retryable) R.string.action_retry else R.string.action_hide,
+                                    ),
+                                )
                             }
                         }
                     }
@@ -328,7 +366,7 @@ private fun BookmarksScreen(
                                 ) {
                                     Icon(
                                         Icons.Filled.MoreVert,
-                                        "Действия",
+                                        stringResource(R.string.actions_content_description),
                                         Modifier.size(20.dp),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -366,21 +404,23 @@ internal fun SmoothPageProgress(tab: Tab?) {
     }
 }
 
-private fun motionGroupByDay(entries: List<HistoryEntry>): List<Pair<String, List<HistoryEntry>>> {
+private enum class HistoryDayGroup { Today, Yesterday, Earlier }
+
+private fun motionGroupByDay(entries: List<HistoryEntry>): List<Pair<HistoryDayGroup, List<HistoryEntry>>> {
     val zone = ZoneId.systemDefault()
     val today = LocalDate.now(zone)
     val todayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
     val yesterdayStart = today.minusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
     val groups = linkedMapOf(
-        "Сегодня" to mutableListOf<HistoryEntry>(),
-        "Вчера" to mutableListOf<HistoryEntry>(),
-        "Ранее" to mutableListOf<HistoryEntry>(),
+        HistoryDayGroup.Today to mutableListOf<HistoryEntry>(),
+        HistoryDayGroup.Yesterday to mutableListOf<HistoryEntry>(),
+        HistoryDayGroup.Earlier to mutableListOf<HistoryEntry>(),
     )
     entries.forEach { entry ->
         when {
-            entry.visitedAt >= todayStart -> groups.getValue("Сегодня").add(entry)
-            entry.visitedAt >= yesterdayStart -> groups.getValue("Вчера").add(entry)
-            else -> groups.getValue("Ранее").add(entry)
+            entry.visitedAt >= todayStart -> groups.getValue(HistoryDayGroup.Today).add(entry)
+            entry.visitedAt >= yesterdayStart -> groups.getValue(HistoryDayGroup.Yesterday).add(entry)
+            else -> groups.getValue(HistoryDayGroup.Earlier).add(entry)
         }
     }
     return groups.filter { it.value.isNotEmpty() }.map { it.key to it.value.toList() }
