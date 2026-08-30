@@ -59,6 +59,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -68,6 +70,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Popup
+import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.NavigationTarget
@@ -78,7 +81,6 @@ import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.formatFindCounter
 import kotlinx.coroutines.delay
 import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import java.io.File
 
@@ -143,6 +145,7 @@ internal fun TopBar(
     onHistory: () -> Unit,
     onSettings: () -> Unit,
     onTranslate: () -> Unit,
+    onToggleDesktop: () -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
@@ -152,6 +155,12 @@ internal fun TopBar(
     val newTab = rawUrl.isBlank() || rawUrl == "about:blank"
     val shown = if (focused) text else (if (newTab) "" else rawUrl)
     val focusManager = LocalFocusManager.current
+    val siteInfoDescription = stringResource(R.string.site_info_content_description)
+    val searchActionDescription = stringResource(R.string.action_search)
+    val searchDescription = stringResource(R.string.search_content_description)
+    val newTabDescription = stringResource(R.string.new_tab_title)
+    val tabsDescription = pluralStringResource(R.plurals.tabs_count, tabCount, tabCount)
+    val menuDescription = stringResource(R.string.menu_content_description)
     LaunchedEffect(focused, text, rawUrl, newTab) {
         val userHasEdited = newTab || text != rawUrl
         onSuggestionQueryChanged(
@@ -198,9 +207,9 @@ internal fun TopBar(
                         .size(48.dp)
                         .semantics {
                             contentDescription = when {
-                                !leadingIsSearch -> "Информация о сайте"
-                                text.isNotBlank() -> "Искать"
-                                else -> "Поиск"
+                                !leadingIsSearch -> siteInfoDescription
+                                text.isNotBlank() -> searchActionDescription
+                                else -> searchDescription
                             }
                         },
                 ) {
@@ -255,7 +264,7 @@ internal fun TopBar(
                 Box(Modifier.weight(1f)) {
                     if (shown.isEmpty()) {
                         Text(
-                            "Поиск или адрес",
+                            stringResource(R.string.omnibox_hint),
                             maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyLarge,
@@ -316,7 +325,7 @@ internal fun TopBar(
         }
         IconButton(
             onClick = { focusManager.clearFocus(force = true); onNewTab() },
-            modifier = Modifier.semantics { contentDescription = "Новая вкладка" },
+            modifier = Modifier.semantics { contentDescription = newTabDescription },
         ) {
             Icon(Icons.Filled.Add, null)
         }
@@ -326,14 +335,14 @@ internal fun TopBar(
                 .clip(Radius.button)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .clickable { focusManager.clearFocus(force = true); onSwitcher() }
-                .semantics { contentDescription = "Вкладки" },
+                .semantics { contentDescription = tabsDescription },
             contentAlignment = Alignment.Center,
         ) {
             Text("$tabCount", style = MaterialTheme.typography.titleMedium)
         }
         IconButton(
             onClick = { focusManager.clearFocus(force = true); menuOpen = true },
-            modifier = Modifier.semantics { contentDescription = "Меню" },
+            modifier = Modifier.semantics { contentDescription = menuDescription },
         ) {
             Icon(Icons.Filled.MoreVert, null)
         }
@@ -359,17 +368,7 @@ internal fun TopBar(
             onToggleAdblock = onToggleAdblock,
             onRetryAdblock = onRetryAdblock,
             onSettings = onSettings,
-            onToggleDesktop = {
-                val t = tab ?: return@MenuSheet
-                t.desktop = !t.desktop
-                t.session.settings.userAgentMode =
-                    if (t.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
-                    else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
-                t.session.settings.viewportMode =
-                    if (t.desktop) GeckoSessionSettings.VIEWPORT_MODE_DESKTOP
-                    else GeckoSessionSettings.VIEWPORT_MODE_MOBILE
-                t.session.reload()
-            },
+            onToggleDesktop = onToggleDesktop,
         )
     }
 }
@@ -440,70 +439,113 @@ private fun MenuSheet(
         ) {
             MenuNavigationAction(
                 Icons.AutoMirrored.Filled.ArrowBack,
-                "Назад",
+                stringResource(R.string.action_back),
                 tab?.canGoBack == true,
                 Modifier.weight(1f),
             ) { dismissThen(onBack) }
             MenuNavigationAction(
                 Icons.AutoMirrored.Filled.ArrowForward,
-                "Вперёд",
+                stringResource(R.string.action_forward),
                 tab?.canGoForward == true,
                 Modifier.weight(1f),
             ) { dismissThen(onForward) }
             MenuNavigationAction(
                 Icons.Filled.Refresh,
-                "Обновить",
+                stringResource(R.string.action_reload),
                 httpPage,
                 Modifier.weight(1f),
             ) { dismissThen(onReload) }
             MenuNavigationAction(
                 if (bookmarked) Icons.Filled.Star else AppIcons.Star,
-                if (bookmarked) "Убрать из закладок" else "В закладки",
+                stringResource(
+                    if (bookmarked) R.string.remove_from_bookmarks_action else R.string.add_to_bookmarks_action,
+                ),
                 httpPage,
                 Modifier.weight(1f),
             ) { dismissThen(onToggleBookmark) }
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            QuickAction(Icons.Filled.Add, "Новая\nвкладка", { dismissThen(onNewTab) })
-            QuickAction(AppIcons.Incognito, "Приватная\nвкладка", { dismissThen(onNewPrivateTab) })
-            QuickAction(AppIcons.Star, "Закладки", { dismissThen(onBookmarks) })
-            QuickAction(AppIcons.History, "История", { dismissThen(onHistory) })
+            QuickAction(Icons.Filled.Add, stringResource(R.string.new_tab_title)) { dismissThen(onNewTab) }
+            QuickAction(AppIcons.Incognito, stringResource(R.string.private_tab_title)) { dismissThen(onNewPrivateTab) }
+            QuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) { dismissThen(onBookmarks) }
+            QuickAction(AppIcons.History, stringResource(R.string.history_title)) { dismissThen(onHistory) }
         }
         MenuDivider()
-        SheetRow(Icons.Filled.Search, "Найти на странице", enabled = httpPage, onClick = { dismissThen(onFind) })
+        SheetRow(
+            Icons.Filled.Search,
+            stringResource(R.string.find_on_page),
+            enabled = httpPage,
+            onClick = { dismissThen(onFind) },
+        )
         tab?.takeIf { httpPage }?.let { currentTab ->
             ToggleRow(
                 AppIcons.Desktop,
-                "Версия для ПК",
+                stringResource(R.string.desktop_site),
                 currentTab.desktop,
                 onChecked = { dismissThen(onToggleDesktop) },
             )
         }
-        SheetRow(Icons.Filled.Share, "Поделиться", enabled = httpPage, onClick = { dismissThen(onShare) })
-        SheetRow(AppIcons.Globe, "Перевести страницу", enabled = httpPage, onClick = { dismissThen(onTranslate) })
+        SheetRow(
+            Icons.Filled.Share,
+            stringResource(R.string.action_share),
+            enabled = httpPage,
+            onClick = { dismissThen(onShare) },
+        )
+        SheetRow(
+            AppIcons.Globe,
+            stringResource(R.string.translate_page),
+            enabled = httpPage,
+            onClick = { dismissThen(onTranslate) },
+        )
         MenuDivider()
         when (adblockStatus) {
             null, ExtensionLoader.Status.Installing ->
                 SheetRow(
                     AppIcons.Shield,
-                    "Блокировка рекламы",
+                    stringResource(R.string.settings_adblock),
                     enabled = false,
-                    trailing = { Text("Запуск…", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    trailing = {
+                        Text(
+                            stringResource(R.string.extension_starting),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
                 )
             ExtensionLoader.Status.Error ->
                 SheetRow(
                     AppIcons.Shield,
-                    "Блокировка рекламы",
-                    trailing = { Text("Ошибка · повторить", color = MaterialTheme.colorScheme.error) },
+                    stringResource(R.string.settings_adblock),
+                    trailing = {
+                        Text(
+                            stringResource(R.string.extension_retry_short),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    },
                     onClick = { dismissThen(onRetryAdblock) },
                 )
             ExtensionLoader.Status.Enabled ->
-                ToggleRow(AppIcons.Shield, "Блокировка рекламы", true, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
+                ToggleRow(
+                    AppIcons.Shield,
+                    stringResource(R.string.settings_adblock),
+                    true,
+                    onToggleAdblock,
+                    subtitle = stringResource(R.string.settings_adblock_subtitle),
+                )
             ExtensionLoader.Status.Disabled ->
-                ToggleRow(AppIcons.Shield, "Блокировка рекламы", false, onToggleAdblock, subtitle = "Блокирует рекламу и трекеры")
+                ToggleRow(
+                    AppIcons.Shield,
+                    stringResource(R.string.settings_adblock),
+                    false,
+                    onToggleAdblock,
+                    subtitle = stringResource(R.string.settings_adblock_subtitle),
+                )
         }
-        SheetRow(Icons.Filled.Settings, "Настройки", onClick = { dismissThen(onSettings) })
+        SheetRow(
+            Icons.Filled.Settings,
+            stringResource(R.string.settings_title),
+            onClick = { dismissThen(onSettings) },
+        )
     }
 }
 
@@ -574,7 +616,12 @@ internal fun FindBar(session: GeckoSession, onClose: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BrowserTextField(q, { q = it }, Modifier.weight(1f), placeholder = "Найти на странице")
+            BrowserTextField(
+                q,
+                { q = it },
+                Modifier.weight(1f),
+                placeholder = stringResource(R.string.find_on_page),
+            )
             if (total > 0) {
                 Text(
                     formatFindCounter(current, total),
@@ -583,9 +630,16 @@ internal fun FindBar(session: GeckoSession, onClose: () -> Unit) {
                 )
             }
         }
-        IconBtn(Icons.Filled.KeyboardArrowUp, "Предыдущее") { doFind(true) }
-        IconBtn(Icons.Filled.KeyboardArrowDown, "Следующее") { doFind(false) }
-        IconBtn(Icons.Filled.Close, "Закрыть поиск") { session.finder.clear(); onClose() }
+        IconBtn(Icons.Filled.KeyboardArrowUp, stringResource(R.string.previous_match_content_description)) {
+            doFind(true)
+        }
+        IconBtn(Icons.Filled.KeyboardArrowDown, stringResource(R.string.next_match_content_description)) {
+            doFind(false)
+        }
+        IconBtn(Icons.Filled.Close, stringResource(R.string.close_find_content_description)) {
+            session.finder.clear()
+            onClose()
+        }
     }
 }
 
@@ -598,12 +652,13 @@ private fun IconBtn(icon: ImageVector, desc: String, onClick: () -> Unit) {
 
 @Composable
 internal fun SiteInfoSheet(tab: Tab, adblockEnabled: Boolean, onDismiss: () -> Unit) {
-    val host = hostOf(tab.url).ifBlank { tab.url.ifBlank { "Новая вкладка" } }
+    val newTabTitle = stringResource(R.string.new_tab_title)
+    val host = hostOf(tab.url).ifBlank { tab.url.ifBlank { newTabTitle } }
     val message = when (tab.securityState) {
-        SecurityState.Secure -> "Соединение защищено"
-        SecurityState.Exception -> "Есть исключение безопасности"
-        SecurityState.Insecure -> "Соединение не защищено"
-        SecurityState.Unknown -> "Состояние соединения неизвестно"
+        SecurityState.Secure -> stringResource(R.string.security_secure)
+        SecurityState.Exception -> stringResource(R.string.security_exception)
+        SecurityState.Insecure -> stringResource(R.string.security_insecure)
+        SecurityState.Unknown -> stringResource(R.string.security_unknown)
     }
     BrowserBottomSheet(onDismissRequest = onDismiss) {
         Text(host, style = MaterialTheme.typography.titleMedium)
@@ -612,8 +667,13 @@ internal fun SiteInfoSheet(tab: Tab, adblockEnabled: Boolean, onDismiss: () -> U
         Spacer(Modifier.height(8.dp))
         SheetRow(
             AppIcons.Shield,
-            "Блокировка рекламы",
-            trailing = { Text(if (adblockEnabled) "Вкл" else "Выкл", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+            stringResource(R.string.settings_adblock),
+            trailing = {
+                Text(
+                    stringResource(if (adblockEnabled) R.string.state_on else R.string.state_off),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
         )
     }
 }
@@ -631,12 +691,12 @@ internal fun ErrorOverlay(message: String, onRetry: () -> Unit) {
         Text(message, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Проверьте адрес и соединение",
+            stringResource(R.string.page_error_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(12.dp))
-        TextButton(onClick = onRetry) { Text("Повторить") }
+        TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
     }
 }
