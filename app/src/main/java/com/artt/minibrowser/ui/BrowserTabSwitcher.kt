@@ -54,6 +54,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -275,8 +276,15 @@ private fun BrowserTabCard(
 ) {
     val host = hostOf(tab.url)
     val preview = if (tab.isPrivate) null else TabPreviewStore[tab.id]
-    val closeTabDescription = stringResource(R.string.close_tab_content_description)
     val newTabTitle = stringResource(R.string.new_tab_title)
+    val privateTabTitle = stringResource(R.string.private_tab_title)
+    val displayTitle = when {
+        tab.isPrivate -> privateTabTitle
+        tab.title.isNotBlank() -> tab.title
+        tab.url.isBlank() || tab.url == "about:blank" -> newTabTitle
+        else -> host.ifBlank { tab.url }
+    }
+    val closeTabDescription = "${stringResource(R.string.close_tab_content_description)}: $displayTitle"
     val borderColor = when {
         isCurrent -> MaterialTheme.colorScheme.primary
         tab.isPrivate -> MaterialTheme.colorScheme.outline
@@ -294,12 +302,12 @@ private fun BrowserTabCard(
             .clip(Radius.card)
             .background(cardColor)
             .border(if (isCurrent) 1.5.dp else 1.dp, borderColor, Radius.card)
-            .clickable(onClick = onSelect),
+            .clickable(role = Role.Button, onClick = onSelect),
     ) {
         if (tab.isPrivate) {
             Box(Modifier.fillMaxWidth().height(48.dp)) {
                 Text(
-                    stringResource(R.string.private_tab_title),
+                    displayTitle,
                     Modifier.align(Alignment.Center),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -329,11 +337,6 @@ private fun BrowserTabCard(
             ) {
                 Favicon(if (host.isNotBlank()) tab.url else host, iconsDir, 17.dp)
                 Spacer(Modifier.width(7.dp))
-                val displayTitle = when {
-                    tab.title.isNotBlank() -> tab.title
-                    tab.url.isBlank() || tab.url == "about:blank" -> newTabTitle
-                    else -> host.ifBlank { tab.url }
-                }
                 Text(
                     displayTitle,
                     Modifier.weight(1f),
