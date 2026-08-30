@@ -28,6 +28,7 @@ import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.NavigationTarget
+import com.artt.minibrowser.engine.PageLoadError
 import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.TabManager
@@ -39,6 +40,7 @@ import com.artt.minibrowser.ui.BrowserChromeUiState
 import com.artt.minibrowser.ui.BrowserExtensionUiState
 import com.artt.minibrowser.ui.BrowserPageActions
 import com.artt.minibrowser.ui.BrowserPageContent
+import com.artt.minibrowser.ui.BrowserPageLoadErrorUiState
 import com.artt.minibrowser.ui.BrowserPageProgress
 import com.artt.minibrowser.ui.BrowserPageUiState
 import com.artt.minibrowser.ui.BrowserSecurityUiState
@@ -184,7 +186,7 @@ internal fun BrowserRoute(
         showFind = showFind,
         showStart = showStart,
         inFullscreen = inFullscreen,
-        loadError = currentTab?.loadError,
+        loadError = currentTab?.loadError.toUiState(),
     )
     val pageActions = BrowserPageActions(
         onSuggestionQueryChanged = omniboxSuggestionsViewModel::updateQuery,
@@ -363,6 +365,13 @@ private fun ExtensionLoader.Status?.toExtensionUiState(): BrowserExtensionUiStat
     ExtensionLoader.Status.Enabled -> BrowserExtensionUiState.Enabled
     ExtensionLoader.Status.Disabled -> BrowserExtensionUiState.Disabled
     ExtensionLoader.Status.Installing, null -> BrowserExtensionUiState.Installing
+}
+
+private fun PageLoadError?.toUiState(): BrowserPageLoadErrorUiState? = when (this) {
+    PageLoadError.Security -> BrowserPageLoadErrorUiState.Security
+    PageLoadError.Network -> BrowserPageLoadErrorUiState.Network
+    PageLoadError.Generic -> BrowserPageLoadErrorUiState.Generic
+    null -> null
 }
 
 private fun SearchEngine.toSettingsUiState(): SettingsSearchEngineUiState = when (this) {
