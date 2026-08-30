@@ -3,6 +3,7 @@ package com.artt.minibrowser
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -74,7 +75,7 @@ private fun DownloadFailureReason?.toUiState(): DownloadFailureUiState = when (t
 internal fun isSupportedDownloadLocation(value: String): Boolean = runCatching {
     val uri = URI(value)
     when (uri.scheme?.lowercase()) {
-        "content" -> !uri.rawAuthority.isNullOrBlank()
+        "content" -> uri.rawAuthority.equals(MediaStore.AUTHORITY, ignoreCase = true)
         "file" -> !uri.path.isNullOrBlank()
         else -> false
     }
