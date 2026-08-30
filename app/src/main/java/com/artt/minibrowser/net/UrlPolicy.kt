@@ -2,7 +2,6 @@ package com.artt.minibrowser.net
 
 import java.net.IDN
 import java.net.URI
-import java.net.URL
 
 private data class WebAuthority(val host: String, val port: Int)
 
@@ -20,9 +19,9 @@ private fun webAuthority(value: String): WebAuthority? = runCatching {
         return@runCatching WebAuthority(host, uri.port)
     }
 
-    // java.net.URI keeps a Unicode authority but reports host=null. URL exposes that host, after
-    // which IDN validation gives us the same DNS-syntax guarantees as the ASCII path above.
-    val url = URL(value)
+    // java.net.URI keeps a Unicode authority but reports host=null. Its URL view exposes that host,
+    // after which IDN validation gives us the same DNS-syntax guarantees as the ASCII path above.
+    val url = uri.toURL()
     if (!url.protocol.equals(scheme, ignoreCase = true)) return@runCatching null
     val host = url.host.takeIf { it.isNotBlank() } ?: return@runCatching null
     IDN.toASCII(host, IDN.USE_STD3_ASCII_RULES).takeIf { it.isNotBlank() }
