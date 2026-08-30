@@ -410,7 +410,8 @@ private fun BookmarksScreen(
 
     selected?.let { bookmark ->
         BookmarkActionsSheet(
-            bookmark = bookmark,
+            bookmarkKey = bookmark.url,
+            bookmarkTitle = bookmark.title,
             onDismiss = { selected = null },
             onOpen = { onOpen(bookmark.url); selected = null },
             onRename = { onRename(bookmark.url, it); selected = null },
