@@ -42,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -64,6 +65,7 @@ import com.artt.minibrowser.engine.Tab
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * Stable adaptive tab overview.
@@ -83,6 +85,7 @@ fun BrowserTabSwitcher(
     onDismiss: () -> Unit,
 ) {
     val reveal = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var switchTarget by remember { mutableStateOf<Long?>(null) }
     var predictiveBackActive by remember { mutableStateOf(false) }
@@ -152,8 +155,8 @@ fun BrowserTabSwitcher(
             predictiveBackActive = false
             onDismiss()
         } catch (cancelled: CancellationException) {
-            animateReveal(1f)
             predictiveBackActive = false
+            scope.launch { animateReveal(1f) }
             throw cancelled
         }
     }
