@@ -1,6 +1,5 @@
 package com.artt.minibrowser.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -177,7 +176,7 @@ internal fun HistoryScreenContent(
                                         Modifier
                                             .fillMaxWidth()
                                             .heightIn(min = 48.dp)
-                                            .clickable { requestExit { onOpen(entry.url) } }
+                                            .softClickable { requestExit { onOpen(entry.url) } }
                                             .padding(horizontal = 20.dp, vertical = 6.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
@@ -327,7 +326,7 @@ internal fun BookmarksScreenContent(
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
-                                        .clickable { requestExit { onOpen(bookmark.url) } }
+                                        .softClickable { requestExit { onOpen(bookmark.url) } }
                                         .padding(horizontal = 20.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
