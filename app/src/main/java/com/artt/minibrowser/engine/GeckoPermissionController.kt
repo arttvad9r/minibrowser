@@ -102,8 +102,14 @@ class GeckoPermissionController(
             PermissionAction.ALLOW, PermissionAction.DENY -> ""
         }
         activity.runOnUiThread {
+            var completed = false
+            fun complete(value: Int) {
+                if (completed) return
+                runCatching { result.complete(value) }.onSuccess { completed = true }
+            }
+
             if (!canShowUi()) {
-                result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
                 return@runOnUiThread
             }
             runCatching {
@@ -111,19 +117,22 @@ class GeckoPermissionController(
                     .setTitle(host)
                     .setMessage(message)
                     .setNegativeButton(activity.getString(R.string.action_deny)) { _, _ ->
-                        result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                        complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
                     }
                     .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
-                        result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+                        complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
                     }
                     .setOnCancelListener {
-                        result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                        complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
                     }
                     .create()
                 dialog.setOnShowListener { perm.notifyShown() }
+                dialog.setOnDismissListener {
+                    complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                }
                 dialog.show()
             }.onFailure {
-                runCatching { result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
+                complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
             }
         }
         return result
@@ -166,16 +175,28 @@ class GeckoPermissionController(
                 callback.reject()
                 return@runOnUiThread
             }
+            var actionTaken = false
             runCatching {
-                AlertDialog.Builder(activity)
+                val dialog = AlertDialog.Builder(activity)
                     .setTitle(host)
                     .setMessage(message)
-                    .setNegativeButton(activity.getString(R.string.action_deny)) { _, _ -> callback.reject() }
+                    .setNegativeButton(activity.getString(R.string.action_deny)) { _, _ ->
+                        actionTaken = true
+                        callback.reject()
+                    }
                     .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
+                        actionTaken = true
                         requestAndroidMediaPermissions(camera, microphone, callback)
                     }
-                    .setOnCancelListener { callback.reject() }
-                    .show()
+                    .setOnCancelListener {
+                        actionTaken = true
+                        callback.reject()
+                    }
+                    .create()
+                dialog.setOnDismissListener {
+                    if (!actionTaken) runCatching { callback.reject() }
+                }
+                dialog.show()
             }.onFailure {
                 runCatching { callback.reject() }
             }
