@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -135,9 +136,17 @@ internal fun FindBarContent(
                 placeholder = stringResource(R.string.find_on_page),
             )
             if (state.resultsReady) {
+                val resultDescription = if (state.total > 0) {
+                    stringResource(R.string.find_match_position, state.current, state.total)
+                } else {
+                    stringResource(R.string.find_no_matches)
+                }
                 Text(
                     formatFindCounter(state.current, state.total),
-                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    Modifier.clearAndSetSemantics {
+                        contentDescription = resultDescription
+                        liveRegion = LiveRegionMode.Polite
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

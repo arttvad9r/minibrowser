@@ -1,0 +1,4 @@
+<resources>
+    <string name="find_match_position">Совпадение %1$d из %2$d</string>
+    <string name="find_no_matches">Совпадений нет</string>
+</resources>
