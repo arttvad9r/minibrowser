@@ -27,6 +27,7 @@ import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.NavigationTarget
+import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
@@ -46,6 +47,8 @@ import com.artt.minibrowser.ui.FindInPageRoute
 import com.artt.minibrowser.ui.GeckoContent
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.SettingsScreen
+import com.artt.minibrowser.ui.SettingsScreenUiState
+import com.artt.minibrowser.ui.SettingsSearchEngineUiState
 import com.artt.minibrowser.ui.SiteInfoSheet
 import com.artt.minibrowser.ui.StartPage
 import com.artt.minibrowser.ui.TabPreviewStore
@@ -73,8 +76,6 @@ internal fun BrowserRoute(
     val settingsUi by settingsViewModel.uiState.collectAsStateWithLifecycle()
     val browserDataUi by browserDataViewModel.uiState.collectAsStateWithLifecycle()
     val prefs = settingsUi.prefs
-    val adblockStatus = settingsUi.adblockStatus
-    val votStatus = settingsUi.votStatus
     val darkTheme = when (prefs.theme) {
         1 -> false
         2 -> true
@@ -135,18 +136,8 @@ internal fun BrowserRoute(
         SecurityState.Exception -> BrowserSecurityUiState.Exception
         SecurityState.Unknown, null -> BrowserSecurityUiState.Unknown
     }
-    val chromeAdblockStatus = when (adblockStatus) {
-        ExtensionLoader.Status.Error -> BrowserExtensionUiState.Error
-        ExtensionLoader.Status.Enabled -> BrowserExtensionUiState.Enabled
-        ExtensionLoader.Status.Disabled -> BrowserExtensionUiState.Disabled
-        ExtensionLoader.Status.Installing, null -> BrowserExtensionUiState.Installing
-    }
-    val settingsVotStatus = when (votStatus) {
-        ExtensionLoader.Status.Error -> BrowserExtensionUiState.Error
-        ExtensionLoader.Status.Enabled -> BrowserExtensionUiState.Enabled
-        ExtensionLoader.Status.Disabled -> BrowserExtensionUiState.Disabled
-        ExtensionLoader.Status.Installing, null -> BrowserExtensionUiState.Installing
-    }
+    val chromeAdblockStatus = settingsUi.adblockStatus.toExtensionUiState()
+    val settingsVotStatus = settingsUi.votStatus.toExtensionUiState()
     val chromeState = BrowserChromeUiState(
         url = currentTab?.url.orEmpty(),
         isPrivate = currentTab?.isPrivate == true,
@@ -154,6 +145,17 @@ internal fun BrowserRoute(
         canGoBack = currentTab?.canGoBack == true,
         canGoForward = currentTab?.canGoForward == true,
         desktop = currentTab?.desktop == true,
+    )
+    val settingsScreenState = SettingsScreenUiState(
+        searchEngine = prefs.searchEngine.toSettingsUiState(),
+        theme = prefs.theme,
+        adblockEnabled = prefs.adblockEnabled,
+        votEnabled = prefs.votEnabled,
+        translateTarget = prefs.translateTarget,
+        adblockStatus = chromeAdblockStatus,
+        votStatus = settingsVotStatus,
+        clearDataInProgress = browserDataUi.isClearing,
+        clearDataFailed = browserDataUi.clearFailed,
     )
     val tabItems = tabs.map { tab ->
         BrowserTabItemUiState(
@@ -278,20 +280,15 @@ internal fun BrowserRoute(
             if (screen == BrowserScreen.Settings) {
                 Box(Modifier.fillMaxSize()) {
                     SettingsScreen(
-                        prefs,
+                        state = settingsScreenState,
                         onBack = { browserViewModel.screen(BrowserScreen.Browser) },
-                        onEngine = settingsViewModel::setSearchEngine,
+                        onEngine = { settingsViewModel.setSearchEngine(it.toSearchEngine()) },
                         onTheme = settingsViewModel::setTheme,
                         onAdblock = toggleAdblock,
                         onRetryAdblock = retryAdblock,
-                        adblockStatus = chromeAdblockStatus,
-                        votEnabled = prefs.votEnabled,
-                        votStatus = settingsVotStatus,
                         onVot = toggleVot,
                         onRetryVot = retryVot,
                         onClearData = browserDataViewModel::clear,
-                        clearDataInProgress = browserDataUi.isClearing,
-                        clearDataFailed = browserDataUi.clearFailed,
                         onTranslateLang = settingsViewModel::setTranslateTarget,
                     )
                 }
@@ -342,4 +339,25 @@ internal fun BrowserRoute(
             }
         }
     }
+}
+
+private fun ExtensionLoader.Status?.toExtensionUiState(): BrowserExtensionUiState = when (this) {
+    ExtensionLoader.Status.Error -> BrowserExtensionUiState.Error
+    ExtensionLoader.Status.Enabled -> BrowserExtensionUiState.Enabled
+    ExtensionLoader.Status.Disabled -> BrowserExtensionUiState.Disabled
+    ExtensionLoader.Status.Installing, null -> BrowserExtensionUiState.Installing
+}
+
+private fun SearchEngine.toSettingsUiState(): SettingsSearchEngineUiState = when (this) {
+    SearchEngine.GOOGLE -> SettingsSearchEngineUiState.Google
+    SearchEngine.DUCKDUCKGO -> SettingsSearchEngineUiState.DuckDuckGo
+    SearchEngine.YANDEX -> SettingsSearchEngineUiState.Yandex
+    SearchEngine.BING -> SettingsSearchEngineUiState.Bing
+}
+
+private fun SettingsSearchEngineUiState.toSearchEngine(): SearchEngine = when (this) {
+    SettingsSearchEngineUiState.Google -> SearchEngine.GOOGLE
+    SettingsSearchEngineUiState.DuckDuckGo -> SearchEngine.DUCKDUCKGO
+    SettingsSearchEngineUiState.Yandex -> SearchEngine.YANDEX
+    SettingsSearchEngineUiState.Bing -> SearchEngine.BING
 }
