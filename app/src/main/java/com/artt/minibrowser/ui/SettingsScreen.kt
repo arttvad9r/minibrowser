@@ -83,101 +83,103 @@ fun SettingsScreen(
     var showDownloads by remember { mutableStateOf(false) }
 
     BrowserMotionScreen(onBack = onBack, fromBottom = true) { requestExit ->
-        Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = { requestExit(onBack) }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
+        CenteredSinglePane(maxWidth = 720.dp) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { requestExit(onBack) }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
+                    }
+                    Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleLarge)
                 }
-                Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleLarge)
-            }
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .imePadding(),
-            ) {
-                GroupLabel(stringResource(R.string.settings_group_search))
-                SettingsGroup {
-                    SettingsRow(
-                        title = stringResource(R.string.settings_search_engine),
-                        value = prefs.searchEngine.label,
-                        onClick = { showEnginePicker = true },
-                        trailing = { PickerChevron() },
-                    )
-                }
-
-                GroupLabel(stringResource(R.string.settings_group_appearance))
-                ThemeSelector(prefs.theme, onTheme)
-
-                GroupLabel(stringResource(R.string.settings_group_translation))
-                SettingsGroup {
-                    SettingsRow(
-                        title = stringResource(R.string.settings_translation_language),
-                        value = translationLanguageLabel(prefs.translateTarget),
-                        onClick = { showLanguagePicker = true },
-                        trailing = { PickerChevron() },
-                    )
-                    HorizontalDividerThin()
-                    if (votStatus == ExtensionLoader.Status.Error) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp)
+                        .imePadding(),
+                ) {
+                    GroupLabel(stringResource(R.string.settings_group_search))
+                    SettingsGroup {
                         SettingsRow(
-                            stringResource(R.string.settings_video_translation),
-                            subtitle = stringResource(R.string.settings_extension_retry_subtitle),
-                            onClick = onRetryVot,
-                        )
-                    } else {
-                        ToggleRow(
-                            AppIcons.Globe,
-                            stringResource(R.string.settings_video_translation),
-                            votEnabled,
-                            onVot,
-                            subtitle = stringResource(R.string.settings_video_translation_subtitle),
+                            title = stringResource(R.string.settings_search_engine),
+                            value = prefs.searchEngine.label,
+                            onClick = { showEnginePicker = true },
+                            trailing = { PickerChevron() },
                         )
                     }
-                }
 
-                GroupLabel(stringResource(R.string.settings_group_files))
-                SettingsGroup {
-                    SettingsRow(
-                        stringResource(R.string.downloads_title),
-                        subtitle = stringResource(R.string.settings_downloads_subtitle),
-                        onClick = { showDownloads = true },
-                        trailing = { PickerChevron() },
-                    )
-                }
+                    GroupLabel(stringResource(R.string.settings_group_appearance))
+                    ThemeSelector(prefs.theme, onTheme)
 
-                GroupLabel(stringResource(R.string.settings_group_privacy))
-                SettingsGroup {
-                    if (adblockStatus == ExtensionLoader.Status.Error) {
+                    GroupLabel(stringResource(R.string.settings_group_translation))
+                    SettingsGroup {
                         SettingsRow(
-                            stringResource(R.string.settings_adblock),
-                            subtitle = stringResource(R.string.settings_extension_retry_subtitle),
-                            onClick = onRetryAdblock,
+                            title = stringResource(R.string.settings_translation_language),
+                            value = translationLanguageLabel(prefs.translateTarget),
+                            onClick = { showLanguagePicker = true },
+                            trailing = { PickerChevron() },
                         )
-                    } else {
-                        ToggleRow(
-                            AppIcons.Shield,
-                            stringResource(R.string.settings_adblock),
-                            prefs.adblockEnabled,
-                            onAdblock,
-                            subtitle = stringResource(R.string.settings_adblock_subtitle),
+                        HorizontalDividerThin()
+                        if (votStatus == ExtensionLoader.Status.Error) {
+                            SettingsRow(
+                                stringResource(R.string.settings_video_translation),
+                                subtitle = stringResource(R.string.settings_extension_retry_subtitle),
+                                onClick = onRetryVot,
+                            )
+                        } else {
+                            ToggleRow(
+                                AppIcons.Globe,
+                                stringResource(R.string.settings_video_translation),
+                                votEnabled,
+                                onVot,
+                                subtitle = stringResource(R.string.settings_video_translation_subtitle),
+                            )
+                        }
+                    }
+
+                    GroupLabel(stringResource(R.string.settings_group_files))
+                    SettingsGroup {
+                        SettingsRow(
+                            stringResource(R.string.downloads_title),
+                            subtitle = stringResource(R.string.settings_downloads_subtitle),
+                            onClick = { showDownloads = true },
+                            trailing = { PickerChevron() },
                         )
                     }
-                    HorizontalDividerThin()
-                    SettingsRow(
-                        stringResource(R.string.settings_clear_data),
-                        subtitle = when {
-                            clearDataInProgress -> stringResource(R.string.settings_clear_data_in_progress)
-                            clearDataFailed -> stringResource(R.string.settings_clear_data_failed)
-                            else -> stringResource(R.string.settings_clear_data_subtitle)
-                        },
-                        onClick = if (clearDataInProgress) null else ({ showClearDialog = true }),
-                    )
+
+                    GroupLabel(stringResource(R.string.settings_group_privacy))
+                    SettingsGroup {
+                        if (adblockStatus == ExtensionLoader.Status.Error) {
+                            SettingsRow(
+                                stringResource(R.string.settings_adblock),
+                                subtitle = stringResource(R.string.settings_extension_retry_subtitle),
+                                onClick = onRetryAdblock,
+                            )
+                        } else {
+                            ToggleRow(
+                                AppIcons.Shield,
+                                stringResource(R.string.settings_adblock),
+                                prefs.adblockEnabled,
+                                onAdblock,
+                                subtitle = stringResource(R.string.settings_adblock_subtitle),
+                            )
+                        }
+                        HorizontalDividerThin()
+                        SettingsRow(
+                            stringResource(R.string.settings_clear_data),
+                            subtitle = when {
+                                clearDataInProgress -> stringResource(R.string.settings_clear_data_in_progress)
+                                clearDataFailed -> stringResource(R.string.settings_clear_data_failed)
+                                else -> stringResource(R.string.settings_clear_data_subtitle)
+                            },
+                            onClick = if (clearDataInProgress) null else ({ showClearDialog = true }),
+                        )
+                    }
+                    Spacer(Modifier.height(32.dp))
                 }
-                Spacer(Modifier.height(32.dp))
             }
         }
     }

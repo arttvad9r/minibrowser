@@ -73,74 +73,76 @@ fun StartPage(
     var selected by remember { mutableStateOf<Bookmark?>(null) }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus(force = true) } }
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
-    ) {
-        Spacer(Modifier.height(24.dp))
-        if (isPrivate) {
-            Icon(
-                AppIcons.Incognito,
-                null,
-                Modifier.align(Alignment.CenterHorizontally).size(32.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                stringResource(R.string.private_tab_title),
-                Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleLarge.copy(fontSize = 26.sp, fontWeight = FontWeight.Medium),
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                stringResource(R.string.private_tab_subtitle),
-                Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    CenteredSinglePane {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus(force = true) } }
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+        ) {
             Spacer(Modifier.height(24.dp))
-        } else {
-            Text(
-                stringResource(R.string.app_name),
-                Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Medium),
-            )
-            Spacer(Modifier.height(24.dp))
-        }
+            if (isPrivate) {
+                Icon(
+                    AppIcons.Incognito,
+                    null,
+                    Modifier.align(Alignment.CenterHorizontally).size(32.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.52f),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.private_tab_title),
+                    Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 26.sp, fontWeight = FontWeight.Medium),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.private_tab_subtitle),
+                    Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(24.dp))
+            } else {
+                Text(
+                    stringResource(R.string.app_name),
+                    Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Medium),
+                )
+                Spacer(Modifier.height(24.dp))
+            }
 
-        if (!isPrivate) {
-            SectionHeader(
-                stringResource(R.string.bookmarks_title),
-                actionLabel = stringResource(R.string.action_all),
-                onAction = onAllBookmarks,
-            )
-            Spacer(Modifier.height(8.dp))
-            BookmarkRow(
-                bookmarks,
-                iconsDir,
-                onOpen = onOpen,
-                onAdd = { showAdd = true },
-                onLongPress = { selected = it },
-            )
-            Spacer(Modifier.height(18.dp))
-
-            if (recent.isNotEmpty()) {
-                RecentCard(
-                    recent,
+            if (!isPrivate) {
+                SectionHeader(
+                    stringResource(R.string.bookmarks_title),
+                    actionLabel = stringResource(R.string.action_all),
+                    onAction = onAllBookmarks,
+                )
+                Spacer(Modifier.height(8.dp))
+                BookmarkRow(
+                    bookmarks,
                     iconsDir,
                     onOpen = onOpen,
-                    onShowAll = onAllHistory,
-                    onRefresh = onRefreshRecent,
+                    onAdd = { showAdd = true },
+                    onLongPress = { selected = it },
                 )
+                Spacer(Modifier.height(18.dp))
+
+                if (recent.isNotEmpty()) {
+                    RecentCard(
+                        recent,
+                        iconsDir,
+                        onOpen = onOpen,
+                        onShowAll = onAllHistory,
+                        onRefresh = onRefreshRecent,
+                    )
+                }
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(24.dp))
         }
     }
 
