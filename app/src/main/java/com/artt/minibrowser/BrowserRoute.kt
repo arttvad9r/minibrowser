@@ -25,6 +25,7 @@ import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.SettingsViewModel
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
+import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.NavigationTarget
 import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.TabManager
@@ -33,10 +34,12 @@ import com.artt.minibrowser.engine.buildTranslateUri
 import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.toggleDesktopMode
 import com.artt.minibrowser.ui.BrowserChromeUiState
+import com.artt.minibrowser.ui.BrowserExtensionUiState
 import com.artt.minibrowser.ui.BrowserPageActions
 import com.artt.minibrowser.ui.BrowserPageContent
 import com.artt.minibrowser.ui.BrowserPageProgress
 import com.artt.minibrowser.ui.BrowserPageUiState
+import com.artt.minibrowser.ui.BrowserSecurityUiState
 import com.artt.minibrowser.ui.BrowserTabItemUiState
 import com.artt.minibrowser.ui.BrowserTabSwitcher
 import com.artt.minibrowser.ui.FindInPageRoute
@@ -126,10 +129,22 @@ internal fun BrowserRoute(
     val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
     val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
     val retryVot: () -> Unit = settingsViewModel::retryVot
+    val chromeSecurityState = when (currentTab?.securityState) {
+        SecurityState.Secure -> BrowserSecurityUiState.Secure
+        SecurityState.Insecure -> BrowserSecurityUiState.Insecure
+        SecurityState.Exception -> BrowserSecurityUiState.Exception
+        SecurityState.Unknown, null -> BrowserSecurityUiState.Unknown
+    }
+    val chromeAdblockStatus = when (adblockStatus) {
+        ExtensionLoader.Status.Error -> BrowserExtensionUiState.Error
+        ExtensionLoader.Status.Enabled -> BrowserExtensionUiState.Enabled
+        ExtensionLoader.Status.Disabled -> BrowserExtensionUiState.Disabled
+        ExtensionLoader.Status.Installing, null -> BrowserExtensionUiState.Installing
+    }
     val chromeState = BrowserChromeUiState(
         url = currentTab?.url.orEmpty(),
         isPrivate = currentTab?.isPrivate == true,
-        securityState = currentTab?.securityState ?: SecurityState.Unknown,
+        securityState = chromeSecurityState,
         canGoBack = currentTab?.canGoBack == true,
         canGoForward = currentTab?.canGoForward == true,
         desktop = currentTab?.desktop == true,
@@ -148,7 +163,7 @@ internal fun BrowserRoute(
         tabCount = tabs.size,
         bookmarked = bookmarked,
         suggestions = omniboxSuggestionsUi.suggestions,
-        adblockStatus = adblockStatus,
+        adblockStatus = chromeAdblockStatus,
         showFind = showFind,
         showStart = showStart,
         inFullscreen = inFullscreen,
