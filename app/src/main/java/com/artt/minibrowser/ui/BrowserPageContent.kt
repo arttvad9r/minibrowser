@@ -88,7 +88,7 @@ internal fun BrowserPageContent(
             .windowInsetsPadding(horizontalSafeInsets),
     ) {
         if (!state.inFullscreen) {
-            Box(Modifier.windowInsetsPadding(topSafeInsets)) {
+            CenteredBrowserChrome(Modifier.windowInsetsPadding(topSafeInsets)) {
                 TopBar(
                     state.chrome,
                     tabCount = state.tabCount,
@@ -121,7 +121,9 @@ internal fun BrowserPageContent(
             }
         }
         if (state.showFind && !state.inFullscreen) {
-            findContent?.invoke()
+            CenteredBrowserChrome {
+                findContent?.invoke()
+            }
         }
         Box(
             Modifier
