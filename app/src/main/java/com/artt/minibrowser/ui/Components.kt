@@ -309,14 +309,14 @@ fun SettingsRow(
     }
 }
 
-/** Строка выбора: компактная 48dp hit-area, место под галку зарезервировано без layout-motion. */
+/** Строка выбора: минимум 48dp; при крупном шрифте строка может расширяться по высоте. */
 @Composable
 fun ChoiceRow(title: String, selected: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .height(48.dp)
+            .heightIn(min = 48.dp)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
