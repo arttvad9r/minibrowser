@@ -51,6 +51,14 @@ import com.artt.minibrowser.engine.SearchEngine
 private val translationLanguageCodes = listOf("ru", "en", "de", "fr")
 
 @Composable
+private fun searchEngineLabel(engine: SearchEngine): String = when (engine) {
+    SearchEngine.GOOGLE -> stringResource(R.string.search_engine_google)
+    SearchEngine.DUCKDUCKGO -> stringResource(R.string.search_engine_duckduckgo)
+    SearchEngine.YANDEX -> stringResource(R.string.search_engine_yandex)
+    SearchEngine.BING -> stringResource(R.string.search_engine_bing)
+}
+
+@Composable
 private fun translationLanguageLabel(code: String): String = when (code) {
     "ru" -> stringResource(R.string.language_russian)
     "en" -> stringResource(R.string.language_english)
@@ -105,7 +113,7 @@ fun SettingsScreen(
                     SettingsGroup {
                         SettingsRow(
                             title = stringResource(R.string.settings_search_engine),
-                            value = prefs.searchEngine.label,
+                            value = searchEngineLabel(prefs.searchEngine),
                             onClick = { showEnginePicker = true },
                             trailing = { PickerChevron() },
                         )
@@ -189,7 +197,7 @@ fun SettingsScreen(
             Text(stringResource(R.string.settings_search_engine), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             SearchEngine.entries.forEach { engine ->
-                CompactChoiceRow(engine.label, engine == prefs.searchEngine) {
+                CompactChoiceRow(searchEngineLabel(engine), engine == prefs.searchEngine) {
                     onEngine(engine)
                     dismiss()
                 }

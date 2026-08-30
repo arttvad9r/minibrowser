@@ -95,6 +95,10 @@
     <string name="settings_title">Настройки</string>
     <string name="settings_group_search">Поиск</string>
     <string name="settings_search_engine">Поисковая система</string>
+    <string name="search_engine_google" translatable="false">Google</string>
+    <string name="search_engine_duckduckgo" translatable="false">DuckDuckGo</string>
+    <string name="search_engine_yandex" translatable="false">Яндекс</string>
+    <string name="search_engine_bing" translatable="false">Bing</string>
     <string name="settings_group_appearance">Внешний вид</string>
     <string name="settings_group_translation">Перевод</string>
     <string name="settings_translation_language">Язык перевода</string>

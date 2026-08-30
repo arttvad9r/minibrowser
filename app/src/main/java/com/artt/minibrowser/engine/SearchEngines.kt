@@ -2,11 +2,11 @@ package com.artt.minibrowser.engine
 
 import java.net.URI
 
-enum class SearchEngine(val label: String, val template: String) {
-    GOOGLE("Google", "https://www.google.com/search?q=%s"),
-    DUCKDUCKGO("DuckDuckGo", "https://duckduckgo.com/?q=%s"),
-    YANDEX("Яндекс", "https://yandex.ru/search/?text=%s"),
-    BING("Bing", "https://www.bing.com/search?q=%s");
+enum class SearchEngine(val template: String) {
+    GOOGLE("https://www.google.com/search?q=%s"),
+    DUCKDUCKGO("https://duckduckgo.com/?q=%s"),
+    YANDEX("https://yandex.ru/search/?text=%s"),
+    BING("https://www.bing.com/search?q=%s");
 }
 
 // Перевод страницы через Google Translate proxy (translate.goog) — приём лёгких браузеров, без API-ключей.
