@@ -373,7 +373,7 @@ private fun MenuSheet(
     onSettings: () -> Unit,
     onToggleDesktop: () -> Unit,
 ) {
-    val httpPage = state.url.startsWith("http")
+    val httpPage = state.isWebPage
     BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
         Row(
             Modifier
