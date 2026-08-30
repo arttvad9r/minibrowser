@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.artt.minibrowser.data.BrowserDownload
+import com.artt.minibrowser.data.DownloadsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,23 +19,20 @@ internal data class DownloadsUiState(
     val isRestoring: Boolean = false,
 )
 
-/** Owns the UI-facing download-history state without coupling the renderer to its global store. */
+/** Owns UI-facing download state behind the DownloadsRepository data boundary. */
 internal class DownloadsViewModel : ViewModel {
     private val clearHistory: () -> Unit
     private val _uiState: MutableStateFlow<DownloadsUiState>
     val uiState: StateFlow<DownloadsUiState>
 
-    constructor(
-        downloads: StateFlow<List<BrowserDownload>>,
-        restoreCompleted: StateFlow<Boolean>,
-        initialize: () -> Unit,
-        clearHistory: () -> Unit,
-    ) : super() {
-        this.clearHistory = clearHistory
-        _uiState = MutableStateFlow(downloadsUiState(downloads.value, restoreCompleted.value))
+    constructor(repository: DownloadsRepository) : super() {
+        clearHistory = repository::clear
+        _uiState = MutableStateFlow(
+            downloadsUiState(repository.downloads.value, repository.restoreCompleted.value),
+        )
         uiState = _uiState.asStateFlow()
-        initialize()
-        observe(downloads, restoreCompleted, viewModelScope)
+        repository.initialize()
+        observe(repository.downloads, repository.restoreCompleted, viewModelScope)
     }
 
     internal constructor(
@@ -66,20 +64,8 @@ internal class DownloadsViewModel : ViewModel {
     }
 
     companion object {
-        fun factory(
-            downloads: StateFlow<List<BrowserDownload>>,
-            restoreCompleted: StateFlow<Boolean>,
-            initialize: () -> Unit,
-            clearHistory: () -> Unit,
-        ): ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                DownloadsViewModel(
-                    downloads = downloads,
-                    restoreCompleted = restoreCompleted,
-                    initialize = initialize,
-                    clearHistory = clearHistory,
-                )
-            }
+        fun factory(repository: DownloadsRepository): ViewModelProvider.Factory = viewModelFactory {
+            initializer { DownloadsViewModel(repository) }
         }
     }
 }
