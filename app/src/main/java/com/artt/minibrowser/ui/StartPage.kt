@@ -133,6 +133,9 @@ internal fun StartPage(
                     stringResource(R.string.bookmarks_title),
                     actionLabel = stringResource(R.string.action_all),
                     onAction = onAllBookmarks,
+                    actionContentDescription = stringResource(
+                        R.string.show_all_bookmarks_content_description,
+                    ),
                 )
                 Spacer(Modifier.height(8.dp))
                 BookmarkRow(

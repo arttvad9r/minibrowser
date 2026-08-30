@@ -69,18 +69,20 @@ fun SectionHeader(
     modifier: Modifier = Modifier,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    actionContentDescription: String? = null,
 ) {
     Row(modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.weight(1f))
         if (actionLabel != null && onAction != null) {
+            val actionDescription = actionContentDescription ?: actionLabel
             Row(
                 Modifier
                     .heightIn(min = 48.dp)
                     .clip(Radius.small)
                     .softClickable(onClick = onAction)
                     .padding(horizontal = 4.dp, vertical = 2.dp)
-                    .semantics { contentDescription = actionLabel },
+                    .semantics { contentDescription = actionDescription },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

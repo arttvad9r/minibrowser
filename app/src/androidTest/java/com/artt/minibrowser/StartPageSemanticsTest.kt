@@ -35,6 +35,7 @@ class StartPageSemanticsTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val appName = context.getString(R.string.app_name)
         val bookmarks = context.getString(R.string.bookmarks_title)
+        val showAllBookmarks = context.getString(R.string.show_all_bookmarks_content_description)
         val addBookmark = context.getString(R.string.add_bookmark_content_description)
 
         composeRule.setContent {
@@ -57,6 +58,10 @@ class StartPageSemanticsTest {
 
         composeRule.onNodeWithText(appName).assertIsDisplayed()
         composeRule.onNodeWithText(bookmarks).assertIsDisplayed()
+        composeRule
+            .onNodeWithContentDescription(showAllBookmarks)
+            .assertIsDisplayed()
+            .assertHasClickAction()
         composeRule
             .onNodeWithContentDescription(addBookmark)
             .assertIsDisplayed()
