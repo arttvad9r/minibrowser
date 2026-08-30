@@ -1,6 +1,7 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.net.isValidWebUri
+import com.artt.minibrowser.net.sanitizeWebUriUserInfoInText
 import com.artt.minibrowser.net.webUriHost
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,6 +29,18 @@ class UrlPolicyTest {
         assertEquals("bücher.de", webUriHost("https://bücher.de:8443/"))
         assertNull(webUriHost("https://example.com:65536/path"))
         assertNull(webUriHost("file:///tmp/test"))
+    }
+
+    @Test fun titleSanitizationChangesOnlyCredentialUserInfo() {
+        assertEquals(
+            "  https://example.com/path?q=1  ",
+            sanitizeWebUriUserInfoInText("  https://example.com/path?q=1  "),
+        )
+        assertEquals(
+            "  https://example.com/private?q=1#x  ",
+            sanitizeWebUriUserInfoInText("  https://user:secret@example.com/private?q=1#x  "),
+        )
+        assertEquals("  Обычный заголовок  ", sanitizeWebUriUserInfoInText("  Обычный заголовок  "))
     }
 
     @Test fun rejectsOutOfRangePorts() {
