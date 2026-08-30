@@ -118,6 +118,20 @@ class BookmarksPolicyTest {
         )
     }
 
+    @Test fun legacyBookmarkHostIsRecomputedFromValidatedUrl() {
+        val bookmark = Bookmark(
+            "https://пример.рф/page",
+            "Page",
+            "user:secret@wrong.invalid",
+            9,
+        )
+
+        assertEquals(
+            listOf(Bookmark("https://пример.рф/page", "Page", "пример.рф", 9)),
+            webBookmarks(listOf(bookmark)),
+        )
+    }
+
     @Test fun canonicalBookmarkWinsOverCredentialVariantInEitherOrder() {
         val safe = Bookmark("https://example.com/private", "Safe", "example.com", 2)
         val credential = Bookmark(
