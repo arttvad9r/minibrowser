@@ -38,7 +38,7 @@ private val TextSecondaryDark = Color(0xFFA9ADB3)
 private val BorderDark = Color(0xFF2C3035)
 private val DividerDark = Color(0xFF292D31)
 
-fun neutralLightScheme() = lightColorScheme(
+private val NeutralLightScheme = lightColorScheme(
     primary = Graphite,
     onPrimary = Color.White,
     primaryContainer = PressedLight,
@@ -63,7 +63,7 @@ fun neutralLightScheme() = lightColorScheme(
     scrim = Color(0x52000000),
 )
 
-fun neutralDarkScheme() = darkColorScheme(
+private val NeutralDarkScheme = darkColorScheme(
     primary = Color(0xFFC9CCD0),
     onPrimary = Color(0xFF111315),
     primaryContainer = PressedDark,
@@ -87,6 +87,10 @@ fun neutralDarkScheme() = darkColorScheme(
     surfaceContainerHighest = PressedDark,
     scrim = Color(0x66000000),
 )
+
+fun neutralLightScheme() = NeutralLightScheme
+
+fun neutralDarkScheme() = NeutralDarkScheme
 
 // --- Типографика: системный sans-serif, максимум Regular/Medium/SemiBold ---
 private val AppTypography = Typography(
@@ -123,7 +127,7 @@ private val AppShapes = Shapes(
 
 @Composable
 fun MinibrowserTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
-    val scheme = if (darkTheme) neutralDarkScheme() else neutralLightScheme()
+    val scheme = if (darkTheme) NeutralDarkScheme else NeutralLightScheme
     CompositionLocalProvider(LocalContentColor provides scheme.onBackground) {
         MaterialTheme(
             colorScheme = scheme,
