@@ -2,6 +2,7 @@ package com.artt.minibrowser
 
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.bookmarkForPersistence
+import com.artt.minibrowser.data.bookmarkTitleForPersistence
 import com.artt.minibrowser.data.mergeSuggestions
 import com.artt.minibrowser.data.webBookmarks
 import kotlin.test.Test
@@ -27,6 +28,15 @@ class BookmarksPolicyTest {
         assertEquals(listOf(safe), webBookmarks(listOf(safe, hostless, script)))
     }
 
+    @Test fun bookmarkTitleSanitizesOnlyUrlShapedCredentials() {
+        assertEquals(
+            "https://example.com/private?q=1#part",
+            bookmarkTitleForPersistence("https://user:secret@example.com/private?q=1#part"),
+        )
+        assertEquals("Обычный заголовок", bookmarkTitleForPersistence("Обычный заголовок"))
+        assertEquals("", bookmarkTitleForPersistence(""))
+    }
+
     @Test fun newCredentialBookmarkIsSanitizedBeforePersistence() {
         val rawUrl = "https://user:secret@example.com/private?q=1#section"
 
@@ -40,6 +50,22 @@ class BookmarksPolicyTest {
             bookmarkForPersistence(rawUrl, rawUrl, position = 4),
         )
         assertNull(bookmarkForPersistence("javascript:alert(1)", "Script", position = 4))
+    }
+
+    @Test fun newBookmarkSanitizesCredentialUrlShapedTitleIndependentlyOfUrl() {
+        assertEquals(
+            Bookmark(
+                url = "https://example.org/page",
+                title = "https://example.com/private",
+                host = "example.org",
+                position = 6,
+            ),
+            bookmarkForPersistence(
+                "https://example.org/page",
+                "https://user:secret@example.com/private",
+                position = 6,
+            ),
+        )
     }
 
     @Test fun unicodeBookmarkUsesValidatedHostForFallbackTitle() {
@@ -65,6 +91,27 @@ class BookmarksPolicyTest {
                     title = "https://example.com/private?q=1#section",
                     host = "example.com",
                     position = 7,
+                ),
+            ),
+            webBookmarks(listOf(bookmark)),
+        )
+    }
+
+    @Test fun credentialLegacyBookmarkTitleIsSanitizedWhenUrlIsAlreadySafe() {
+        val bookmark = Bookmark(
+            "https://example.org/page",
+            "https://user:secret@example.com/private",
+            "example.org",
+            8,
+        )
+
+        assertEquals(
+            listOf(
+                Bookmark(
+                    "https://example.org/page",
+                    "https://example.com/private",
+                    "example.org",
+                    8,
                 ),
             ),
             webBookmarks(listOf(bookmark)),
