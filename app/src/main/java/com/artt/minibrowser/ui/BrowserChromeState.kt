@@ -16,6 +16,7 @@ enum class BrowserExtensionUiState {
 
 internal data class BrowserChromeUiState(
     val url: String = "",
+    val isWebPage: Boolean = false,
     val isPrivate: Boolean = false,
     val securityState: BrowserSecurityUiState = BrowserSecurityUiState.Unknown,
     val canGoBack: Boolean = false,
