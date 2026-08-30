@@ -23,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -114,6 +116,9 @@ internal fun FindBarContent(
     onNext: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
+
     Row(
         Modifier
             .fillMaxWidth()
@@ -132,7 +137,9 @@ internal fun FindBarContent(
             BrowserTextField(
                 state.query,
                 onQueryChange,
-                Modifier.weight(1f),
+                Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester),
                 placeholder = stringResource(R.string.find_on_page),
             )
             if (state.resultsReady) {
