@@ -113,7 +113,7 @@ internal fun BrowserPageContent(
         }
         if (state.showFind && currentSession != null && !state.inFullscreen) {
             key(currentTab.id) {
-                FindBar(currentSession, actions.onCloseFind)
+                FindInPageRoute(currentSession, actions.onCloseFind)
             }
         }
         Box(
