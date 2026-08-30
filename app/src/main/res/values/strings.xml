@@ -62,6 +62,7 @@
     <string name="download_completed_subtitle">%1$s · %2$s</string>
     <string name="download_failed_subtitle">Ошибка · %1$s</string>
     <string name="download_failed_default">Не удалось скачать</string>
+    <string name="download_failure_interrupted">Загрузка была прервана</string>
     <string name="download_unavailable">Файл больше недоступен</string>
     <string name="open_file_chooser_title">Открыть файл</string>
     <string name="no_app_to_open_file">Нет приложения для открытия файла</string>

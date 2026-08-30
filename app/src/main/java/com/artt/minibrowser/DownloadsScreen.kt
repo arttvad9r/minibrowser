@@ -46,6 +46,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.artt.minibrowser.browser.DownloadsUiState
 import com.artt.minibrowser.browser.DownloadsViewModel
 import com.artt.minibrowser.data.BrowserDownload
+import com.artt.minibrowser.data.DownloadFailureReason
 import com.artt.minibrowser.data.DownloadHistory
 import com.artt.minibrowser.data.DownloadStatus
 import com.artt.minibrowser.data.formatDownloadSize
@@ -207,10 +208,13 @@ private fun DownloadCard(
                         dateFormat.format(Date(whenDone)),
                     )
                 }
-                DownloadStatus.Failed -> stringResource(
-                    R.string.download_failed_subtitle,
-                    item.error ?: stringResource(R.string.download_failed_default),
-                )
+                DownloadStatus.Failed -> {
+                    val failure = when (item.failureReason) {
+                        DownloadFailureReason.Interrupted -> stringResource(R.string.download_failure_interrupted)
+                        null -> item.error ?: stringResource(R.string.download_failed_default)
+                    }
+                    stringResource(R.string.download_failed_subtitle, failure)
+                }
             }
             Text(
                 statusText,

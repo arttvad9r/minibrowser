@@ -1,6 +1,7 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.data.BrowserDownload
+import com.artt.minibrowser.data.DownloadFailureReason
 import com.artt.minibrowser.data.DownloadStatus
 import com.artt.minibrowser.data.downloadSourceForHistory
 import com.artt.minibrowser.data.mergeRestoredDownloads
@@ -13,6 +14,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DownloadHistoryTest {
@@ -40,7 +42,7 @@ class DownloadHistoryTest {
         assertFalse(shouldPersistDownloadHistory(isPrivate = true))
     }
 
-    @Test fun restoredInFlightDownloadBecomesSanitizedFailure() {
+    @Test fun restoredInFlightDownloadBecomesSanitizedStructuredFailure() {
         val restored = BrowserDownload(
             id = "old",
             name = "archive.zip",
@@ -55,7 +57,34 @@ class DownloadHistoryTest {
         assertEquals("https://example.com", normalized.sourceUrl)
         assertEquals(DownloadStatus.Failed, normalized.status)
         assertEquals(42L, normalized.finishedAt)
-        assertEquals("Загрузка была прервана", normalized.error)
+        assertEquals(DownloadFailureReason.Interrupted, normalized.failureReason)
+        assertNull(normalized.error)
+    }
+
+    @Test fun legacyInterruptedFailureMigratesToStructuredReason() {
+        val restored = BrowserDownload(
+            id = "legacy",
+            name = "legacy.zip",
+            sourceUrl = "https://example.com",
+            mime = "application/zip",
+            status = DownloadStatus.Failed,
+            startedAt = 10L,
+            finishedAt = 20L,
+            error = "Загрузка была прервана",
+        )
+
+        val normalized = normalizeRestoredDownload(restored, now = 42L)
+
+        assertEquals(DownloadFailureReason.Interrupted, normalized.failureReason)
+        assertNull(normalized.error)
+        assertTrue(
+            shouldPersistRestoredDownloadMerge(
+                live = emptyList(),
+                rawRestored = listOf(restored),
+                normalizedRestored = listOf(normalized),
+                discardRestoredHistory = false,
+            ),
+        )
     }
 
     @Test fun liveDownloadWinsWhenRestoreCompletesLater() {

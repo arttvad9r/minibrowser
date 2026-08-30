@@ -23,6 +23,7 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.util.UUID
 
 enum class DownloadStatus { Downloading, Completed, Failed }
+enum class DownloadFailureReason { Interrupted }
 
 data class BrowserDownload(
     val id: String,
@@ -35,7 +36,10 @@ data class BrowserDownload(
     val bytes: Long = 0L,
     val location: String? = null,
     val error: String? = null,
+    val failureReason: DownloadFailureReason? = null,
 )
+
+private const val LEGACY_INTERRUPTED_ERROR = "Загрузка была прервана"
 
 /** Keep only the origin for display; signed download URLs frequently contain credentials in query parameters. */
 internal fun downloadSourceForHistory(value: String): String = runCatching {
@@ -46,14 +50,20 @@ internal fun downloadSourceForHistory(value: String): String = runCatching {
 
 internal fun normalizeRestoredDownload(item: BrowserDownload, now: Long): BrowserDownload {
     val sanitized = item.copy(sourceUrl = downloadSourceForHistory(item.sourceUrl))
-    return if (sanitized.status == DownloadStatus.Downloading) {
-        sanitized.copy(
+    return when {
+        sanitized.status == DownloadStatus.Downloading -> sanitized.copy(
             status = DownloadStatus.Failed,
             finishedAt = now,
-            error = "Загрузка была прервана",
+            error = null,
+            failureReason = DownloadFailureReason.Interrupted,
         )
-    } else {
-        sanitized
+        sanitized.status == DownloadStatus.Failed &&
+            sanitized.failureReason == null &&
+            sanitized.error == LEGACY_INTERRUPTED_ERROR -> sanitized.copy(
+                error = null,
+                failureReason = DownloadFailureReason.Interrupted,
+            )
+        else -> sanitized
     }
 }
 
@@ -178,6 +188,7 @@ object DownloadHistory {
                 bytes = bytes,
                 location = location,
                 error = null,
+                failureReason = null,
             )
         }
     }
@@ -188,6 +199,7 @@ object DownloadHistory {
                 status = DownloadStatus.Failed,
                 finishedAt = System.currentTimeMillis(),
                 error = error,
+                failureReason = null,
             )
         }
     }
@@ -227,6 +239,7 @@ object DownloadHistory {
                     put("bytes", item.bytes)
                     item.location?.let { put("location", it) }
                     item.error?.let { put("error", it) }
+                    item.failureReason?.let { put("failureReason", it.name) }
                 },
             )
         }
@@ -253,6 +266,11 @@ object DownloadHistory {
                             bytes = o.optLong("bytes"),
                             location = o.optString("location").takeIf { it.isNotBlank() },
                             error = o.optString("error").takeIf { it.isNotBlank() },
+                            failureReason = o.optString("failureReason")
+                                .takeIf { it.isNotBlank() }
+                                ?.let { value ->
+                                    runCatching { DownloadFailureReason.valueOf(value) }.getOrNull()
+                                },
                         ),
                     )
                 }
