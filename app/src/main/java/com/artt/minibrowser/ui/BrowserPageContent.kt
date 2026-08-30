@@ -1,0 +1,165 @@
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+)
+
+package com.artt.minibrowser.ui
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import com.artt.minibrowser.SmoothPageProgress
+import com.artt.minibrowser.data.Suggestion
+import com.artt.minibrowser.engine.ExtensionLoader
+import com.artt.minibrowser.engine.SearchEngine
+import com.artt.minibrowser.engine.Tab
+import java.io.File
+
+internal data class BrowserPageUiState(
+    val tabs: List<Tab>,
+    val currentId: Long?,
+    val currentTab: Tab?,
+    val searchEngine: SearchEngine,
+    val bookmarked: Boolean,
+    val suggestions: List<Suggestion>,
+    val adblockStatus: ExtensionLoader.Status?,
+    val adblockEnabled: Boolean,
+    val showFind: Boolean,
+    val showSwitcher: Boolean,
+    val showSiteInfo: Boolean,
+    val showStart: Boolean,
+    val inFullscreen: Boolean,
+)
+
+internal data class BrowserPageActions(
+    val onSuggestionQueryChanged: (String?) -> Unit,
+    val onNavigate: (String) -> Unit,
+    val onExternal: (String) -> Unit,
+    val onBack: () -> Unit,
+    val onForward: () -> Unit,
+    val onReload: () -> Unit,
+    val onSiteInfo: () -> Unit,
+    val onSwitcher: () -> Unit,
+    val onNewTab: () -> Unit,
+    val onNewPrivateTab: () -> Unit,
+    val onFind: () -> Unit,
+    val onCloseFind: () -> Unit,
+    val onToggleBookmark: () -> Unit,
+    val onBookmarks: () -> Unit,
+    val onHistory: () -> Unit,
+    val onShare: () -> Unit,
+    val onSettings: () -> Unit,
+    val onToggleAdblock: (Boolean) -> Unit,
+    val onRetryAdblock: () -> Unit,
+    val onTranslate: () -> Unit,
+    val onSelectTab: (Long) -> Unit,
+    val onCloseTab: (Long) -> Unit,
+    val onNewSwitcherTab: () -> Unit,
+    val onDismissSwitcher: () -> Unit,
+    val onDismissSiteInfo: () -> Unit,
+)
+
+/** Browser-page renderer. It receives only display state, UI actions and a start-page slot. */
+@Composable
+internal fun BrowserPageContent(
+    state: BrowserPageUiState,
+    actions: BrowserPageActions,
+    iconsDir: File,
+    startPageContent: @Composable () -> Unit,
+) {
+    val currentTab = state.currentTab
+    val currentSession = currentTab?.session
+    val omniboxFocus = remember { FocusRequester() }
+    val horizontalSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+    val topSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top)
+    val bottomSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
+
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(horizontalSafeInsets),
+        ) {
+            if (!state.inFullscreen) {
+                Box(Modifier.windowInsetsPadding(topSafeInsets)) {
+                    TopBar(
+                        currentTab,
+                        engine = state.searchEngine,
+                        tabCount = state.tabs.size,
+                        bookmarked = state.bookmarked,
+                        iconsDir = iconsDir,
+                        omniboxFocus = omniboxFocus,
+                        suggestions = state.suggestions,
+                        onSuggestionQueryChanged = actions.onSuggestionQueryChanged,
+                        onNavigate = actions.onNavigate,
+                        onExternal = actions.onExternal,
+                        onBack = actions.onBack,
+                        onForward = actions.onForward,
+                        onReload = actions.onReload,
+                        onSiteInfo = actions.onSiteInfo,
+                        onSwitcher = actions.onSwitcher,
+                        onNewTab = actions.onNewTab,
+                        onNewPrivateTab = actions.onNewPrivateTab,
+                        onFind = actions.onFind,
+                        onToggleBookmark = actions.onToggleBookmark,
+                        onBookmarks = actions.onBookmarks,
+                        onHistory = actions.onHistory,
+                        onShare = actions.onShare,
+                        onSettings = actions.onSettings,
+                        onToggleAdblock = actions.onToggleAdblock,
+                        onRetryAdblock = actions.onRetryAdblock,
+                        adblockStatus = state.adblockStatus,
+                        onTranslate = actions.onTranslate,
+                    )
+                }
+            }
+            if (state.showFind && currentSession != null && !state.inFullscreen) {
+                key(currentTab.id) {
+                    FindBar(currentSession, actions.onCloseFind)
+                }
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .windowInsetsPadding(bottomSafeInsets),
+            ) {
+                GeckoContent(currentTab, Modifier.fillMaxSize())
+                SmoothPageProgress(currentTab)
+                if (state.showStart) {
+                    startPageContent()
+                }
+                if (!state.showStart && currentTab?.loadError != null) {
+                    ErrorOverlay(currentTab.loadError.orEmpty(), actions.onReload)
+                }
+            }
+        }
+        if (state.showSwitcher) {
+            BrowserTabSwitcher(
+                state.tabs,
+                state.currentId,
+                iconsDir,
+                onSelect = actions.onSelectTab,
+                onClose = actions.onCloseTab,
+                onNew = actions.onNewSwitcherTab,
+                onDismiss = actions.onDismissSwitcher,
+            )
+        }
+        if (state.showSiteInfo && currentTab != null) {
+            SiteInfoSheet(
+                currentTab,
+                state.adblockEnabled,
+                actions.onDismissSiteInfo,
+            )
+        }
+    }
+}
