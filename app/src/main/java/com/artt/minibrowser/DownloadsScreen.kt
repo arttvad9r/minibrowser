@@ -49,8 +49,8 @@ import com.artt.minibrowser.browser.DownloadsUiState
 import com.artt.minibrowser.browser.DownloadsViewModel
 import com.artt.minibrowser.data.BrowserDownload
 import com.artt.minibrowser.data.DownloadFailureReason
-import com.artt.minibrowser.data.DownloadHistory
 import com.artt.minibrowser.data.DownloadStatus
+import com.artt.minibrowser.data.DownloadsRepository
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BrowserMotionScreen
 import com.artt.minibrowser.ui.CenteredSinglePane
@@ -66,14 +66,8 @@ import java.util.Date
 internal fun MotionDownloadsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val applicationContext = context.applicationContext
-    val factory = remember(applicationContext) {
-        DownloadsViewModel.factory(
-            downloads = DownloadHistory.items,
-            restoreCompleted = DownloadHistory.restoreCompleted,
-            initialize = { DownloadHistory.init(applicationContext) },
-            clearHistory = DownloadHistory::clear,
-        )
-    }
+    val repository = remember(applicationContext) { DownloadsRepository(applicationContext) }
+    val factory = remember(repository) { DownloadsViewModel.factory(repository) }
     val downloadsViewModel: DownloadsViewModel = viewModel(factory = factory)
     val state by downloadsViewModel.uiState.collectAsStateWithLifecycle()
 
