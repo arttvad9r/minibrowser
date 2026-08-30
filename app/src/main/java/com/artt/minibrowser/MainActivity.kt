@@ -34,6 +34,7 @@ import com.artt.minibrowser.browser.BrowserActivityRequestController
 import com.artt.minibrowser.browser.BrowserDataViewModel
 import com.artt.minibrowser.browser.BrowserIntentController
 import com.artt.minibrowser.browser.BrowserRootEffects
+import com.artt.minibrowser.browser.BrowserTabLifecycleController
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.BrowserWindowController
@@ -66,6 +67,7 @@ class MainActivity : ComponentActivity() {
     private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private lateinit var tabManager: TabManager
+    private lateinit var tabLifecycle: BrowserTabLifecycleController
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
         ViewModelProvider(
@@ -130,6 +132,7 @@ class MainActivity : ComponentActivity() {
             permissionRequester = activityRequests::requestPermissions,
             filePicker = activityRequests::pickFiles,
         )
+        tabLifecycle = BrowserTabLifecycleController(this, tabManager)
         val iconsDir = File(filesDir, "icons")
 
         setContent {
@@ -357,24 +360,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         externalNavigation.accept(intent?.data?.toString())
-    }
-
-    override fun onPause() {
-        super.onPause()
-        if (::tabManager.isInitialized) {
-            tabManager.setAppVisible(false)
-            tabManager.persist()
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        if (::tabManager.isInitialized) tabManager.trimForBackground()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (::tabManager.isInitialized) tabManager.setAppVisible(true)
     }
 
     override fun onDestroy() {
