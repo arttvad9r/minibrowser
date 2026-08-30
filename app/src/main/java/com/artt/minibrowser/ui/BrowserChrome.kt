@@ -27,9 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -45,7 +42,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,9 +71,6 @@ import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.Tab
-import com.artt.minibrowser.engine.formatFindCounter
-import kotlinx.coroutines.delay
-import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import java.io.File
 
@@ -567,79 +560,6 @@ private fun MenuDivider() {
     Spacer(Modifier.height(4.dp))
     androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     Spacer(Modifier.height(4.dp))
-}
-
-@Composable
-internal fun FindBar(session: GeckoSession, onClose: () -> Unit) {
-    var q by remember { mutableStateOf("") }
-    var current by remember { mutableIntStateOf(0) }
-    var total by remember { mutableIntStateOf(0) }
-    val doFind: (Boolean) -> Unit = { backward ->
-        if (q.isBlank()) {
-            session.finder.clear()
-            total = 0
-            current = 0
-        } else {
-            session.finder.find(
-                q,
-                if (backward) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD,
-            ).accept { result ->
-                total = result?.total ?: 0
-                current = result?.current ?: 0
-            }
-        }
-    }
-    LaunchedEffect(q, session) {
-        if (q.isNotBlank()) delay(70)
-        doFind(false)
-    }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            Modifier
-                .weight(1f)
-                .clip(Radius.field)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BrowserTextField(
-                q,
-                { q = it },
-                Modifier.weight(1f),
-                placeholder = stringResource(R.string.find_on_page),
-            )
-            if (total > 0) {
-                Text(
-                    formatFindCounter(current, total),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        IconBtn(Icons.Filled.KeyboardArrowUp, stringResource(R.string.previous_match_content_description)) {
-            doFind(true)
-        }
-        IconBtn(Icons.Filled.KeyboardArrowDown, stringResource(R.string.next_match_content_description)) {
-            doFind(false)
-        }
-        IconBtn(Icons.Filled.Close, stringResource(R.string.close_find_content_description)) {
-            session.finder.clear()
-            onClose()
-        }
-    }
-}
-
-@Composable
-private fun IconBtn(icon: ImageVector, desc: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = desc }) {
-        Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
 }
 
 @Composable
