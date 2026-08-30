@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="page_error_security">Проблема безопасности соединения</string>
+    <string name="page_error_network">Проверьте интернет-соединение</string>
+    <string name="page_error_generic">Не удалось открыть страницу</string>
+</resources>
