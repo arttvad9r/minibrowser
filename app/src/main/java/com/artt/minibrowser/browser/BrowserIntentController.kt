@@ -13,25 +13,31 @@ internal class BrowserIntentController(
 ) {
     fun openExternalUri(value: String) {
         val external = createSafeExternalIntent(value)
-        if (external != null && external.resolveActivity(activity.packageManager) != null) {
-            activity.startActivity(
-                Intent.createChooser(external, activity.getString(R.string.external_chooser_title)),
-            )
-            return
-        }
+        val launched = external != null &&
+            external.resolveActivity(activity.packageManager) != null &&
+            runCatching {
+                activity.startActivity(
+                    Intent.createChooser(external, activity.getString(R.string.external_chooser_title)),
+                )
+                true
+            }.getOrDefault(false)
+        if (launched) return
+
         safeExternalFallbackUrl(value)?.let(loadFallback)
     }
 
     fun shareUrl(value: String?) {
         val url = value ?: return
-        activity.startActivity(
-            Intent.createChooser(
-                Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, url)
-                },
-                activity.getString(R.string.share_chooser_title),
-            ),
-        )
+        runCatching {
+            activity.startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, url)
+                    },
+                    activity.getString(R.string.share_chooser_title),
+                ),
+            )
+        }
     }
 }
