@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -373,6 +374,7 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
 private fun Field(label: String, value: String, onChange: (String) -> Unit, placeholder: String) {
     Text(
         label,
+        modifier = Modifier.clearAndSetSemantics { },
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -380,9 +382,11 @@ private fun Field(label: String, value: String, onChange: (String) -> Unit, plac
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { contentDescription = label },
         singleLine = true,
-        placeholder = { Text(placeholder) },
+        placeholder = { Text(placeholder, Modifier.clearAndSetSemantics { }) },
         shape = Radius.button,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.outline,
