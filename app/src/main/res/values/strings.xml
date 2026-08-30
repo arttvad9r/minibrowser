@@ -6,6 +6,11 @@
     <string name="bookmarks_title">Закладки</string>
     <string name="action_all">Все</string>
     <string name="action_add">Добавить</string>
+    <string name="action_back">Назад</string>
+    <string name="action_clear">Очистить</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_retry">Повторить</string>
+    <string name="action_hide">Скрыть</string>
     <string name="add_bookmark_content_description">Добавить закладку</string>
     <string name="recent_title">Недавние</string>
     <string name="refresh_recent_content_description">Обновить недавние</string>
@@ -15,7 +20,6 @@
     <string name="bookmark_title_placeholder" translatable="false">YouTube</string>
     <string name="field_address">Адрес</string>
     <string name="bookmark_url_placeholder" translatable="false">youtube.com</string>
-    <string name="action_cancel">Отмена</string>
 
     <string name="start_page_load_error">Не удалось загрузить стартовую страницу</string>
     <string name="start_page_refresh_error">Не удалось обновить стартовую страницу</string>
@@ -23,6 +27,23 @@
     <string name="bookmark_add_error">Не удалось добавить закладку</string>
     <string name="bookmark_rename_error">Не удалось переименовать закладку</string>
     <string name="bookmark_delete_error">Не удалось удалить закладку</string>
-    <string name="action_retry">Повторить</string>
-    <string name="action_hide">Скрыть</string>
+
+    <string name="history_title">История</string>
+    <string name="history_empty_title">История пуста</string>
+    <string name="history_empty_subtitle">Посещённые страницы появятся здесь.</string>
+    <string name="history_load_error">Не удалось загрузить историю</string>
+    <string name="history_clear_error">Не удалось очистить историю</string>
+    <string name="retry_hint">Повторите попытку.</string>
+    <string name="history_today">Сегодня</string>
+    <string name="history_yesterday">Вчера</string>
+    <string name="history_earlier">Ранее</string>
+    <string name="history_entry_subtitle">%1$s · %2$s</string>
+    <string name="history_clear_dialog_title">Очистить историю?</string>
+    <string name="history_clear_dialog_message">Список посещённых страниц будет удалён. Это действие нельзя отменить.</string>
+
+    <string name="bookmarks_load_error">Не удалось загрузить закладки</string>
+    <string name="bookmarks_refresh_error">Не удалось обновить закладки</string>
+    <string name="bookmarks_empty_title">Закладок пока нет</string>
+    <string name="bookmarks_empty_subtitle">Сохранённые страницы появятся здесь.</string>
+    <string name="actions_content_description">Действия</string>
 </resources>
