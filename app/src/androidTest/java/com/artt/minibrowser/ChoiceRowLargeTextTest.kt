@@ -36,6 +36,7 @@ class ChoiceRowLargeTextTest {
                             title = "Очень длинный вариант выбора",
                             selected = false,
                             onClick = {},
+                            modifier = Modifier.testTag("choice-row"),
                         )
                     }
                 }
@@ -44,6 +45,6 @@ class ChoiceRowLargeTextTest {
 
         composeRule
             .onNodeWithTag("choice-row", useUnmergedTree = true)
-            .assertHeightIsAtLeast(48.dp)
+            .assertHeightIsAtLeast(49.dp)
     }
 }
