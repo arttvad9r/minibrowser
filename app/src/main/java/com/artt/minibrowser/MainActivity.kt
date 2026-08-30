@@ -46,10 +46,7 @@ class MainActivity : ComponentActivity() {
             clearHistory = { historyRepo.clear() },
             clearBookmarks = { bookmarksRepo.clearAll() },
             clearFaviconCaches = { FaviconRepository.clear(iconsDir) },
-            clearWebData = {
-                tabManager.clearWebData()
-                Unit
-            },
+            clearWebData = { tabManager.clearWebData() },
         )
     }
     private val browserDataViewModel by lazy {
