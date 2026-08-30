@@ -46,6 +46,7 @@ private inline fun <T> tracedTabStoreLoad(block: () -> T): T {
 
 object TabStore {
     private const val FILE_NAME = "open_tabs.json"
+    private const val CORRUPT_FILE_NAME = "$FILE_NAME.corrupt"
     private val json = Json { ignoreUnknownKeys = true }
     private val writeLock = Any()
     private val newestRevisionByTarget = mutableMapOf<String, Long>()
@@ -123,9 +124,17 @@ object TabStore {
                     tabs = legacy.mapIndexed { index, url -> PersistedTab(index.toLong() + 1, url) },
                 )
             }.getOrElse {
-                target.renameTo(File(dir, "$FILE_NAME.corrupt-${System.currentTimeMillis()}"))
+                quarantineCorruptStore(target, File(dir, CORRUPT_FILE_NAME))
                 PersistedBrowserState()
             }
         }
+    }
+
+    private fun quarantineCorruptStore(target: File, backup: File) {
+        val moved = runCatching {
+            Files.move(target.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            true
+        }.getOrDefault(false)
+        if (!moved) target.delete()
     }
 }

@@ -84,11 +84,20 @@ class TabStoreTest {
         dir.deleteRecursively()
     }
 
-    @Test fun corruptedStateFallsBackToEmpty() {
+    @Test fun corruptedStateFallsBackToEmptyAndKeepsOneBoundedBackup() {
         val dir = File(System.getProperty("java.io.tmpdir"), "tabs-corrupt-${System.nanoTime()}").apply { mkdirs() }
-        File(dir, "open_tabs.json").writeText("not-json")
+        val target = File(dir, "open_tabs.json")
+        val backup = File(dir, "open_tabs.json.corrupt")
+
+        target.writeText("first-corrupt")
         assertEquals(emptyList(), TabStore.loadState(dir).tabs)
-        assertTrue(dir.listFiles()?.any { it.name.startsWith("open_tabs.json.corrupt-") } == true)
+        assertEquals("first-corrupt", backup.readText())
+        assertFalse(target.exists())
+
+        target.writeText("second-corrupt")
+        assertEquals(emptyList(), TabStore.loadState(dir).tabs)
+        assertEquals("second-corrupt", backup.readText())
+        assertEquals(1, dir.listFiles()?.count { it.name.startsWith("open_tabs.json.corrupt") })
         dir.deleteRecursively()
     }
 
