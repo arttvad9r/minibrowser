@@ -7,7 +7,7 @@ internal enum class BrowserSecurityUiState {
     Exception,
 }
 
-internal enum class BrowserExtensionUiState {
+enum class BrowserExtensionUiState {
     Installing,
     Error,
     Enabled,
