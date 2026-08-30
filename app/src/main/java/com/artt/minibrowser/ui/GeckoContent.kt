@@ -35,6 +35,11 @@ internal fun GeckoContent(
                 pageSettled = pageSettled,
             )
         },
+        onRelease = { view ->
+            // The view only borrows the session. TabManager remains responsible for persistence and
+            // closing it; releasing here prevents a disposed AndroidView from retaining the session.
+            view.releaseSession()
+        },
         modifier = modifier,
     )
 }
