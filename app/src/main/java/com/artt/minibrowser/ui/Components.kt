@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -63,6 +64,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.engine.FaviconFetcher
 import com.artt.minibrowser.engine.decodeSampledFavicon
@@ -463,7 +465,7 @@ fun BookmarkActionsSheet(
     BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
         Column {
             if (renaming) {
-                Text("Переименовать", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.action_rename), style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
@@ -472,15 +474,34 @@ fun BookmarkActionsSheet(
                             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(14.dp))
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                     ) {
-                        BrowserTextField(text, { text = it }, Modifier.fillMaxWidth(), placeholder = "Название")
+                        BrowserTextField(
+                            text,
+                            { text = it },
+                            Modifier.fillMaxWidth(),
+                            placeholder = stringResource(R.string.field_title),
+                        )
                     }
                     Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { onRename(text.trim().ifBlank { bookmark.title }) }) { Text("ОК") }
+                    TextButton(onClick = { onRename(text.trim().ifBlank { bookmark.title }) }) {
+                        Text(stringResource(R.string.action_ok))
+                    }
                 }
             } else {
-                SheetRow(Icons.Filled.Search, "Открыть", onClick = { dismissThen(onOpen) })
-                SheetRow(Icons.Filled.Edit, "Переименовать", onClick = { renaming = true })
-                SheetRow(Icons.Filled.Delete, "Удалить", onClick = { dismissThen(onDelete) })
+                SheetRow(
+                    Icons.Filled.Search,
+                    stringResource(R.string.action_open),
+                    onClick = { dismissThen(onOpen) },
+                )
+                SheetRow(
+                    Icons.Filled.Edit,
+                    stringResource(R.string.action_rename),
+                    onClick = { renaming = true },
+                )
+                SheetRow(
+                    Icons.Filled.Delete,
+                    stringResource(R.string.action_delete),
+                    onClick = { dismissThen(onDelete) },
+                )
             }
         }
     }
