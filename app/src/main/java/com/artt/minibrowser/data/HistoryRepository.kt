@@ -1,8 +1,7 @@
 package com.artt.minibrowser.data
 
-import com.artt.minibrowser.net.isValidWebUri
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
-import java.net.URI
+import com.artt.minibrowser.net.webUriHost
 
 private val HISTORY_WHITESPACE = Regex("\\s+")
 
@@ -43,10 +42,7 @@ internal fun webHistoryEntries(entries: List<HistoryEntry>): List<HistoryEntry> 
 }
 
 private fun historyHost(url: String): String =
-    runCatching { URI(url).host.orEmpty() }
-        .getOrDefault("")
-        .lowercase()
-        .removePrefix("www.")
+    webUriHost(url).orEmpty().lowercase().removePrefix("www.")
 
 private fun historyDisplayKey(entry: HistoryEntry): String {
     val title = entry.title
