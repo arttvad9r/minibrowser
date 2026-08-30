@@ -126,6 +126,30 @@ class TabStoreTest {
         dir.deleteRecursively()
     }
 
+    @Test fun filtersNonPositiveAndDuplicatePersistedIds() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "tabs-ids-${System.nanoTime()}")
+        TabStore.saveState(
+            dir,
+            PersistedBrowserState(
+                selectedId = 2,
+                tabs = listOf(
+                    PersistedTab(0, "https://zero.example", "Zero"),
+                    PersistedTab(2, "https://first.example", "First"),
+                    PersistedTab(2, "https://duplicate.example", "Duplicate"),
+                    PersistedTab(-3, "https://negative.example", "Negative"),
+                    PersistedTab(4, "https://four.example", "Four"),
+                ),
+            ),
+        )
+
+        val state = TabStore.loadState(dir)
+
+        assertEquals(2L, state.selectedId)
+        assertEquals(listOf(2L, 4L), state.tabs.map { it.id })
+        assertEquals(listOf("First", "Four"), state.tabs.map { it.title })
+        dir.deleteRecursively()
+    }
+
     @Test fun readsPreviousUrlOnlyFormat() {
         val dir = File(System.getProperty("java.io.tmpdir"), "tabs-legacy-${System.nanoTime()}").apply { mkdirs() }
         File(dir, "open_tabs.json").writeText("[\"https://legacy.example\"]")

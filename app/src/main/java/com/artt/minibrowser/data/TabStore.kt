@@ -46,13 +46,15 @@ private inline fun <T> tracedTabStoreLoad(block: () -> T): T {
 }
 
 internal fun sanitizePersistedBrowserState(state: PersistedBrowserState): PersistedBrowserState {
+    val seenIds = mutableSetOf<Long>()
     val tabs = state.tabs.mapNotNull { tab ->
-        when {
+        val normalized = when {
             tab.url.isEmpty() -> tab
             tab.url.equals("about:blank", ignoreCase = true) -> tab.copy(url = "about:blank")
             isValidWebUri(tab.url) -> tab
             else -> null
-        }
+        } ?: return@mapNotNull null
+        normalized.takeIf { it.id > 0L && seenIds.add(it.id) }
     }
     val selectedId = state.selectedId?.takeIf { selected -> tabs.any { it.id == selected } }
     return if (tabs == state.tabs && selectedId == state.selectedId) {
