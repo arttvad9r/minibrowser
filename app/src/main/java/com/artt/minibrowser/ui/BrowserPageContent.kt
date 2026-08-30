@@ -17,14 +17,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import com.artt.minibrowser.data.Suggestion
 import java.io.File
+
+internal data class BrowserSuggestionUiState(
+    val label: String,
+    val url: String,
+)
 
 internal data class BrowserPageUiState(
     val chrome: BrowserChromeUiState,
     val tabCount: Int,
     val bookmarked: Boolean,
-    val suggestions: List<Suggestion>,
+    val suggestions: List<BrowserSuggestionUiState>,
     val adblockStatus: BrowserExtensionUiState,
     val showFind: Boolean,
     val showStart: Boolean,
