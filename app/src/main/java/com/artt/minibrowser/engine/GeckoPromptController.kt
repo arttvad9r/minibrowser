@@ -77,6 +77,26 @@ class GeckoPromptController(
 
     private fun isPromptOpen(prompt: GeckoSession.PromptDelegate.BasePrompt): Boolean = !prompt.isComplete
 
+    private fun showPromptDialog(
+        prompt: GeckoSession.PromptDelegate.BasePrompt,
+        guard: PromptGuard<GeckoSession.PromptDelegate.PromptResponse>,
+        dialog: Dialog,
+    ) {
+        if (!isPromptOpen(prompt)) return
+        if (activity.isFinishing || activity.isDestroyed) {
+            guard.complete { prompt.dismiss() }
+            return
+        }
+        runCatching {
+            bindPromptDialog(prompt, dialog)
+            dialog.show()
+        }.onFailure {
+            // Window state can change between the lifecycle check and Dialog.show(). Never leave
+            // Gecko waiting on a prompt whose Activity can no longer host its native UI.
+            guard.complete { prompt.dismiss() }
+        }
+    }
+
     override fun onAlertPrompt(
         session: GeckoSession,
         prompt: GeckoSession.PromptDelegate.AlertPrompt,
@@ -107,8 +127,7 @@ class GeckoPromptController(
                 }
                 .setOnCancelListener { guard.complete { prompt.dismiss() } }
                 .create()
-            bindPromptDialog(prompt, dialog)
-            dialog.show()
+            showPromptDialog(prompt, guard, dialog)
         }
         return result
     }
@@ -153,8 +172,7 @@ class GeckoPromptController(
                 }
                 .setOnCancelListener { guard.complete { prompt.dismiss() } }
                 .create()
-            bindPromptDialog(prompt, dialog)
-            dialog.show()
+            showPromptDialog(prompt, guard, dialog)
         }
         return result
     }
@@ -185,8 +203,7 @@ class GeckoPromptController(
                 }
             }
             val dialog = builder.setOnCancelListener { guard.complete { prompt.dismiss() } }.create()
-            bindPromptDialog(prompt, dialog)
-            dialog.show()
+            showPromptDialog(prompt, guard, dialog)
         }
         return result
     }
@@ -315,7 +332,6 @@ class GeckoPromptController(
                 .setPositiveButton(activity.getString(R.string.action_ok), null)
                 .setOnCancelListener { guard.complete { prompt.dismiss() } }
                 .create()
-            bindPromptDialog(prompt, dialog)
             dialog.setOnShowListener {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                     val value = input.text.toString()
@@ -327,7 +343,7 @@ class GeckoPromptController(
                     }
                 }
             }
-            dialog.show()
+            showPromptDialog(prompt, guard, dialog)
         }
         return result
     }
@@ -379,8 +395,7 @@ class GeckoPromptController(
             dialog.datePicker.maxDate = it.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
         dialog.setOnCancelListener { guard.complete { prompt.dismiss() } }
-        bindPromptDialog(prompt, dialog)
-        dialog.show()
+        showPromptDialog(prompt, guard, dialog)
     }
 
     private fun parsePromptDate(type: Int, value: String?): LocalDate? = when (type) {
@@ -430,7 +445,6 @@ class GeckoPromptController(
             .setPositiveButton(activity.getString(R.string.action_ok), null)
             .setOnCancelListener { guard.complete { prompt.dismiss() } }
             .create()
-        bindPromptDialog(prompt, dialog)
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val time = LocalTime.of(picker.hour, picker.minute)
@@ -457,7 +471,7 @@ class GeckoPromptController(
                 }
             }
         }
-        dialog.show()
+        showPromptDialog(prompt, guard, dialog)
     }
 
     override fun onPopupPrompt(
@@ -490,8 +504,7 @@ class GeckoPromptController(
                 }
                 .setOnCancelListener { guard.complete { prompt.confirm(AllowOrDeny.DENY) } }
                 .create()
-            bindPromptDialog(prompt, dialog)
-            dialog.show()
+            showPromptDialog(prompt, guard, dialog)
         }
         return result
     }
@@ -671,8 +684,7 @@ class GeckoPromptController(
                 .setPositiveButton(activity.getString(R.string.action_ok)) { _, _ -> guard.complete(positive) }
                 .setOnCancelListener { guard.complete(negative) }
                 .create()
-            bindPromptDialog(prompt, dialog)
-            dialog.show()
+            showPromptDialog(prompt, guard, dialog)
         }
         return result
     }
