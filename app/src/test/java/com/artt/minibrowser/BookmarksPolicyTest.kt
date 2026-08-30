@@ -42,16 +42,17 @@ class BookmarksPolicyTest {
         )
     }
 
-    @Test fun credentialVariantDoesNotDuplicateExistingSafeBookmark() {
-        val safe = Bookmark("https://example.com/private", "Safe", "example.com", 1)
+    @Test fun canonicalBookmarkWinsOverCredentialVariantInEitherOrder() {
+        val safe = Bookmark("https://example.com/private", "Safe", "example.com", 2)
         val credential = Bookmark(
             "https://user:secret@example.com/private",
             "Credential copy",
             "example.com",
-            2,
+            1,
         )
 
         assertEquals(listOf(safe), webBookmarks(listOf(safe, credential)))
+        assertEquals(listOf(safe), webBookmarks(listOf(credential, safe)))
     }
 
     @Test fun omniboxMergeNeverPublishesUnsafeStoredUrls() {
