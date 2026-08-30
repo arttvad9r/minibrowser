@@ -1,6 +1,6 @@
 package com.artt.minibrowser.browser
 
-enum class BrowserScreen { Browser, Settings, History, Bookmarks }
+enum class BrowserScreen { Browser, Settings, Downloads, History, Bookmarks }
 enum class BrowserOverlay { Switcher, Find, SiteInfo }
 
 data class BrowserUiState(
