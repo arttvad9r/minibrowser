@@ -42,6 +42,18 @@ class BookmarksPolicyTest {
         assertNull(bookmarkForPersistence("javascript:alert(1)", "Script", position = 4))
     }
 
+    @Test fun unicodeBookmarkUsesValidatedHostForFallbackTitle() {
+        assertEquals(
+            Bookmark(
+                url = "https://пример.рф/страница",
+                title = "пример.рф",
+                host = "пример.рф",
+                position = 5,
+            ),
+            bookmarkForPersistence("https://пример.рф/страница", "", position = 5),
+        )
+    }
+
     @Test fun credentialLegacyBookmarkIsSanitizedBeforeUi() {
         val rawUrl = "https://user:secret@example.com/private?q=1#section"
         val bookmark = Bookmark(rawUrl, rawUrl, "example.com", 7)
