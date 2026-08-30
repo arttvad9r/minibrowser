@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -33,6 +34,8 @@ import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.StorageController
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 internal const val TAB_RESTORE_MATERIALIZE_TRACE = "TabManager.restoreTabs"
 internal const val TAB_RESTORE_OPEN_SELECTED_TRACE = "TabManager.openSelected"
@@ -508,8 +511,8 @@ class TabManager(
         tab.restoreUrlOnOpen = true
     }
 
-    suspend fun clearWebData(): GeckoResult<Void> {
-        if (closed) return GeckoResult.fromValue<Void>(null)
+    suspend fun clearWebData() {
+        if (closed) return
         val clearRequest = clearGeneration.incrementAndGet()
         _tabs.value.forEach { tab ->
             runtime.webExtensionController.setTabActive(tab.session, false)
@@ -538,13 +541,20 @@ class TabManager(
                 newTab(null)
             }
         }
-        return runtime.storageController.clearData(StorageController.ClearFlags.ALL).accept(
-            { restoreBlankTab() },
-            { error ->
-                Log.e("MinibrowserTabs", "Failed to clear web data", error)
-                restoreBlankTab()
-            },
-        )
+        val clearResult = runtime.storageController.clearData(StorageController.ClearFlags.ALL)
+        suspendCancellableCoroutine<Unit> { continuation ->
+            clearResult.accept(
+                {
+                    restoreBlankTab()
+                    if (continuation.isActive) continuation.resume(Unit)
+                },
+                { error ->
+                    Log.e("MinibrowserTabs", "Failed to clear web data", error)
+                    restoreBlankTab()
+                    if (continuation.isActive) continuation.resumeWithException(error)
+                },
+            )
+        }
     }
 
     fun persist() {
