@@ -26,7 +26,7 @@ class BrowserDataViewModelTest {
 
         viewModel.clear(withBookmarks = false)
 
-        assertEquals(listOf("previews", "history", "favicons", "web"), events)
+        assertEquals(listOf("previews", "web", "history", "favicons"), events)
         assertEquals(BrowserDataUiState(), viewModel.uiState.value)
     }
 
@@ -43,7 +43,7 @@ class BrowserDataViewModelTest {
 
         viewModel.clear(withBookmarks = true)
 
-        assertEquals(listOf("previews", "history", "bookmarks", "favicons", "web"), events)
+        assertEquals(listOf("previews", "web", "history", "bookmarks", "favicons"), events)
         assertEquals(BrowserDataUiState(), viewModel.uiState.value)
     }
 
@@ -83,6 +83,26 @@ class BrowserDataViewModelTest {
     }
 
     @Test
+    fun webDataFailureStopsPersistentStoreCleanup() {
+        val events = mutableListOf<String>()
+        val viewModel = browserDataViewModel(
+            clearTabPreviews = { events += "previews" },
+            clearHistory = { events += "history" },
+            clearBookmarks = { events += "bookmarks" },
+            clearFaviconCaches = { events += "favicons" },
+            clearWebData = {
+                events += "web"
+                error("boom")
+            },
+        )
+
+        viewModel.clear(withBookmarks = true)
+
+        assertEquals(listOf("previews", "web"), events)
+        assertEquals(BrowserDataStatus.Failed, viewModel.uiState.value.status)
+    }
+
+    @Test
     fun failureStopsRemainingOperationsAndPublishesExclusiveErrorState() {
         val events = mutableListOf<String>()
         val viewModel = browserDataViewModel(
@@ -98,7 +118,7 @@ class BrowserDataViewModelTest {
 
         viewModel.clear(withBookmarks = true)
 
-        assertEquals(listOf("previews", "history"), events)
+        assertEquals(listOf("previews", "web", "history"), events)
         assertEquals(BrowserDataStatus.Failed, viewModel.uiState.value.status)
         assertTrue(viewModel.uiState.value.clearFailed)
         assertFalse(viewModel.uiState.value.isClearing)
