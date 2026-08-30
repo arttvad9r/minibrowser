@@ -2,6 +2,7 @@ package com.artt.minibrowser.data
 
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import java.net.URI
+import kotlinx.coroutines.CancellationException
 
 private fun sanitizedBookmark(entry: Bookmark): Bookmark? {
     val safeUrl = sanitizeWebUriForPersistence(entry.url) ?: return null
@@ -44,7 +45,16 @@ class BookmarksRepository(private val dao: AppDao) {
     suspend fun all(): List<Bookmark> {
         val stored = dao.bookmarks()
         val safe = webBookmarks(stored)
-        if (safe !== stored) migrateLegacyRows(stored)
+        if (safe !== stored) {
+            try {
+                migrateLegacyRows(stored)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                // The sanitized read result is already safe to display. Keep the screen usable and
+                // retry storage cleanup on the next load instead of surfacing a migration-only error.
+            }
+        }
         return safe
     }
 
