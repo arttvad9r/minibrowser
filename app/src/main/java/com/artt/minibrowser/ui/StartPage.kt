@@ -195,6 +195,10 @@ private fun BookmarkRow(
             val bookmarkDescription = bm.title.ifBlank {
                 bm.host.ifBlank { hostOf(bm.url).ifBlank { bm.url } }
             }
+            val bookmarkActionsDescription = stringResource(
+                R.string.bookmark_actions_named_content_description,
+                bookmarkDescription,
+            )
             Column(Modifier.width(68.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     Modifier
@@ -204,6 +208,7 @@ private fun BookmarkRow(
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.button)
                         .softCombinedClickable(
                             onClick = { onOpen(bm.url) },
+                            onLongClickLabel = bookmarkActionsDescription,
                             onLongClick = { onLongPress(bm) },
                         )
                         .semantics { contentDescription = bookmarkDescription },

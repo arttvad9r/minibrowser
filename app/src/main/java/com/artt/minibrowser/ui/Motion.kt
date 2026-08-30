@@ -60,6 +60,7 @@ fun Modifier.softClickable(
 @Composable
 fun Modifier.softCombinedClickable(
     enabled: Boolean = true,
+    onLongClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ): Modifier {
@@ -69,6 +70,7 @@ fun Modifier.softCombinedClickable(
         indication = LocalIndication.current,
         enabled = enabled,
         role = Role.Button,
+        onLongClickLabel = onLongClickLabel,
         onLongClick = onLongClick,
         onClick = onClick,
     )

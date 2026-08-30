@@ -1,7 +1,9 @@
 package com.artt.minibrowser
 
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
@@ -10,6 +12,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -61,9 +64,16 @@ class StartPageSemanticsTest {
     }
 
     @Test
-    fun bookmarkTileHasAccessibleNameAndClickAction() {
+    fun bookmarkTileHasAccessibleNameAndLabeledActions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val title = "Example bookmark"
+        val actionsDescription = context.getString(
+            R.string.bookmark_actions_named_content_description,
+            title,
+        )
+        val hasNamedLongClick = SemanticsMatcher("long click opens named bookmark actions") { node ->
+            node.config.getOrNull(SemanticsActions.OnLongClick)?.label == actionsDescription
+        }
 
         composeRule.setContent {
             MinibrowserTheme(darkTheme = false) {
@@ -89,10 +99,16 @@ class StartPageSemanticsTest {
             }
         }
 
-        composeRule
+        val bookmarkTile = composeRule
             .onNodeWithContentDescription(title)
             .assertIsDisplayed()
             .assertHasClickAction()
+            .assert(hasNamedLongClick)
+
+        bookmarkTile.performSemanticsAction(SemanticsActions.OnLongClick)
+        composeRule
+            .onNodeWithText(context.getString(R.string.action_rename))
+            .assertIsDisplayed()
     }
 
     @Test
