@@ -4,13 +4,11 @@
 package com.artt.minibrowser
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -87,7 +85,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.artt.minibrowser.browser.ActivityRequestCoordinator
+import com.artt.minibrowser.browser.BrowserActivityRequestController
 import com.artt.minibrowser.browser.BrowserDataViewModel
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
@@ -95,7 +93,6 @@ import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.OmniboxSuggestionsViewModel
 import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.SettingsViewModel
-import com.artt.minibrowser.browser.areRequestedPermissionsSatisfied
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
@@ -176,41 +173,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val externalNavigation = NavigationController()
-    private val permissionRequests = ActivityRequestCoordinator<Boolean>()
-    private val fileRequests = ActivityRequestCoordinator<Array<Uri>>()
-    private var permissionCompletion: ((Boolean) -> Unit)? = null
-    private var pendingPermissionRequest: Set<String> = emptySet()
-    private var fileCompletion: ((Array<Uri>) -> Unit)? = null
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) { grants ->
-        val requested = pendingPermissionRequest
-        pendingPermissionRequest = emptySet()
-        val completion = permissionCompletion
-        permissionCompletion = null
-        completion?.invoke(areRequestedPermissionsSatisfied(requested, grants))
-    }
-    private val filePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments(),
-    ) { uris ->
-        val completion = fileCompletion
-        fileCompletion = null
-        completion?.invoke(uris.toTypedArray())
-    }
-    private val singleFilePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        val completion = fileCompletion
-        fileCompletion = null
-        completion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
-    }
-    private val folderPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocumentTree(),
-    ) { uri ->
-        val completion = fileCompletion
-        fileCompletion = null
-        completion?.invoke(uri?.let { arrayOf(it) } ?: emptyArray())
-    }
+    private val activityRequests = BrowserActivityRequestController(this)
 
     private fun openExternalUri(value: String) {
         val external = createSafeExternalIntent(value)
@@ -238,51 +201,8 @@ class MainActivity : ComponentActivity() {
             Engine.runtime,
             File(filesDir, "tabs"),
             this,
-            permissionRequester = { permissions, callback ->
-                permissionRequests.enqueue(
-                    start = { complete ->
-                        pendingPermissionRequest = permissions.toSet()
-                        permissionCompletion = { granted -> callback(granted); complete(granted) }
-                        permissionLauncher.launch(permissions)
-                    },
-                    cancel = { callback(false) },
-                )
-            },
-            filePicker = { type, mimeTypes, callback ->
-                runOnUiThread {
-                    fileRequests.enqueue(
-                        start = { complete ->
-                            val accepted = mimeTypes
-                                .filter { it.isNotBlank() && it.contains('/') }
-                                .distinct()
-                                .toTypedArray()
-                                .let { if (it.isEmpty()) arrayOf("*/*") else it }
-                            fileCompletion = { uris ->
-                                callback(uris)
-                                complete(uris)
-                            }
-                            runCatching {
-                                when (type) {
-                                    GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
-                                        filePickerLauncher.launch(accepted)
-                                    GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
-                                        folderPickerLauncher.launch(null)
-                                    GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE ->
-                                        singleFilePickerLauncher.launch(accepted)
-                                    else ->
-                                        singleFilePickerLauncher.launch(accepted)
-                                }
-                            }.onFailure {
-                                fileCompletion = null
-                                val none = emptyArray<Uri>()
-                                callback(none)
-                                complete(none)
-                            }
-                        },
-                        cancel = { callback(emptyArray()) },
-                    )
-                }
-            },
+            permissionRequester = activityRequests::requestPermissions,
+            filePicker = activityRequests::pickFiles,
         )
         val iconsDir = File(filesDir, "icons")
 
@@ -560,11 +480,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        permissionRequests.cancelAll()
-        fileRequests.cancelAll()
-        pendingPermissionRequest = emptySet()
-        permissionCompletion = null
-        fileCompletion = null
+        activityRequests.cancelAll()
         if (::tabManager.isInitialized) tabManager.close()
         super.onDestroy()
     }
