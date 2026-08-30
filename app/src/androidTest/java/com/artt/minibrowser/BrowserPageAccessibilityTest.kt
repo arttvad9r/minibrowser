@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.isHiddenFromAccessibility
@@ -35,6 +37,24 @@ class BrowserPageAccessibilityTest {
             .assert(!hasAnyAncestor(isHiddenFromAccessibility()))
     }
 
+    @Test
+    fun fullScreenDestinationExposesPaneTitle() {
+        val title = "History"
+
+        composeRule.setContent {
+            Box(Modifier.accessibilityPane(title)) {
+                Text("Destination", Modifier.testTag(PANE_CHILD_TAG))
+            }
+        }
+
+        composeRule.onNodeWithTag(PANE_CHILD_TAG, useUnmergedTree = true)
+            .assert(
+                hasAnyAncestor(
+                    SemanticsMatcher.expectValue(SemanticsProperties.PaneTitle, title),
+                ),
+            )
+    }
+
     private fun render(hidden: Boolean) {
         composeRule.setContent {
             Box(Modifier.hideFromAccessibilityWhen(hidden)) {
@@ -45,5 +65,6 @@ class BrowserPageAccessibilityTest {
 
     private companion object {
         const val CHILD_TAG = "browser-page-child"
+        const val PANE_CHILD_TAG = "browser-pane-child"
     }
 }

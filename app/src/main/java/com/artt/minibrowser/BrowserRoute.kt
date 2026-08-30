@@ -11,7 +11,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.browser.BrowserDataClearer
@@ -239,6 +241,11 @@ internal fun BrowserRoute(
         },
     )
 
+    val settingsPaneTitle = stringResource(R.string.settings_title)
+    val downloadsPaneTitle = stringResource(R.string.downloads_title)
+    val historyPaneTitle = stringResource(R.string.history_title)
+    val bookmarksPaneTitle = stringResource(R.string.bookmarks_title)
+
     MinibrowserTheme(darkTheme = darkTheme) {
         Box(
             Modifier
@@ -301,7 +308,7 @@ internal fun BrowserRoute(
             }
 
             if (screen == BrowserScreen.Settings) {
-                Box(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().accessibilityPane(settingsPaneTitle)) {
                     SettingsScreen(
                         state = settingsScreenState,
                         onBack = { browserViewModel.screen(BrowserScreen.Browser) },
@@ -319,32 +326,38 @@ internal fun BrowserRoute(
                     )
                 }
             }
-            if (screen == BrowserScreen.Downloads) Box(Modifier.fillMaxSize()) {
-                MotionDownloadsScreen(
-                    onBack = { browserViewModel.screen(BrowserScreen.Settings) },
-                )
+            if (screen == BrowserScreen.Downloads) {
+                Box(Modifier.fillMaxSize().accessibilityPane(downloadsPaneTitle)) {
+                    MotionDownloadsScreen(
+                        onBack = { browserViewModel.screen(BrowserScreen.Settings) },
+                    )
+                }
             }
-            if (screen == BrowserScreen.History) Box(Modifier.fillMaxSize()) {
-                MotionHistoryScreen(
-                    historyRepository,
-                    iconsDir,
-                    onBack = { browserViewModel.screen(BrowserScreen.Browser) },
-                    onOpen = { uri ->
-                        browserViewModel.screen(BrowserScreen.Browser)
-                        (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
-                    },
-                )
+            if (screen == BrowserScreen.History) {
+                Box(Modifier.fillMaxSize().accessibilityPane(historyPaneTitle)) {
+                    MotionHistoryScreen(
+                        historyRepository,
+                        iconsDir,
+                        onBack = { browserViewModel.screen(BrowserScreen.Browser) },
+                        onOpen = { uri ->
+                            browserViewModel.screen(BrowserScreen.Browser)
+                            (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                        },
+                    )
+                }
             }
-            if (screen == BrowserScreen.Bookmarks) Box(Modifier.fillMaxSize()) {
-                MotionBookmarksScreen(
-                    bookmarksRepository,
-                    iconsDir,
-                    onBack = { browserViewModel.screen(BrowserScreen.Browser) },
-                    onOpen = { uri ->
-                        browserViewModel.screen(BrowserScreen.Browser)
-                        (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
-                    },
-                )
+            if (screen == BrowserScreen.Bookmarks) {
+                Box(Modifier.fillMaxSize().accessibilityPane(bookmarksPaneTitle)) {
+                    MotionBookmarksScreen(
+                        bookmarksRepository,
+                        iconsDir,
+                        onBack = { browserViewModel.screen(BrowserScreen.Browser) },
+                        onOpen = { uri ->
+                            browserViewModel.screen(BrowserScreen.Browser)
+                            (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                        },
+                    )
+                }
             }
             if (showSwitcher) {
                 BrowserTabSwitcher(
@@ -374,6 +387,9 @@ internal fun BrowserRoute(
 
 internal fun Modifier.hideFromAccessibilityWhen(hidden: Boolean): Modifier =
     if (hidden) semantics { hideFromAccessibility() } else this
+
+internal fun Modifier.accessibilityPane(title: String): Modifier =
+    semantics { paneTitle = title }
 
 private fun ExtensionLoader.Status?.toExtensionUiState(): BrowserExtensionUiState = when (this) {
     ExtensionLoader.Status.Error -> BrowserExtensionUiState.Error
