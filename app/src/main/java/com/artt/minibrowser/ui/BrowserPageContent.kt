@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import com.artt.minibrowser.data.Suggestion
-import com.artt.minibrowser.engine.ExtensionLoader
 import java.io.File
 
 internal data class BrowserPageUiState(
@@ -26,7 +25,7 @@ internal data class BrowserPageUiState(
     val tabCount: Int,
     val bookmarked: Boolean,
     val suggestions: List<Suggestion>,
-    val adblockStatus: ExtensionLoader.Status?,
+    val adblockStatus: BrowserExtensionUiState,
     val showFind: Boolean,
     val showStart: Boolean,
     val inFullscreen: Boolean,
