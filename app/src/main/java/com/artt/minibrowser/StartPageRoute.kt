@@ -69,8 +69,13 @@ internal fun StartPageRoute(
         }
 
         state.error?.let { operation ->
+            val hasContent = state.bookmarks.isNotEmpty() || state.recent.isNotEmpty()
             val message = when (operation) {
-                StartPageOperation.Load -> "Не удалось загрузить стартовую страницу"
+                StartPageOperation.Load -> if (hasContent) {
+                    "Не удалось обновить стартовую страницу"
+                } else {
+                    "Не удалось загрузить стартовую страницу"
+                }
                 StartPageOperation.RefreshRecent -> "Не удалось обновить недавние"
                 StartPageOperation.Add -> "Не удалось добавить закладку"
                 StartPageOperation.Rename -> "Не удалось переименовать закладку"
