@@ -53,10 +53,7 @@ class MainActivity : ComponentActivity() {
         )
     }
     private val browserDataViewModel by lazy {
-        ViewModelProvider(
-            this,
-            BrowserDataViewModel.factory(browserDataClearer),
-        )[BrowserDataViewModel::class.java]
+        ViewModelProvider(this)[BrowserDataViewModel::class.java]
     }
     private val pageBookmarkViewModel by lazy {
         ViewModelProvider(
@@ -105,6 +102,7 @@ class MainActivity : ComponentActivity() {
                 tabManager = tabManager,
                 settingsViewModel = settingsViewModel,
                 browserDataViewModel = browserDataViewModel,
+                browserDataClearer = browserDataClearer,
                 browserViewModel = browserViewModel,
                 pageBookmarkViewModel = pageBookmarkViewModel,
                 omniboxSuggestionsViewModel = omniboxSuggestionsViewModel,
