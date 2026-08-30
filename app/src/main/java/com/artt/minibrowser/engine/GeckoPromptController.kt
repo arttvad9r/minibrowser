@@ -81,10 +81,11 @@ class GeckoPromptController(
         prompt: GeckoSession.PromptDelegate.BasePrompt,
         guard: PromptGuard<GeckoSession.PromptDelegate.PromptResponse>,
         dialog: Dialog,
+        onUnavailable: () -> GeckoSession.PromptDelegate.PromptResponse = { prompt.dismiss() },
     ) {
         if (!isPromptOpen(prompt)) return
         if (activity.isFinishing || activity.isDestroyed) {
-            guard.complete { prompt.dismiss() }
+            guard.complete(onUnavailable)
             return
         }
         runCatching {
@@ -92,8 +93,9 @@ class GeckoPromptController(
             dialog.show()
         }.onFailure {
             // Window state can change between the lifecycle check and Dialog.show(). Never leave
-            // Gecko waiting on a prompt whose Activity can no longer host its native UI.
-            guard.complete { prompt.dismiss() }
+            // Gecko waiting on a prompt whose Activity can no longer host its native UI. Use the
+            // same negative action as the dialog when policy requires an explicit DENY response.
+            guard.complete(onUnavailable)
         }
     }
 
@@ -504,7 +506,12 @@ class GeckoPromptController(
                 }
                 .setOnCancelListener { guard.complete { prompt.confirm(AllowOrDeny.DENY) } }
                 .create()
-            showPromptDialog(prompt, guard, dialog)
+            showPromptDialog(
+                prompt,
+                guard,
+                dialog,
+                onUnavailable = { prompt.confirm(AllowOrDeny.DENY) },
+            )
         }
         return result
     }
@@ -684,7 +691,7 @@ class GeckoPromptController(
                 .setPositiveButton(activity.getString(R.string.action_ok)) { _, _ -> guard.complete(positive) }
                 .setOnCancelListener { guard.complete(negative) }
                 .create()
-            showPromptDialog(prompt, guard, dialog)
+            showPromptDialog(prompt, guard, dialog, onUnavailable = negative)
         }
         return result
     }
