@@ -2,12 +2,9 @@
 
 package com.artt.minibrowser.ui
 
-// Переиспользуемые примитивы дизайн-системы: favicon, заголовки секций,
-// строки настроек/меню, поля, empty states, действия закладки.
+// Переиспользуемые примитивы дизайн-системы: заголовки секций, строки настроек/меню,
+// поля, empty states и действия закладки.
 
-import android.graphics.Bitmap
-import android.util.LruCache
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,9 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -61,94 +55,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Bookmark
-import com.artt.minibrowser.engine.FaviconFetcher
-import com.artt.minibrowser.engine.decodeSampledFavicon
-import com.artt.minibrowser.engine.faviconOrigin
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
 import java.net.URI
+import kotlinx.coroutines.launch
 
 fun hostOf(url: String): String = runCatching { URI(url).host ?: "" }.getOrDefault("")
-
-private object FaviconMemoryCache {
-    private val cache = object : LruCache<String, Bitmap>(4 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
-    }
-    var generation by mutableIntStateOf(0)
-        private set
-
-    fun get(key: String): Bitmap? = synchronized(cache) { cache.get(key) }
-
-    fun putIfCurrent(key: String, bitmap: Bitmap, expectedGeneration: Int): Boolean {
-        if (generation != expectedGeneration) return false
-        return synchronized(cache) {
-            if (generation != expectedGeneration) {
-                false
-            } else {
-                cache.put(key, bitmap)
-                true
-            }
-        }
-    }
-
-    fun clear() {
-        generation++
-        synchronized(cache) { cache.evictAll() }
-    }
-}
-
-/** Clears Compose bitmap state, in-flight favicon work and the on-disk favicon cache as one action. */
-fun clearFaviconCaches(iconsDir: File) {
-    FaviconMemoryCache.clear()
-    FaviconFetcher.clear(iconsDir)
-}
-
-/** Favicon с дисковым кэшем и bounded sampled bitmap cache. */
-@Composable
-fun Favicon(source: String, iconsDir: File, size: Dp, modifier: Modifier = Modifier) {
-    val origin = remember(source) { faviconOrigin(source) }
-    val displayHost = remember(source) {
-        hostOf(source).ifBlank { hostOf("https://${source.trim()}") }.ifBlank { source.trim() }
-    }
-    val key = origin ?: source.trim().lowercase()
-    val cacheGeneration = FaviconMemoryCache.generation
-    var bmp by remember(key, cacheGeneration) { mutableStateOf(FaviconMemoryCache.get(key)) }
-    LaunchedEffect(key, origin, cacheGeneration) {
-        if (origin != null && bmp == null) {
-            val loaded = withContext(Dispatchers.IO) {
-                val f = FaviconFetcher.fetch(origin, iconsDir)
-                if (f.exists()) decodeSampledFavicon(f) else null
-            }
-            if (loaded != null && FaviconMemoryCache.putIfCurrent(key, loaded, cacheGeneration)) {
-                bmp = loaded
-            }
-        }
-    }
-    Box(modifier.size(size), contentAlignment = Alignment.Center) {
-        val bitmap = bmp
-        if (bitmap != null) {
-            Image(bitmap.asImageBitmap(), null, Modifier.size(size))
-        } else if (displayHost.isNotBlank()) {
-            Box(
-                Modifier.size(size).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    displayHost.removePrefix("www.").take(1).uppercase(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = (size.value * 0.45f).sp,
-                )
-            }
-        }
-    }
-}
 
 /** Заголовок секции: слева название, справа необязательное действие («Все ›»). */
 @Composable
