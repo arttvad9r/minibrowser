@@ -1,5 +1,6 @@
 package com.artt.minibrowser
 
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
@@ -33,17 +34,7 @@ class SettingsClearDataSemanticsTest {
         composeRule.setContent {
             MinibrowserTheme(darkTheme = false) {
                 SettingsScreen(
-                    state = SettingsScreenUiState(
-                        searchEngine = SettingsSearchEngineUiState.Yandex,
-                        theme = 0,
-                        adblockEnabled = true,
-                        votEnabled = true,
-                        translateTarget = "ru",
-                        adblockStatus = BrowserExtensionUiState.Enabled,
-                        votStatus = BrowserExtensionUiState.Enabled,
-                        clearDataInProgress = false,
-                        clearDataFailed = false,
-                    ),
+                    state = settingsState(clearDataFailed = false),
                     onBack = {},
                     onEngine = {},
                     onTheme = {},
@@ -68,4 +59,48 @@ class SettingsClearDataSemanticsTest {
             .performClick()
             .assert(SemanticsMatcher.expectValue(toggleState, ToggleableState.On))
     }
+
+    @Test
+    fun clearDataFailureIsAnnouncedAsPoliteLiveRegion() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val failure = context.getString(R.string.settings_clear_data_failed)
+
+        composeRule.setContent {
+            MinibrowserTheme(darkTheme = false) {
+                SettingsScreen(
+                    state = settingsState(clearDataFailed = true),
+                    onBack = {},
+                    onEngine = {},
+                    onTheme = {},
+                    onAdblock = {},
+                    onRetryAdblock = {},
+                    onVot = {},
+                    onRetryVot = {},
+                    onDownloads = {},
+                    onClearData = {},
+                    onTranslateLang = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText(failure)
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+    }
+
+    private fun settingsState(clearDataFailed: Boolean) = SettingsScreenUiState(
+        searchEngine = SettingsSearchEngineUiState.Yandex,
+        theme = 0,
+        adblockEnabled = true,
+        votEnabled = true,
+        translateTarget = "ru",
+        adblockStatus = BrowserExtensionUiState.Enabled,
+        votStatus = BrowserExtensionUiState.Enabled,
+        clearDataInProgress = false,
+        clearDataFailed = clearDataFailed,
+    )
 }
