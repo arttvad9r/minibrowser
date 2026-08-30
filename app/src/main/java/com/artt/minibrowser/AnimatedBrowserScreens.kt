@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,7 +20,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,7 +46,6 @@ import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
-import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.ui.AppIcons
 import com.artt.minibrowser.ui.BookmarkActionsSheet
 import com.artt.minibrowser.ui.BrowserMotionScreen
@@ -414,20 +411,6 @@ private fun BookmarksScreen(
             onRename = { onRename(bookmark.url, it); selected = null },
             onDelete = { onDelete(bookmark.url); selected = null },
         )
-    }
-}
-
-/** Reflect Gecko's real progress without adding an artificial catch-up animation. */
-@Composable
-internal fun SmoothPageProgress(tab: Tab?) {
-    val progress = tab?.progress ?: -1f
-    Box(Modifier.fillMaxWidth().height(2.dp)) {
-        if (progress >= 0f) {
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(2.dp),
-            )
-        }
     }
 }
 
