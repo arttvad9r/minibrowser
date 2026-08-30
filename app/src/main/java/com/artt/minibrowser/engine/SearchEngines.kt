@@ -12,6 +12,8 @@ enum class SearchEngine(val template: String) {
     BING("https://www.bing.com/search?q=%s");
 }
 
+private data class TranslationOrigin(val host: String, val port: Int)
+
 private val TRANSLATION_TARGETS = setOf("ru", "en", "de", "fr")
 private val TRANSLATE_QUERY_KEYS = setOf("_x_tr_sl", "_x_tr_tl", "_x_tr_hl")
 private val IPV4_LITERAL = Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$")
@@ -27,15 +29,26 @@ private fun isTranslatableHost(host: String): Boolean =
         !host.endsWith(".localhost", ignoreCase = true) &&
         !host.endsWith(".local", ignoreCase = true)
 
-private fun translationHost(uri: URI): String? {
-    val host = (uri.host ?: runCatching { uri.toURL().host }.getOrNull())
-        ?.trimEnd('.')
-        ?.takeIf(::isTranslatableHost)
-        ?: return null
-    return runCatching { IDN.toASCII(host, IDN.USE_STD3_ASCII_RULES) }
+private fun translationOrigin(uri: URI): TranslationOrigin? {
+    val parsedHost = uri.host
+    val rawHost: String
+    val port: Int
+    if (parsedHost != null) {
+        rawHost = parsedHost
+        port = uri.port
+    } else {
+        val url = runCatching { uri.toURL() }.getOrNull() ?: return null
+        rawHost = url.host
+        port = url.port
+    }
+
+    val normalizedHost = rawHost.trimEnd('.').takeIf(::isTranslatableHost) ?: return null
+    val asciiHost = runCatching { IDN.toASCII(normalizedHost, IDN.USE_STD3_ASCII_RULES) }
         .getOrNull()
         ?.lowercase()
         ?.takeIf(::isTranslatableHost)
+        ?: return null
+    return TranslationOrigin(asciiHost, port)
 }
 
 private fun translateQueryKey(segment: String): String {
@@ -60,9 +73,10 @@ fun buildTranslateUri(url: String, target: String): String? {
     val language = normalizeTranslationTarget(target) ?: return null
     if (!isValidWebUri(url)) return null
     val u = runCatching { URI(url) }.getOrNull() ?: return null
-    val host = translationHost(u) ?: return null
+    val origin = translationOrigin(u) ?: return null
+    val host = origin.host
     val defaultPort = if (u.scheme.equals("https", ignoreCase = true)) 443 else 80
-    if (u.port != -1 && u.port != defaultPort) return null
+    if (origin.port != -1 && origin.port != defaultPort) return null
     if (host.equals("translate.goog", ignoreCase = true) || host.endsWith(".translate.goog", ignoreCase = true)) {
         return null
     }

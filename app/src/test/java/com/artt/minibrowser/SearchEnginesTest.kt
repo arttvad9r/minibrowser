@@ -70,6 +70,13 @@ class SearchEnginesTest {
             buildTranslateUri("https://пример.рф/путь?keep=1&_x_tr_tl=fr#часть", "en"),
         )
     }
+    @Test fun translateUriUsesUnicodeAuthorityPort() {
+        assertEquals(
+            "https://xn----e1afmkfd-xn----p1ai.translate.goog/a?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en",
+            buildTranslateUri("https://пример.рф:443/a", "en"),
+        )
+        assertNull(buildTranslateUri("https://пример.рф:8443/a", "en"))
+    }
     @Test fun translateUriDropsConflictingControlQuery() {
         assertEquals(
             "https://example-com.translate.goog/a?keep=1&_x_tr_sl=auto&_x_tr_tl=ru&_x_tr_hl=ru#section",
