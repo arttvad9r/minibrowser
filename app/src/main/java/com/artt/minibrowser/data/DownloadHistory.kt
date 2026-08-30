@@ -69,6 +69,7 @@ internal fun normalizeRestoredDownload(item: BrowserDownload, now: Long): Browse
     val sanitized = item.copy(
         sourceUrl = downloadSourceForHistory(item.sourceUrl),
         mime = normalizeDownloadMime(item.mime),
+        location = item.location?.takeIf(::isSupportedDownloadLocation),
     )
     return when (sanitized.status) {
         DownloadStatus.Downloading -> sanitized.copy(
