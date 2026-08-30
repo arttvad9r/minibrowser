@@ -73,11 +73,8 @@ import androidx.compose.ui.window.Popup
 import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.ExtensionLoader
-import com.artt.minibrowser.engine.NavigationTarget
-import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.Tab
-import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.formatFindCounter
 import kotlinx.coroutines.delay
 import org.mozilla.geckoview.GeckoSession
@@ -119,18 +116,17 @@ internal fun GeckoContent(
 @Composable
 internal fun TopBar(
     tab: Tab?,
-    engine: SearchEngine,
     tabCount: Int,
     bookmarked: Boolean,
     iconsDir: File,
     omniboxFocus: FocusRequester,
     suggestions: List<Suggestion>,
     onSuggestionQueryChanged: (String?) -> Unit,
+    onSubmitQuery: (String) -> Unit,
     adblockStatus: ExtensionLoader.Status?,
     onToggleAdblock: (Boolean) -> Unit,
     onRetryAdblock: () -> Unit,
     onNavigate: (String) -> Unit,
-    onExternal: (String) -> Unit,
     onBack: () -> Unit,
     onForward: () -> Unit,
     onReload: () -> Unit,
@@ -167,12 +163,8 @@ internal fun TopBar(
             text.takeIf { focused && it.isNotBlank() && userHasEdited },
         )
     }
-    val navigate: (String) -> Unit = { q ->
-        when (val target = com.artt.minibrowser.engine.resolveNavigation(q)) {
-            is NavigationTarget.External -> onExternal(target.uri)
-            is NavigationTarget.Web, is NavigationTarget.Internal, is NavigationTarget.Search ->
-                onNavigate(buildLoadUri(q, engine))
-        }
+    val navigate: (String) -> Unit = { query ->
+        onSubmitQuery(query)
         focusManager.clearFocus(force = true)
     }
     Row(
