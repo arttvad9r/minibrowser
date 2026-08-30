@@ -1,0 +1,4 @@
+<resources>
+    <string name="close_named_tab_content_description">Закрыть вкладку «%1$s»</string>
+    <string name="bookmark_actions_named_content_description">Действия для закладки «%1$s»</string>
+</resources>
