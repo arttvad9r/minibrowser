@@ -83,6 +83,8 @@
     <string name="clipboard_label_link">Ссылка</string>
     <string name="clipboard_label_address">Адрес</string>
     <string name="copied_to_clipboard">Скопировано</string>
+    <string name="external_chooser_title">Открыть с помощью</string>
+    <string name="share_chooser_title">Поделиться</string>
 
     <string name="site_fallback">Сайт</string>
     <string name="permission_geolocation_message">%1$s хочет получить доступ к местоположению.</string>
