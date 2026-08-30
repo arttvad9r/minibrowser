@@ -155,9 +155,8 @@ internal fun BrowserRoute(
         onToggleAdblock = toggleAdblock,
         onRetryAdblock = retryAdblock,
         onTranslate = {
-            val url = currentTab?.url
-            if (url != null) {
-                buildTranslateUri(url, prefs.translateTarget)?.let(currentTab.session::loadUri)
+            currentTab?.let { tab ->
+                buildTranslateUri(tab.url, prefs.translateTarget)?.let(tab.session::loadUri)
             }
         },
     )
