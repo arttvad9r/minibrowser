@@ -46,4 +46,17 @@
     <string name="bookmarks_empty_title">Закладок пока нет</string>
     <string name="bookmarks_empty_subtitle">Сохранённые страницы появятся здесь.</string>
     <string name="actions_content_description">Действия</string>
+
+    <string name="downloads_title">Загрузки</string>
+    <string name="downloads_empty_title">Загрузок пока нет</string>
+    <string name="downloads_empty_subtitle">Скачанные через Minibrowser файлы появятся здесь.</string>
+    <string name="downloads_clear_dialog_title">Очистить историю загрузок?</string>
+    <string name="downloads_clear_dialog_message">Записи о загрузках будут удалены. Скачанные файлы останутся на устройстве.</string>
+    <string name="download_status_downloading">Скачивается…</string>
+    <string name="download_completed_subtitle">%1$s · %2$s</string>
+    <string name="download_failed_subtitle">Ошибка · %1$s</string>
+    <string name="download_failed_default">Не удалось скачать</string>
+    <string name="download_unavailable">Файл больше недоступен</string>
+    <string name="open_file_chooser_title">Открыть файл</string>
+    <string name="no_app_to_open_file">Нет приложения для открытия файла</string>
 </resources>
