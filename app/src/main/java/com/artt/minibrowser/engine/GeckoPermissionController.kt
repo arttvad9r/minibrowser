@@ -7,6 +7,7 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.artt.minibrowser.R
+import com.artt.minibrowser.net.webUriHost
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -37,6 +38,8 @@ internal fun resolveContentPermissionValue(action: PermissionAction, existingVal
         }
     }
 }
+
+internal fun permissionHost(uri: String?): String? = uri?.let(::webUriHost)
 
 class GeckoPermissionController(
     private val activity: Activity,
@@ -84,7 +87,7 @@ class GeckoPermissionController(
             return GeckoResult.fromValue(resolvedValue)
         }
         val result = GeckoResult<Int>()
-        val hostName = hostOfPermission(perm.uri)
+        val hostName = permissionHost(perm.uri)
         val host = hostName ?: activity.getString(R.string.site_fallback)
         val message = when (action) {
             PermissionAction.PROMPT_GEOLOCATION ->
@@ -92,7 +95,7 @@ class GeckoPermissionController(
             PermissionAction.PROMPT_DRM ->
                 activity.getString(R.string.permission_drm_message, host)
             PermissionAction.PROMPT_STORAGE_ACCESS -> {
-                val thirdParty = hostOfPermission(perm.thirdPartyOrigin)
+                val thirdParty = permissionHost(perm.thirdPartyOrigin)
                 if (thirdParty != null && hostName != null) {
                     activity.getString(R.string.permission_storage_access_message, thirdParty, hostName)
                 } else {
@@ -163,7 +166,7 @@ class GeckoPermissionController(
             callback.reject()
             return
         }
-        val host = hostOfPermission(uri) ?: activity.getString(R.string.site_fallback)
+        val host = permissionHost(uri) ?: activity.getString(R.string.site_fallback)
         val message = when {
             camera != null && microphone != null ->
                 activity.getString(R.string.permission_camera_microphone_message)
@@ -228,8 +231,4 @@ class GeckoPermissionController(
     }
 
     private fun canShowUi(): Boolean = !activity.isFinishing && !activity.isDestroyed
-
-    private fun hostOfPermission(uri: String?): String? = runCatching {
-        android.net.Uri.parse(uri.orEmpty()).host
-    }.getOrNull()?.takeIf { it.isNotBlank() }
 }
