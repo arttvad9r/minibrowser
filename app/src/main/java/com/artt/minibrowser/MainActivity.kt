@@ -6,7 +6,6 @@ package com.artt.minibrowser
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -85,6 +84,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.browser.BrowserActivityRequestController
 import com.artt.minibrowser.browser.BrowserDataViewModel
 import com.artt.minibrowser.browser.BrowserIntentController
+import com.artt.minibrowser.browser.BrowserRootEffects
 import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.BrowserWindowController
@@ -224,39 +224,36 @@ class MainActivity : ComponentActivity() {
             val topSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top)
             val bottomSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
 
-            // Уход с браузера закрывает подсказки омнибокса (попап рисуется поверх любых экранов).
-            LaunchedEffect(screen, showSwitcher) {
-                if (screen != BrowserScreen.Browser || showSwitcher) focusManager.clearFocus(force = true)
-            }
-
-            LaunchedEffect(Unit) {
-                externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
-            }
-
-            LaunchedEffect(screen, currentTab?.url) {
-                if (screen == BrowserScreen.Browser) {
-                    pageBookmarkViewModel.sync(currentTab?.url)
-                }
-            }
+            val inFullscreen = currentTab?.fullscreen == true
+            BrowserRootEffects(
+                screen = screen,
+                showSwitcher = showSwitcher,
+                currentUrl = currentTab?.url,
+                canGoBack = currentTab?.canGoBack == true,
+                inFullscreen = inFullscreen,
+                showFind = showFind,
+                onClearFocus = { focusManager.clearFocus(force = true) },
+                onInstallExternalNavigation = {
+                    externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
+                },
+                onSyncBookmark = pageBookmarkViewModel::sync,
+                onGoBack = { currentSession?.goBack() },
+                onExitFullscreen = { currentSession?.exitFullScreen() },
+                onCloseFind = {
+                    currentSession?.finder?.clear()
+                    browserViewModel.showFind(false)
+                },
+            )
             val bookmarked = pageBookmarkUi.url == currentTab?.url && pageBookmarkUi.isBookmarked
             val showStart = screen == BrowserScreen.Browser &&
                 (currentTab?.url.isNullOrBlank() || currentTab.url == "about:blank")
 
-            BackHandler(enabled = screen == BrowserScreen.Browser && currentTab?.canGoBack == true) {
-                currentTab?.session?.goBack()
-            }
-            val inFullscreen = currentTab?.fullscreen == true
             BrowserWindowEffects(
                 controller = browserWindow,
                 darkTheme = darkTheme,
                 isPrivate = currentTab?.isPrivate == true,
                 inFullscreen = inFullscreen,
             )
-            BackHandler(enabled = inFullscreen) { currentSession?.exitFullScreen() }
-            BackHandler(enabled = showFind) {
-                currentSession?.finder?.clear()
-                browserViewModel.showFind(false)
-            }
             val toggleAdblock: (Boolean) -> Unit = settingsViewModel::setAdblock
             val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
             val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
