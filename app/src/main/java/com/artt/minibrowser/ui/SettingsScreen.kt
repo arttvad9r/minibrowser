@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.MotionDownloadsScreen
 import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Prefs
-import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
 
 private val translationLanguageCodes = listOf("ru", "en", "de", "fr")
@@ -75,9 +74,9 @@ fun SettingsScreen(
     onTheme: (Int) -> Unit,
     onAdblock: (Boolean) -> Unit,
     onRetryAdblock: () -> Unit,
-    adblockStatus: ExtensionLoader.Status?,
+    adblockStatus: BrowserExtensionUiState,
     votEnabled: Boolean,
-    votStatus: ExtensionLoader.Status?,
+    votStatus: BrowserExtensionUiState,
     onVot: (Boolean) -> Unit,
     onRetryVot: () -> Unit,
     onClearData: (withBookmarks: Boolean) -> Unit,
@@ -131,7 +130,7 @@ fun SettingsScreen(
                             trailing = { PickerChevron() },
                         )
                         HorizontalDividerThin()
-                        if (votStatus == ExtensionLoader.Status.Error) {
+                        if (votStatus == BrowserExtensionUiState.Error) {
                             SettingsRow(
                                 stringResource(R.string.settings_video_translation),
                                 subtitle = stringResource(R.string.settings_extension_retry_subtitle),
@@ -160,7 +159,7 @@ fun SettingsScreen(
 
                     GroupLabel(stringResource(R.string.settings_group_privacy))
                     SettingsGroup {
-                        if (adblockStatus == ExtensionLoader.Status.Error) {
+                        if (adblockStatus == BrowserExtensionUiState.Error) {
                             SettingsRow(
                                 stringResource(R.string.settings_adblock),
                                 subtitle = stringResource(R.string.settings_extension_retry_subtitle),
