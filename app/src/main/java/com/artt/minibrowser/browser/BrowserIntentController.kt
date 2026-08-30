@@ -5,6 +5,10 @@ import androidx.activity.ComponentActivity
 import com.artt.minibrowser.R
 import com.artt.minibrowser.engine.createSafeExternalIntent
 import com.artt.minibrowser.engine.safeExternalFallbackUrl
+import com.artt.minibrowser.net.sanitizeWebUriForPersistence
+
+internal fun shareableBrowserUrl(value: String?): String? =
+    value?.let(::sanitizeWebUriForPersistence)
 
 /** Owns Android Intent side effects for browser navigation and sharing. */
 internal class BrowserIntentController(
@@ -29,7 +33,7 @@ internal class BrowserIntentController(
     }
 
     fun shareUrl(value: String?) {
-        val url = value ?: return
+        val url = shareableBrowserUrl(value) ?: return
         if (activity.isFinishing || activity.isDestroyed) return
 
         runCatching {
