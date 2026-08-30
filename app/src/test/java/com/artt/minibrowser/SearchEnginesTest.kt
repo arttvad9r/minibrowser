@@ -31,11 +31,19 @@ class SearchEnginesTest {
             buildTranslateUri("https://en.wikipedia.org/wiki/Main_Page", "ru"))
     @Test fun translateUriEscapesDashesAndKeepsQuery() =
         assertEquals(
-            "https://my--site-com.translate.goog/a?b=1&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=ru",
+            "https://my--site-com.translate.goog/a?b=1&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en",
             buildTranslateUri("https://my-site.com/a?b=1", "en"))
+    @Test fun translateUriNormalizesSupportedTarget() =
+        assertEquals(
+            "https://example-com.translate.goog/a?_x_tr_sl=auto&_x_tr_tl=de&_x_tr_hl=de",
+            buildTranslateUri("https://example.com/a", " DE "))
     @Test fun translateUriRejectsGarbage() {
         assertNull(buildTranslateUri("https://a.translate.goog/x", "ru"))
+        assertNull(buildTranslateUri("https://TRANSLATE.GOOG/x", "ru"))
         assertNull(buildTranslateUri("about:blank", "ru"))
+        assertNull(buildTranslateUri("httpx://example.com/x", "ru"))
         assertNull(buildTranslateUri("https://a.b/c", "  "))
+        assertNull(buildTranslateUri("https://a.b/c", "ru&x=1"))
+        assertNull(buildTranslateUri("https://a.b/c", "es"))
     }
 }
