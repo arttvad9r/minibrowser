@@ -27,10 +27,21 @@ internal data class StartPageUiState(
     val error: StartPageOperation? = null,
 )
 
+private val URI_SCHEME_PREFIX = Regex("^[A-Za-z][A-Za-z0-9+.-]*:")
+private val HOST_PORT_INPUT = Regex("^[A-Za-z0-9.-]+:[0-9]{1,5}(?:[/\\?#].*)?$")
+
 internal fun normalizeBookmarkInputUrl(value: String): String? {
     val target = value.trim()
     if (target.isEmpty()) return null
     if (isValidWebUri(target)) return target
+
+    val explicitScheme = URI_SCHEME_PREFIX.find(target)?.value?.dropLast(1)
+    if (explicitScheme != null) {
+        val malformedWebScheme = explicitScheme.equals("http", ignoreCase = true) ||
+            explicitScheme.equals("https", ignoreCase = true)
+        if (malformedWebScheme || !HOST_PORT_INPUT.matches(target)) return null
+    }
+
     return "https://$target".takeIf(::isValidWebUri)
 }
 
