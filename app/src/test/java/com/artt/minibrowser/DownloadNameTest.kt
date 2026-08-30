@@ -1,8 +1,8 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.engine.header
 import com.artt.minibrowser.engine.parseFilename
 import com.artt.minibrowser.engine.sanitizeFilename
-import com.artt.minibrowser.engine.header
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -14,6 +14,15 @@ class DownloadNameTest {
         assertEquals(
             "отчет.pdf",
             parseFilename("attachment; filename*=UTF-8''%D0%BE%D1%82%D1%87%D0%B5%D1%82.pdf", "file"),
+        )
+
+    @Test fun malformedRfc5987FallsBackInsteadOfThrowing() =
+        assertEquals("file", parseFilename("attachment; filename*=UTF-8''broken%ZZname.pdf", "file"))
+
+    @Test fun malformedRfc5987CanFallThroughToPlainFilename() =
+        assertEquals(
+            "safe.pdf",
+            parseFilename("attachment; filename*=UTF-8''broken%ZZ; filename=\"safe.pdf\"", "file"),
         )
 
     @Test fun nullDispositionFallsBack() =

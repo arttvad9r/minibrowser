@@ -24,13 +24,13 @@ fun sanitizeFilename(raw: String?, fallback: String): String {
 fun parseFilename(disposition: String?, fallback: String): String {
     if (disposition == null) return sanitizeFilename(null, fallback)
     Regex("filename\\*=UTF-8''([^;]+)", RegexOption.IGNORE_CASE).find(disposition)?.let {
-        return sanitizeFilename(
+        val decoded = runCatching {
             URLDecoder.decode(
                 it.groupValues[1].trim().replace("+", "%2B"),
                 StandardCharsets.UTF_8.name(),
-            ),
-            fallback,
-        )
+            )
+        }.getOrNull()
+        if (decoded != null) return sanitizeFilename(decoded, fallback)
     }
     Regex("filename=\"([^\"]+)\"").find(disposition)?.let {
         return sanitizeFilename(it.groupValues[1], fallback)
