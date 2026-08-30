@@ -8,9 +8,11 @@ import com.artt.minibrowser.engine.SearchEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class SettingsViewModelTest {
     @Test
@@ -68,6 +70,31 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun newerOrdinaryPreferenceCancelsOlderWrite() {
+        val writes = mutableListOf<Int>()
+        var firstCancelled = false
+        val viewModel = settingsViewModel(
+            setThemePreference = { theme ->
+                if (theme == 1) {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        firstCancelled = true
+                    }
+                } else {
+                    writes += theme
+                }
+            },
+        )
+
+        viewModel.setTheme(1)
+        viewModel.setTheme(2)
+
+        assertTrue(firstCancelled)
+        assertEquals(listOf(2), writes)
+    }
+
+    @Test
     fun adblockPersistsBeforeApplyingRuntimePolicy() {
         val events = mutableListOf<String>()
         val viewModel = settingsViewModel(
@@ -77,6 +104,32 @@ class SettingsViewModelTest {
 
         viewModel.setAdblock(false)
 
+        assertEquals(listOf("persist:false", "apply:false"), events)
+    }
+
+    @Test
+    fun newerAdblockChoiceCancelsOlderWriteBeforeRuntimeApply() {
+        val events = mutableListOf<String>()
+        var firstCancelled = false
+        val viewModel = settingsViewModel(
+            setAdblockPreference = { enabled ->
+                if (enabled) {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        firstCancelled = true
+                    }
+                } else {
+                    events += "persist:false"
+                }
+            },
+            applyAdblock = { events += "apply:$it" },
+        )
+
+        viewModel.setAdblock(true)
+        viewModel.setAdblock(false)
+
+        assertTrue(firstCancelled)
         assertEquals(listOf("persist:false", "apply:false"), events)
     }
 

@@ -10,6 +10,7 @@ import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,11 @@ internal class SettingsViewModel : ViewModel {
     private val retryAdblockExtension: (Boolean) -> Unit
     private val applyVot: (Boolean) -> Unit
     private val retryVotExtension: (Boolean) -> Unit
+    private var searchEngineJob: Job? = null
+    private var themeJob: Job? = null
+    private var adblockJob: Job? = null
+    private var votJob: Job? = null
+    private var translateTargetJob: Job? = null
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -99,15 +105,18 @@ internal class SettingsViewModel : ViewModel {
     }
 
     fun setSearchEngine(engine: SearchEngine) {
-        viewModelScope.launch { setSearchEnginePreference(engine) }
+        searchEngineJob?.cancel()
+        searchEngineJob = viewModelScope.launch { setSearchEnginePreference(engine) }
     }
 
     fun setTheme(theme: Int) {
-        viewModelScope.launch { setThemePreference(theme) }
+        themeJob?.cancel()
+        themeJob = viewModelScope.launch { setThemePreference(theme) }
     }
 
     fun setAdblock(enabled: Boolean) {
-        viewModelScope.launch {
+        adblockJob?.cancel()
+        adblockJob = viewModelScope.launch {
             // Preserve the existing ordering: persist the user's desired policy first, then ask
             // Gecko to converge the installed extension to that policy.
             setAdblockPreference(enabled)
@@ -120,7 +129,8 @@ internal class SettingsViewModel : ViewModel {
     }
 
     fun setVot(enabled: Boolean) {
-        viewModelScope.launch {
+        votJob?.cancel()
+        votJob = viewModelScope.launch {
             setVotPreference(enabled)
             applyVot(enabled)
         }
@@ -131,7 +141,8 @@ internal class SettingsViewModel : ViewModel {
     }
 
     fun setTranslateTarget(language: String) {
-        viewModelScope.launch { setTranslateTargetPreference(language) }
+        translateTargetJob?.cancel()
+        translateTargetJob = viewModelScope.launch { setTranslateTargetPreference(language) }
     }
 
     private fun observe(
