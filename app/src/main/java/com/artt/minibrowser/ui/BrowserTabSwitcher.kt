@@ -81,7 +81,7 @@ internal data class BrowserTabItemUiState(
  * previous full-screen maxHeight translation that crossed thousands of pixels in a few frames.
  */
 @Composable
-fun BrowserTabSwitcher(
+internal fun BrowserTabSwitcher(
     tabs: List<BrowserTabItemUiState>,
     currentId: Long?,
     iconsDir: File,
