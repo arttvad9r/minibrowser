@@ -18,6 +18,7 @@ internal class BrowserActivityRequestController(
     private val permissionRequests = ActivityRequestCoordinator<Boolean>()
     private val fileRequests = ActivityRequestCoordinator<Array<Uri>>()
 
+    @Volatile private var destroyed = false
     private var permissionCompletion: ((Boolean) -> Unit)? = null
     private var pendingPermissionRequest: Set<String> = emptySet()
     private var fileCompletion: ((Array<Uri>) -> Unit)? = null
@@ -51,28 +52,38 @@ internal class BrowserActivityRequestController(
     }
 
     fun requestPermissions(permissions: Array<String>, callback: (Boolean) -> Unit) {
-        permissionRequests.enqueue(
-            start = { complete ->
-                pendingPermissionRequest = permissions.toSet()
-                permissionCompletion = { granted ->
-                    callback(granted)
-                    complete(granted)
-                }
-                // Let ActivityRequestCoordinator own synchronous launcher failure. It invokes the
-                // cancel callback after releasing its lock, so Gecko/user callbacks never re-enter
-                // this coordinator from inside request.start().
-                permissionLauncher.launch(permissions)
-            },
-            cancel = {
-                pendingPermissionRequest = emptySet()
-                permissionCompletion = null
+        activity.runOnUiThread {
+            if (!canLaunch()) {
                 callback(false)
-            },
-        )
+                return@runOnUiThread
+            }
+            permissionRequests.enqueue(
+                start = { complete ->
+                    pendingPermissionRequest = permissions.toSet()
+                    permissionCompletion = { granted ->
+                        callback(granted)
+                        complete(granted)
+                    }
+                    // Let ActivityRequestCoordinator own synchronous launcher failure. It invokes the
+                    // cancel callback after releasing its lock, so Gecko/user callbacks never re-enter
+                    // this coordinator from inside request.start().
+                    permissionLauncher.launch(permissions)
+                },
+                cancel = {
+                    pendingPermissionRequest = emptySet()
+                    permissionCompletion = null
+                    callback(false)
+                },
+            )
+        }
     }
 
     fun pickFiles(type: Int, mimeTypes: Array<String>, callback: (Array<Uri>) -> Unit) {
         activity.runOnUiThread {
+            if (!canLaunch()) {
+                callback(emptyArray())
+                return@runOnUiThread
+            }
             fileRequests.enqueue(
                 start = { complete ->
                     val accepted = acceptedMimeTypes(mimeTypes)
@@ -102,12 +113,15 @@ internal class BrowserActivityRequestController(
     }
 
     fun cancelAll() {
+        destroyed = true
         permissionRequests.cancelAll()
         fileRequests.cancelAll()
         pendingPermissionRequest = emptySet()
         permissionCompletion = null
         fileCompletion = null
     }
+
+    private fun canLaunch(): Boolean = !destroyed && !activity.isFinishing && !activity.isDestroyed
 
     private fun completeFileRequest(uris: Array<Uri>) {
         val completion = fileCompletion
