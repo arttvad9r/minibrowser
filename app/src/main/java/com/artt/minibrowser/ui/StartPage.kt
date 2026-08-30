@@ -152,7 +152,8 @@ fun StartPage(
     val sel = selected
     if (sel != null) {
         BookmarkActionsSheet(
-            bookmark = sel,
+            bookmarkKey = sel.url,
+            bookmarkTitle = sel.title,
             onDismiss = { selected = null },
             onOpen = { onOpen(sel.url) },
             onRename = { onRename(sel.url, it); selected = null },
