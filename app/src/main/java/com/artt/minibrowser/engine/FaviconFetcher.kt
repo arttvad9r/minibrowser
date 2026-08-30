@@ -1,6 +1,8 @@
 package com.artt.minibrowser.engine
 
 import android.graphics.BitmapFactory
+import com.artt.minibrowser.net.sanitizeWebUriForPersistence
+import com.artt.minibrowser.net.webUriHost
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -8,6 +10,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
+import java.net.IDN
 import java.net.URI
 import java.net.URL
 import java.nio.file.Files
@@ -185,13 +188,15 @@ internal fun faviconOrigin(pageUrlOrHost: String): String? = runCatching {
     val value = pageUrlOrHost.trim()
     if (value.isEmpty()) return@runCatching null
     val input = if (value.contains("://")) value else "https://$value"
-    val uri = URI(input)
+    val safeInput = sanitizeWebUriForPersistence(input) ?: return@runCatching null
+    val uri = URI(safeInput)
     val scheme = uri.scheme?.lowercase()?.takeIf { it == "http" || it == "https" }
         ?: return@runCatching null
-    val host = uri.host?.takeIf { it.isNotBlank() } ?: return@runCatching null
+    val host = webUriHost(safeInput) ?: return@runCatching null
+    val networkHost = if (host.contains(':')) host else IDN.toASCII(host, IDN.USE_STD3_ASCII_RULES)
     val defaultPort = if (scheme == "https") 443 else 80
     val port = if (uri.port == defaultPort) -1 else uri.port
-    URI(scheme, null, host, port, null, null, null).toASCIIString()
+    URI(scheme, null, networkHost, port, null, null, null).toASCIIString()
 }.getOrNull()
 
 internal fun faviconInFlightKey(origin: String, generation: Long): String =
