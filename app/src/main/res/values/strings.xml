@@ -87,4 +87,17 @@
     <string name="language_english" translatable="false">English</string>
     <string name="language_german" translatable="false">Deutsch</string>
     <string name="language_french" translatable="false">Français</string>
+
+    <string name="close_tab_switcher_content_description">Закрыть переключатель вкладок</string>
+    <string name="new_tab_title">Новая вкладка</string>
+    <string name="no_open_tabs">Нет открытых вкладок</string>
+    <string name="close_tab_content_description">Закрыть вкладку</string>
+    <string name="private_mode_title">Приватный режим</string>
+
+    <plurals name="tabs_count">
+        <item quantity="one">%d вкладка</item>
+        <item quantity="few">%d вкладки</item>
+        <item quantity="many">%d вкладок</item>
+        <item quantity="other">%d вкладок</item>
+    </plurals>
 </resources>
