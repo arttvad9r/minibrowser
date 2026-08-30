@@ -4,15 +4,20 @@ import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import java.net.URI
 import kotlinx.coroutines.CancellationException
 
+internal fun bookmarkForPersistence(url: String, title: String, position: Int): Bookmark? {
+    val safeUrl = sanitizeWebUriForPersistence(url) ?: return null
+    val host = runCatching { URI(safeUrl).host.orEmpty() }.getOrDefault("")
+    val safeTitle = when {
+        title.isBlank() -> host
+        title == url -> safeUrl
+        else -> title
+    }
+    return Bookmark(safeUrl, safeTitle, host, position)
+}
+
 private fun sanitizedBookmark(entry: Bookmark): Bookmark? {
-    val safeUrl = sanitizeWebUriForPersistence(entry.url) ?: return null
-    if (safeUrl == entry.url) return entry
-    val safeHost = runCatching { URI(safeUrl).host.orEmpty() }.getOrDefault("")
-    return entry.copy(
-        url = safeUrl,
-        title = if (entry.title == entry.url) safeUrl else entry.title,
-        host = safeHost,
-    )
+    val safe = bookmarkForPersistence(entry.url, entry.title, entry.position) ?: return null
+    return if (safe == entry) entry else safe
 }
 
 /** Drops malformed rows and strips HTTP user-info before stored bookmarks reach browser UI. */
@@ -59,15 +64,9 @@ class BookmarksRepository(private val dao: AppDao) {
     }
 
     suspend fun add(url: String, title: String) {
-        val safeUrl = sanitizeWebUriForPersistence(url) ?: return
-        val host = runCatching { URI(safeUrl).host ?: "" }.getOrDefault("")
-        val safeTitle = when {
-            title.isBlank() -> host
-            title == url -> safeUrl
-            else -> title
-        }
-        val max = dao.maxBookmarkPosition()
-        dao.upsertBookmark(Bookmark(safeUrl, safeTitle, host, max + 1))
+        val nextPosition = dao.maxBookmarkPosition() + 1
+        val bookmark = bookmarkForPersistence(url, title, nextPosition) ?: return
+        dao.upsertBookmark(bookmark)
     }
 
     suspend fun remove(url: String) {
