@@ -1,14 +1,11 @@
 package com.artt.minibrowser.data
 
+import com.artt.minibrowser.net.isValidWebUri
 import java.net.URI
 
 private val HISTORY_WHITESPACE = Regex("\\s+")
 
-internal fun isHistoryUrl(url: String): Boolean {
-    val value = url.trim()
-    return value.startsWith("https://", ignoreCase = true) ||
-        value.startsWith("http://", ignoreCase = true)
-}
+internal fun isHistoryUrl(url: String): Boolean = isValidWebUri(url.trim())
 
 /**
  * Normal writes already reject non-web URLs. Reuse the Room result directly in that common case;
@@ -114,17 +111,18 @@ internal fun mergeSuggestions(
     limit: Int = 8,
 ): List<Suggestion> {
     if (limit <= 0) return emptyList()
-    val result = ArrayList<Suggestion>(minOf(limit, bookmarks.size + history.size))
+    val safeBookmarks = webBookmarks(bookmarks)
+    val result = ArrayList<Suggestion>(minOf(limit, safeBookmarks.size + history.size))
     val seenUrls = HashSet<String>()
 
-    for (bookmark in bookmarks) {
+    for (bookmark in safeBookmarks) {
         if (seenUrls.add(bookmark.url)) {
             result += Suggestion(bookmark.title.ifBlank { bookmark.url }, bookmark.url)
             if (result.size == limit) return result
         }
     }
     for (suggestion in history) {
-        if (seenUrls.add(suggestion.url)) {
+        if (isValidWebUri(suggestion.url) && seenUrls.add(suggestion.url)) {
             result += suggestion
             if (result.size == limit) break
         }
@@ -151,7 +149,7 @@ class HistoryRepository(private val dao: AppDao) {
 
         // Bookmarks are rendered first. Once all eight slots are filled, avoid the history query
         // and all of its filtering/ranking work entirely.
-        val bookmarks = dao.bookmarksMatching(query)
+        val bookmarks = webBookmarks(dao.bookmarksMatching(query))
         if (bookmarks.size >= 8) return mergeSuggestions(bookmarks, emptyList())
 
         val rows = webHistoryEntries(dao.searchHistory(query))

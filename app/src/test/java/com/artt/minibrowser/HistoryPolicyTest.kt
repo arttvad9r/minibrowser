@@ -17,11 +17,14 @@ class HistoryPolicyTest {
         assertTrue(isHistoryUrl("http://localhost:8080/test"))
     }
 
-    @Test fun dropsInternalAndNonWebPages() {
+    @Test fun dropsInternalNonWebAndMalformedPages() {
         assertFalse(isHistoryUrl("about:blank"))
         assertFalse(isHistoryUrl("about:config"))
         assertFalse(isHistoryUrl("file:///tmp/test"))
         assertFalse(isHistoryUrl("data:text/plain,test"))
+        assertFalse(isHistoryUrl("https://"))
+        assertFalse(isHistoryUrl("https:///path"))
+        assertFalse(isHistoryUrl("httpx://example.com"))
         assertFalse(isHistoryUrl(""))
     }
 
@@ -33,11 +36,12 @@ class HistoryPolicyTest {
         assertSame(rows, webHistoryEntries(rows))
     }
 
-    @Test fun webHistoryFilteringDropsLegacyInternalRows() {
-        val first = HistoryEntry("https://example.com/a", "A", 3, 1)
-        val internal = HistoryEntry("about:blank", "Blank", 2, 1)
+    @Test fun webHistoryFilteringDropsLegacyInternalAndMalformedRows() {
+        val first = HistoryEntry("https://example.com/a", "A", 4, 1)
+        val internal = HistoryEntry("about:blank", "Blank", 3, 1)
+        val malformed = HistoryEntry("https://", "Broken", 2, 1)
         val last = HistoryEntry("https://example.com/b", "B", 1, 1)
-        assertEquals(listOf(first, last), webHistoryEntries(listOf(first, internal, last)))
+        assertEquals(listOf(first, last), webHistoryEntries(listOf(first, internal, malformed, last)))
     }
 
     @Test fun collapsesFastSameSiteSameTitleNavigationNoise() {
