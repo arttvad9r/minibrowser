@@ -25,6 +25,8 @@ import com.artt.minibrowser.browser.StartPageViewModel
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.ui.StartPage
+import com.artt.minibrowser.ui.StartPageBookmarkUiState
+import com.artt.minibrowser.ui.StartPageRecentUiState
 import java.io.File
 
 /** Non-private Start page destination. Data access and mutations stay outside the renderer. */
@@ -48,11 +50,25 @@ internal fun StartPageRoute(
     // shown again so Settings/Bookmarks/History mutations are reflected without global reload flags.
     LaunchedEffect(startPageViewModel, refreshKey) { startPageViewModel.refresh() }
 
+    val bookmarkItems = state.bookmarks.map { bookmark ->
+        StartPageBookmarkUiState(
+            url = bookmark.url,
+            title = bookmark.title,
+            host = bookmark.host,
+        )
+    }
+    val recentItems = state.recent.map { entry ->
+        StartPageRecentUiState(
+            url = entry.url,
+            title = entry.title,
+        )
+    }
+
     Box(Modifier.fillMaxSize()) {
         StartPage(
-            bookmarks = state.bookmarks,
+            bookmarks = bookmarkItems,
             iconsDir = iconsDir,
-            recent = state.recent,
+            recent = recentItems,
             isPrivate = false,
             onOpen = onOpen,
             onAllBookmarks = onAllBookmarks,
