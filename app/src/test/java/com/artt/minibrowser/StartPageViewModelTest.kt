@@ -8,6 +8,7 @@ import com.artt.minibrowser.data.HistoryEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -195,6 +196,44 @@ class StartPageViewModelTest {
                 recent = recent,
                 isLoading = false,
                 error = StartPageOperation.Load,
+            ),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun bookmarkMutationCancelsInFlightFullRefreshSoStaleSnapshotCannotWin() {
+        val bookmark = Bookmark("https://example.com", "Example", "example.com", 1)
+        val recent = listOf(HistoryEntry("https://recent.example", "Recent", 10L, 1))
+        var bookmarkLoads = 0
+        var recentLoads = 0
+        var deleted = false
+        val viewModel = startPageViewModel(
+            loadBookmarks = {
+                bookmarkLoads++
+                if (bookmarkLoads < 3) listOf(bookmark) else emptyList()
+            },
+            loadRecent = {
+                recentLoads++
+                if (recentLoads == 1) recent else awaitCancellation()
+            },
+            deleteBookmark = { deleted = true },
+        )
+        viewModel.refresh()
+
+        viewModel.refresh()
+        assertEquals(2, bookmarkLoads)
+        assertEquals(2, recentLoads)
+
+        viewModel.delete(bookmark.url)
+
+        assertEquals(true, deleted)
+        assertEquals(3, bookmarkLoads)
+        assertEquals(
+            StartPageUiState(
+                bookmarks = emptyList(),
+                recent = recent,
+                isLoading = false,
             ),
             viewModel.uiState.value,
         )
