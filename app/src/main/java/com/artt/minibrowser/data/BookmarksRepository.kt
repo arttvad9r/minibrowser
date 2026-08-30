@@ -31,7 +31,10 @@ internal fun webBookmarks(entries: List<Bookmark>): List<Bookmark> {
     val canonicalUrls = HashSet<String>()
     entries.forEach { entry ->
         val safe = sanitizedBookmark(entry)
-        if (safe === entry) canonicalUrls += entry.url
+        // An already-safe primary-key URL is canonical even when its title/host metadata needs
+        // cleanup. Credential-bearing aliases must never displace that real stored bookmark merely
+        // because the canonical row came from an older build with stale metadata.
+        if (safe != null && safe.url == entry.url) canonicalUrls += entry.url
     }
 
     var result: ArrayList<Bookmark>? = null
@@ -39,7 +42,7 @@ internal fun webBookmarks(entries: List<Bookmark>): List<Bookmark> {
     for (index in entries.indices) {
         val entry = entries[index]
         val safe = sanitizedBookmark(entry)
-        val shadowedByCanonical = safe != null && safe !== entry && safe.url in canonicalUrls
+        val shadowedByCanonical = safe != null && safe.url != entry.url && safe.url in canonicalUrls
         val keep = safe != null && !shadowedByCanonical && seenUrls.add(safe.url)
         if (result == null && safe === entry && keep) continue
 
