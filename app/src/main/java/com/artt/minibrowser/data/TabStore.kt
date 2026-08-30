@@ -2,6 +2,7 @@ package com.artt.minibrowser.data
 
 import android.os.Trace
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
+import com.artt.minibrowser.net.sanitizeWebUriUserInfoInText
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -53,7 +54,7 @@ private fun sanitizePersistedSessionUrl(value: String?): String? = when {
 }
 
 private fun sanitizePersistedTitle(value: String): String =
-    sanitizeWebUriForPersistence(value) ?: value
+    sanitizeWebUriUserInfoInText(value)
 
 internal fun sanitizePersistedBrowserState(state: PersistedBrowserState): PersistedBrowserState {
     val seenIds = mutableSetOf<Long>()
