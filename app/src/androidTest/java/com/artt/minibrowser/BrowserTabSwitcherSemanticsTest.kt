@@ -23,7 +23,7 @@ class BrowserTabSwitcherSemanticsTest {
     fun closeActionNamesItsTab() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val title = "Example tab"
-        val closeDescription = "${context.getString(R.string.close_tab_content_description)}: $title"
+        val closeDescription = context.getString(R.string.close_named_tab_content_description, title)
 
         composeRule.setContent {
             MinibrowserTheme(darkTheme = false) {
