@@ -170,7 +170,7 @@ fun SheetRow(
     Row(
         modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .heightIn(min = 52.dp)
             .clip(Radius.small)
             .then(
                 if (onClick != null) {
