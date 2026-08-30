@@ -1,6 +1,8 @@
 package com.artt.minibrowser.data
 
 import android.content.Context
+import com.artt.minibrowser.net.sanitizeWebUriForPersistence
+import com.artt.minibrowser.net.webUriHost
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,9 +51,18 @@ private const val LEGACY_INTERRUPTED_ERROR = "Загрузка была прер
 
 /** Keep only the origin for display; signed download URLs frequently contain credentials in query parameters. */
 internal fun downloadSourceForHistory(value: String): String = runCatching {
-    val uri = URI(value)
-    if (uri.scheme?.lowercase() !in setOf("http", "https") || uri.host.isNullOrBlank()) return@runCatching ""
-    URI(uri.scheme.lowercase(), null, uri.host, uri.port, null, null, null).toString()
+    val safeUrl = sanitizeWebUriForPersistence(value) ?: return@runCatching ""
+    val uri = URI(safeUrl)
+    val scheme = uri.scheme?.lowercase() ?: return@runCatching ""
+    val host = webUriHost(safeUrl) ?: return@runCatching ""
+    val displayHost = if (host.contains(':') && !(host.startsWith("[") && host.endsWith("]"))) {
+        "[$host]"
+    } else {
+        host
+    }
+    val explicitPort = uri.toURL().port
+    val portSuffix = if (explicitPort >= 0) ":$explicitPort" else ""
+    "$scheme://$displayHost$portSuffix"
 }.getOrDefault("")
 
 internal fun normalizeRestoredDownload(item: BrowserDownload, now: Long): BrowserDownload {
