@@ -3,6 +3,7 @@ package com.artt.minibrowser
 import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.ui.Favicon
@@ -26,7 +27,7 @@ class FaviconSemanticsTest {
                 Favicon(
                     source = "invalid host with spaces",
                     iconsDir = File(context.cacheDir, "favicon-semantics"),
-                    size = androidx.compose.ui.unit.dp(32f),
+                    size = 32.dp,
                 )
             }
         }
