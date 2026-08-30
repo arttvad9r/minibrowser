@@ -20,14 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import com.artt.minibrowser.data.Suggestion
 import com.artt.minibrowser.engine.ExtensionLoader
-import com.artt.minibrowser.engine.SearchEngine
 import com.artt.minibrowser.engine.Tab
 import java.io.File
 
 internal data class BrowserPageUiState(
     val tabs: List<Tab>,
     val currentTab: Tab?,
-    val searchEngine: SearchEngine,
     val bookmarked: Boolean,
     val suggestions: List<Suggestion>,
     val adblockStatus: ExtensionLoader.Status?,
@@ -38,8 +36,8 @@ internal data class BrowserPageUiState(
 
 internal data class BrowserPageActions(
     val onSuggestionQueryChanged: (String?) -> Unit,
+    val onSubmitQuery: (String) -> Unit,
     val onNavigate: (String) -> Unit,
-    val onExternal: (String) -> Unit,
     val onBack: () -> Unit,
     val onForward: () -> Unit,
     val onReload: () -> Unit,
@@ -84,15 +82,14 @@ internal fun BrowserPageContent(
             Box(Modifier.windowInsetsPadding(topSafeInsets)) {
                 TopBar(
                     currentTab,
-                    engine = state.searchEngine,
                     tabCount = state.tabs.size,
                     bookmarked = state.bookmarked,
                     iconsDir = iconsDir,
                     omniboxFocus = omniboxFocus,
                     suggestions = state.suggestions,
                     onSuggestionQueryChanged = actions.onSuggestionQueryChanged,
+                    onSubmitQuery = actions.onSubmitQuery,
                     onNavigate = actions.onNavigate,
-                    onExternal = actions.onExternal,
                     onBack = actions.onBack,
                     onForward = actions.onForward,
                     onReload = actions.onReload,
