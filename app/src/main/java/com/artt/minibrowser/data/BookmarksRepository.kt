@@ -21,20 +21,14 @@ internal fun webBookmarks(entries: List<Bookmark>): List<Bookmark> {
     for (index in entries.indices) {
         val entry = entries[index]
         val safe = sanitizedBookmark(entry)
-        val unchanged = safe === entry && safe != null && seenUrls.add(entry.url)
-        if (unchanged) {
-            result?.add(entry)
-            continue
-        }
+        val keep = safe != null && seenUrls.add(safe.url)
+        if (result == null && safe === entry && keep) continue
 
         if (result == null) {
             result = ArrayList(entries.size)
-            for (retainedIndex in 0 until index) {
-                val retained = entries[retainedIndex]
-                if (seenUrls.add(retained.url)) result.add(retained)
-            }
+            for (retainedIndex in 0 until index) result.add(entries[retainedIndex])
         }
-        if (safe != null && seenUrls.add(safe.url)) result.add(safe)
+        if (keep) result.add(requireNotNull(safe))
     }
     return result ?: entries
 }
