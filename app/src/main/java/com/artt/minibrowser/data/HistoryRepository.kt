@@ -1,6 +1,7 @@
 package com.artt.minibrowser.data
 
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
+import com.artt.minibrowser.net.sanitizeWebUriUserInfoInText
 import com.artt.minibrowser.net.webUriHost
 
 private val HISTORY_WHITESPACE = Regex("\\s+")
@@ -10,7 +11,7 @@ internal fun isHistoryUrl(url: String): Boolean = sanitizeWebUriForPersistence(u
 /** Removes HTTP(S) user-info from URL-shaped titles without altering ordinary page titles. */
 internal fun historyTitleForPersistence(title: String?): String? {
     val value = title?.takeIf { it.isNotBlank() } ?: return null
-    return sanitizeWebUriForPersistence(value) ?: value
+    return sanitizeWebUriUserInfoInText(value)
 }
 
 /**
