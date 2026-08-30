@@ -46,6 +46,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -180,6 +182,9 @@ private fun BookmarkRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         bookmarks.forEach { bm ->
+            val bookmarkDescription = bm.title.ifBlank {
+                bm.host.ifBlank { hostOf(bm.url).ifBlank { bm.url } }
+            }
             Column(Modifier.width(68.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     Modifier
@@ -190,7 +195,8 @@ private fun BookmarkRow(
                         .softCombinedClickable(
                             onClick = { onOpen(bm.url) },
                             onLongClick = { onLongPress(bm) },
-                        ),
+                        )
+                        .semantics { contentDescription = bookmarkDescription },
                     contentAlignment = Alignment.Center,
                 ) {
                     Favicon(bm.url, iconsDir, 30.dp)
