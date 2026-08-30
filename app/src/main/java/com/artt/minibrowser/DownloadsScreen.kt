@@ -3,63 +3,25 @@ package com.artt.minibrowser
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.text.format.Formatter
 import android.widget.Toast
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.artt.minibrowser.browser.DownloadsUiState
 import com.artt.minibrowser.browser.DownloadsViewModel
 import com.artt.minibrowser.data.BrowserDownload
 import com.artt.minibrowser.data.DownloadFailureReason
 import com.artt.minibrowser.data.DownloadStatus
 import com.artt.minibrowser.data.DownloadsRepository
-import com.artt.minibrowser.ui.AppIcons
-import com.artt.minibrowser.ui.BrowserMotionScreen
-import com.artt.minibrowser.ui.CenteredSinglePane
-import com.artt.minibrowser.ui.EmptyState
-import com.artt.minibrowser.ui.Radius
-import com.artt.minibrowser.ui.softClickable
+import com.artt.minibrowser.ui.DownloadFailureUiState
+import com.artt.minibrowser.ui.DownloadItemUiState
+import com.artt.minibrowser.ui.DownloadStatusUiState
+import com.artt.minibrowser.ui.DownloadsScreenContent
+import com.artt.minibrowser.ui.DownloadsScreenUiState
 import java.io.File
-import java.text.DateFormat
-import java.util.Date
 
 /** Downloads stays in the same Compose navigation layer as Settings/History/Bookmarks. */
 @Composable
@@ -71,183 +33,41 @@ internal fun MotionDownloadsScreen(onBack: () -> Unit) {
     val downloadsViewModel: DownloadsViewModel = viewModel(factory = factory)
     val state by downloadsViewModel.uiState.collectAsStateWithLifecycle()
 
-    DownloadsScreen(
-        state = state,
+    DownloadsScreenContent(
+        state = DownloadsScreenUiState(
+            downloads = state.downloads.map(BrowserDownload::toUiState),
+            isRestoring = state.isRestoring,
+        ),
         onBack = onBack,
         onClear = downloadsViewModel::clear,
-        onOpen = { item -> openDownload(context, item) },
+        onOpen = { id ->
+            state.downloads.firstOrNull { it.id == id }?.let { openDownload(context, it) }
+        },
     )
 }
 
-@Composable
-private fun DownloadsScreen(
-    state: DownloadsUiState,
-    onBack: () -> Unit,
-    onClear: () -> Unit,
-    onOpen: (BrowserDownload) -> Unit,
-) {
-    val downloads = state.downloads
-    val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
-    var showClearConfirm by remember { mutableStateOf(false) }
+private fun BrowserDownload.toUiState(): DownloadItemUiState = DownloadItemUiState(
+    id = id,
+    name = name,
+    sourceUrl = sourceUrl,
+    status = status.toUiState(),
+    startedAt = startedAt,
+    finishedAt = finishedAt,
+    bytes = bytes,
+    canOpen = status == DownloadStatus.Completed && !location.isNullOrBlank(),
+    failureReason = failureReason.toUiState(),
+)
 
-    BrowserMotionScreen(onBack = onBack) { requestExit ->
-        CenteredSinglePane {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background),
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = { requestExit(onBack) }, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
-                    }
-                    Text(
-                        stringResource(R.string.downloads_title),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    if (downloads.isNotEmpty()) {
-                        TextButton(onClick = { showClearConfirm = true }) {
-                            Text(stringResource(R.string.action_clear))
-                        }
-                    }
-                }
-
-                when {
-                    state.isRestoring -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
-                    }
-                    downloads.isEmpty() -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            EmptyState(
-                                AppIcons.Download,
-                                stringResource(R.string.downloads_empty_title),
-                                stringResource(R.string.downloads_empty_subtitle),
-                            )
-                        }
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(downloads, key = { it.id }) { item ->
-                                DownloadCard(item, dateFormat) { onOpen(item) }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (showClearConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearConfirm = false },
-            title = { Text(stringResource(R.string.downloads_clear_dialog_title)) },
-            text = { Text(stringResource(R.string.downloads_clear_dialog_message)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showClearConfirm = false
-                        onClear()
-                    },
-                ) { Text(stringResource(R.string.action_clear)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearConfirm = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
-            },
-        )
-    }
+private fun DownloadStatus.toUiState(): DownloadStatusUiState = when (this) {
+    DownloadStatus.Downloading -> DownloadStatusUiState.Downloading
+    DownloadStatus.Completed -> DownloadStatusUiState.Completed
+    DownloadStatus.Failed -> DownloadStatusUiState.Failed
 }
 
-@Composable
-private fun DownloadCard(
-    item: BrowserDownload,
-    dateFormat: DateFormat,
-    onOpen: () -> Unit,
-) {
-    val context = LocalContext.current
-    val canOpen = item.status == DownloadStatus.Completed && !item.location.isNullOrBlank()
-    val iconTint = when (item.status) {
-        DownloadStatus.Downloading -> MaterialTheme.colorScheme.primary
-        DownloadStatus.Completed -> MaterialTheme.colorScheme.onSurface
-        DownloadStatus.Failed -> MaterialTheme.colorScheme.error
-    }
-    var cardModifier = Modifier
-        .fillMaxWidth()
-        .clip(Radius.card)
-        .background(MaterialTheme.colorScheme.surface)
-        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card)
-    if (canOpen) cardModifier = cardModifier.softClickable(onClick = onOpen)
-
-    Row(
-        cardModifier.padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(AppIcons.Download, null, Modifier.size(28.dp), tint = iconTint)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                item.name,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Spacer(Modifier.height(3.dp))
-            val statusText = when (item.status) {
-                DownloadStatus.Downloading -> stringResource(R.string.download_status_downloading)
-                DownloadStatus.Completed -> {
-                    val whenDone = item.finishedAt ?: item.startedAt
-                    stringResource(
-                        R.string.download_completed_subtitle,
-                        Formatter.formatShortFileSize(context, item.bytes.coerceAtLeast(0L)),
-                        dateFormat.format(Date(whenDone)),
-                    )
-                }
-                DownloadStatus.Failed -> {
-                    val failure = when (item.failureReason) {
-                        DownloadFailureReason.Interrupted -> stringResource(R.string.download_failure_interrupted)
-                        DownloadFailureReason.SaveFailed -> stringResource(R.string.download_save_error)
-                        null -> stringResource(R.string.download_failed_default)
-                    }
-                    stringResource(R.string.download_failed_subtitle, failure)
-                }
-            }
-            Text(
-                statusText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (item.status == DownloadStatus.Failed) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            val host = remember(item.sourceUrl) {
-                runCatching { Uri.parse(item.sourceUrl).host.orEmpty() }.getOrDefault("")
-            }
-            if (host.isNotBlank()) {
-                Spacer(Modifier.height(1.dp))
-                Text(
-                    host,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
+private fun DownloadFailureReason?.toUiState(): DownloadFailureUiState = when (this) {
+    DownloadFailureReason.Interrupted -> DownloadFailureUiState.Interrupted
+    DownloadFailureReason.SaveFailed -> DownloadFailureUiState.SaveFailed
+    null -> DownloadFailureUiState.Unknown
 }
 
 private fun openDownload(context: Context, item: BrowserDownload) {
