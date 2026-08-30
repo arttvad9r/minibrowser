@@ -3,6 +3,7 @@ package com.artt.minibrowser.browser
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import java.util.Locale
 import org.mozilla.geckoview.GeckoSession
 
 /**
@@ -116,7 +117,11 @@ internal class BrowserActivityRequestController(
 }
 
 internal fun acceptedMimeTypes(mimeTypes: Array<String>): Array<String> = mimeTypes
-    .filter { it.isNotBlank() && it.contains('/') }
+    .map { it.trim().lowercase(Locale.ROOT) }
+    .filter { value ->
+        val slash = value.indexOf('/')
+        slash > 0 && slash < value.lastIndex
+    }
     .distinct()
     .toTypedArray()
     .let { if (it.isEmpty()) arrayOf("*/*") else it }
