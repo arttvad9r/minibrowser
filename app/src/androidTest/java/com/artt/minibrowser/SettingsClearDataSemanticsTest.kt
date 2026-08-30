@@ -61,6 +61,35 @@ class SettingsClearDataSemanticsTest {
     }
 
     @Test
+    fun settingsGroupsAreAccessibilityHeadings() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val searchGroup = context.getString(R.string.settings_group_search).uppercase()
+        val privacyGroup = context.getString(R.string.settings_group_privacy).uppercase()
+
+        composeRule.setContent {
+            MinibrowserTheme(darkTheme = false) {
+                SettingsScreen(
+                    state = settingsState(clearDataFailed = false),
+                    onBack = {},
+                    onEngine = {},
+                    onTheme = {},
+                    onAdblock = {},
+                    onRetryAdblock = {},
+                    onVot = {},
+                    onRetryVot = {},
+                    onDownloads = {},
+                    onClearData = {},
+                    onTranslateLang = {},
+                )
+            }
+        }
+
+        val heading = SemanticsMatcher.expectValue(SemanticsProperties.Heading, Unit)
+        composeRule.onNodeWithText(searchGroup).assert(heading)
+        composeRule.onNodeWithText(privacyGroup).assert(heading)
+    }
+
+    @Test
     fun clearDataFailureIsAnnouncedAsPoliteLiveRegion() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val failure = context.getString(R.string.settings_clear_data_failed)

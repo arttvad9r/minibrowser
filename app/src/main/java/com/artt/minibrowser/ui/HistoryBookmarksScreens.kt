@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -168,7 +169,9 @@ internal fun HistoryScreenContent(
                                     }
                                     Text(
                                         label,
-                                        Modifier.padding(start = 24.dp, top = 12.dp, bottom = 2.dp),
+                                        Modifier
+                                            .padding(start = 24.dp, top = 12.dp, bottom = 2.dp)
+                                            .semantics { heading() },
                                         style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
