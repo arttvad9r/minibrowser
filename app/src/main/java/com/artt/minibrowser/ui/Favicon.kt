@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.engine.FaviconRepository
@@ -60,6 +61,7 @@ fun Favicon(
             ) {
                 Text(
                     displayHost.removePrefix("www.").take(1).uppercase(),
+                    modifier = Modifier.clearAndSetSemantics { },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = (size.value * 0.45f).sp,
                 )
