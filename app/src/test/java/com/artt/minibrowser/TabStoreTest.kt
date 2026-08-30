@@ -7,6 +7,7 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TabStoreTest {
@@ -98,6 +99,30 @@ class TabStoreTest {
         assertEquals(emptyList(), TabStore.loadState(dir).tabs)
         assertEquals("second-corrupt", backup.readText())
         assertEquals(1, dir.listFiles()?.count { it.name.startsWith("open_tabs.json.corrupt") })
+        dir.deleteRecursively()
+    }
+
+    @Test fun filtersUnsafePersistedUrlsAndRepairsSelection() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "tabs-unsafe-${System.nanoTime()}")
+        TabStore.saveState(
+            dir,
+            PersistedBrowserState(
+                selectedId = 2,
+                tabs = listOf(
+                    PersistedTab(1, "https://safe.example", "Safe"),
+                    PersistedTab(2, "file:///data/local/private.html", "File"),
+                    PersistedTab(3, "javascript:alert(1)", "Script"),
+                    PersistedTab(4, "https://", "Hostless"),
+                    PersistedTab(5, "ABOUT:BLANK", "Blank"),
+                ),
+            ),
+        )
+
+        val state = TabStore.loadState(dir)
+
+        assertNull(state.selectedId)
+        assertEquals(listOf(1L, 5L), state.tabs.map { it.id })
+        assertEquals(listOf("https://safe.example", "about:blank"), state.tabs.map { it.url })
         dir.deleteRecursively()
     }
 

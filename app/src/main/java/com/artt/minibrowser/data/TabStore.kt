@@ -1,6 +1,7 @@
 package com.artt.minibrowser.data
 
 import android.os.Trace
+import com.artt.minibrowser.net.isValidWebUri
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -41,6 +42,23 @@ private inline fun <T> tracedTabStoreLoad(block: () -> T): T {
         block()
     } finally {
         if (started) runCatching { Trace.endSection() }
+    }
+}
+
+internal fun sanitizePersistedBrowserState(state: PersistedBrowserState): PersistedBrowserState {
+    val tabs = state.tabs.mapNotNull { tab ->
+        when {
+            tab.url.isEmpty() -> tab
+            tab.url.equals("about:blank", ignoreCase = true) -> tab.copy(url = "about:blank")
+            isValidWebUri(tab.url) -> tab
+            else -> null
+        }
+    }
+    val selectedId = state.selectedId?.takeIf { selected -> tabs.any { it.id == selected } }
+    return if (tabs == state.tabs && selectedId == state.selectedId) {
+        state
+    } else {
+        state.copy(selectedId = selectedId, tabs = tabs)
     }
 }
 
@@ -115,7 +133,7 @@ object TabStore {
         val target = File(dir, FILE_NAME)
         if (!target.isFile) return@tracedTabStoreLoad PersistedBrowserState()
         val text = target.readText()
-        runCatching {
+        val decoded = runCatching {
             json.decodeFromString(PersistedBrowserState.serializer(), text)
         }.getOrElse {
             runCatching {
@@ -125,9 +143,10 @@ object TabStore {
                 )
             }.getOrElse {
                 quarantineCorruptStore(target, File(dir, CORRUPT_FILE_NAME))
-                PersistedBrowserState()
+                return@tracedTabStoreLoad PersistedBrowserState()
             }
         }
+        sanitizePersistedBrowserState(decoded)
     }
 
     private fun quarantineCorruptStore(target: File, backup: File) {

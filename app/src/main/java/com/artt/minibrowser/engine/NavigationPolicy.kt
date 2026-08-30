@@ -2,7 +2,7 @@ package com.artt.minibrowser.engine
 
 import android.content.Intent
 import android.net.Uri
-import java.net.URI
+import com.artt.minibrowser.net.isValidWebUri as isSharedValidWebUri
 
 sealed interface NavigationTarget {
     data class Web(val uri: String) : NavigationTarget
@@ -81,10 +81,7 @@ private fun isSafeIntentData(uri: Uri): Boolean {
 private fun isSafePackageName(value: String): Boolean =
     value.length <= 255 && Regex("^[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)+$").matches(value)
 
-internal fun isValidWebUri(value: String): Boolean = runCatching {
-    val uri = URI(value)
-    uri.scheme?.lowercase() in setOf("http", "https") && !uri.host.isNullOrBlank()
-}.getOrDefault(false)
+internal fun isValidWebUri(value: String): Boolean = isSharedValidWebUri(value)
 
 fun isAllowedWebUri(value: String): Boolean = isValidWebUri(value)
 
