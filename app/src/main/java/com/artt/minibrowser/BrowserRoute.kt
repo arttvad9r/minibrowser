@@ -141,6 +141,12 @@ internal fun BrowserRoute(
         ExtensionLoader.Status.Disabled -> BrowserExtensionUiState.Disabled
         ExtensionLoader.Status.Installing, null -> BrowserExtensionUiState.Installing
     }
+    val settingsVotStatus = when (votStatus) {
+        ExtensionLoader.Status.Error -> BrowserExtensionUiState.Error
+        ExtensionLoader.Status.Enabled -> BrowserExtensionUiState.Enabled
+        ExtensionLoader.Status.Disabled -> BrowserExtensionUiState.Disabled
+        ExtensionLoader.Status.Installing, null -> BrowserExtensionUiState.Installing
+    }
     val chromeState = BrowserChromeUiState(
         url = currentTab?.url.orEmpty(),
         isPrivate = currentTab?.isPrivate == true,
@@ -278,9 +284,9 @@ internal fun BrowserRoute(
                         onTheme = settingsViewModel::setTheme,
                         onAdblock = toggleAdblock,
                         onRetryAdblock = retryAdblock,
-                        adblockStatus = adblockStatus,
+                        adblockStatus = chromeAdblockStatus,
                         votEnabled = prefs.votEnabled,
-                        votStatus = votStatus,
+                        votStatus = settingsVotStatus,
                         onVot = toggleVot,
                         onRetryVot = retryVot,
                         onClearData = browserDataViewModel::clear,
