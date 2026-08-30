@@ -24,7 +24,7 @@ private val FieldLight = Color(0xFFF1F2F4)
 private val PressedLight = Color(0xFFECEEF0)
 private val TextPrimaryLight = Color(0xFF161719)
 private val TextSecondaryLight = Color(0xFF60646B)
-private val BorderLight = Color(0xFFE5E7EA)
+private val BorderLight = Color(0xFF84888F)
 private val DividerLight = Color(0xFFE8EAED)
 private val Graphite = Color(0xFF25272A)
 
@@ -35,7 +35,7 @@ private val FieldDark = Color(0xFF202327)
 private val PressedDark = Color(0xFF272A2F)
 private val TextPrimaryDark = Color(0xFFF2F3F5)
 private val TextSecondaryDark = Color(0xFFA9ADB3)
-private val BorderDark = Color(0xFF2C3035)
+private val BorderDark = Color(0xFF6A6F77)
 private val DividerDark = Color(0xFF292D31)
 
 private val NeutralLightScheme = lightColorScheme(
