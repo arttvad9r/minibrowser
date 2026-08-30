@@ -49,6 +49,34 @@ class StartPageViewModelTest {
     }
 
     @Test
+    fun refreshFailurePreservesExistingContent() {
+        val bookmark = Bookmark("https://example.com", "Example", "example.com", 1)
+        val recent = listOf(HistoryEntry("https://recent.example", "Recent", 10L, 1))
+        var fail = false
+        val viewModel = startPageViewModel(
+            loadBookmarks = {
+                if (fail) error("read failed")
+                listOf(bookmark)
+            },
+            loadRecent = { recent },
+        )
+        viewModel.refresh()
+        fail = true
+
+        viewModel.refresh()
+
+        assertEquals(
+            StartPageUiState(
+                bookmarks = listOf(bookmark),
+                recent = recent,
+                isLoading = false,
+                error = StartPageOperation.Load,
+            ),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
     fun refreshRecentPreservesBookmarks() {
         val bookmark = Bookmark("https://example.com", "Example", "example.com", 1)
         var recent = listOf(HistoryEntry("https://old.example", "Old", 5L, 1))
@@ -136,6 +164,37 @@ class StartPageViewModelTest {
                 recent = recent,
                 isLoading = false,
                 error = StartPageOperation.Delete,
+            ),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun postMutationReloadFailureIsReportedAsLoadError() {
+        val bookmark = Bookmark("https://example.com", "Example", "example.com", 1)
+        val recent = listOf(HistoryEntry("https://recent.example", "Recent", 10L, 1))
+        var bookmarkLoads = 0
+        var deleted = false
+        val viewModel = startPageViewModel(
+            loadBookmarks = {
+                bookmarkLoads++
+                if (bookmarkLoads > 1) error("reload failed")
+                listOf(bookmark)
+            },
+            loadRecent = { recent },
+            deleteBookmark = { deleted = true },
+        )
+        viewModel.refresh()
+
+        viewModel.delete(bookmark.url)
+
+        assertEquals(true, deleted)
+        assertEquals(
+            StartPageUiState(
+                bookmarks = listOf(bookmark),
+                recent = recent,
+                isLoading = false,
+                error = StartPageOperation.Load,
             ),
             viewModel.uiState.value,
         )
