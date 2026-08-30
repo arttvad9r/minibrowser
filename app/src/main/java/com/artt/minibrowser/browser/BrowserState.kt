@@ -1,10 +1,13 @@
 package com.artt.minibrowser.browser
 
 enum class BrowserScreen { Browser, Settings, History, Bookmarks }
+enum class BrowserOverlay { Switcher, Find, SiteInfo }
 
 data class BrowserUiState(
     val screen: BrowserScreen = BrowserScreen.Browser,
-    val showSwitcher: Boolean = false,
-    val showFind: Boolean = false,
-    val showSiteInfo: Boolean = false,
-)
+    val overlay: BrowserOverlay? = null,
+) {
+    val showSwitcher: Boolean get() = overlay == BrowserOverlay.Switcher
+    val showFind: Boolean get() = overlay == BrowserOverlay.Find
+    val showSiteInfo: Boolean get() = overlay == BrowserOverlay.SiteInfo
+}
