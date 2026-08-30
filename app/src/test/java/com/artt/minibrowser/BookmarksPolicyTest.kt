@@ -145,6 +145,27 @@ class BookmarksPolicyTest {
         assertEquals(listOf(safe), webBookmarks(listOf(credential, safe)))
     }
 
+    @Test fun canonicalUrlStillWinsWhenItsMetadataNeedsCleanup() {
+        val credentialAlias = Bookmark(
+            "https://user:secret@example.com/private",
+            "Credential copy",
+            "example.com",
+            1,
+        )
+        val canonicalWithStaleHost = Bookmark(
+            "https://example.com/private",
+            "Safe",
+            "stale.invalid",
+            2,
+        )
+        val expected = Bookmark("https://example.com/private", "Safe", "example.com", 2)
+
+        assertEquals(
+            listOf(expected),
+            webBookmarks(listOf(credentialAlias, canonicalWithStaleHost)),
+        )
+    }
+
     @Test fun omniboxMergeNeverPublishesUnsafeStoredUrls() {
         val unsafe = Bookmark("file:///tmp/private", "Private", "", 1)
         val credential = Bookmark(
