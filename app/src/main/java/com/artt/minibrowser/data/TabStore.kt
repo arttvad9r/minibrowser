@@ -132,22 +132,30 @@ object TabStore {
     fun load(dir: File): List<String> = loadState(dir).tabs.map { it.url }
 
     fun loadState(dir: File): PersistedBrowserState = tracedTabStoreLoad {
-        val target = File(dir, FILE_NAME)
-        if (!target.isFile) return@tracedTabStoreLoad PersistedBrowserState()
-        val text = target.readText()
-        val decoded = runCatching {
-            json.decodeFromString(PersistedBrowserState.serializer(), text)
-        }.getOrElse {
-            runCatching {
-                val legacy = json.decodeFromString(ListSerializer(String.serializer()), text)
-                PersistedBrowserState(
-                    tabs = legacy.mapIndexed { index, url -> PersistedTab(index.toLong() + 1, url) },
-                )
+        synchronized(writeLock) {
+            val target = File(dir, FILE_NAME)
+            if (!target.isFile) return@synchronized PersistedBrowserState()
+            val text = target.readText()
+            var needsRewrite = false
+            val decoded = runCatching {
+                json.decodeFromString(PersistedBrowserState.serializer(), text)
             }.getOrElse {
-                quarantineCorruptFile(target, File(dir, CORRUPT_FILE_NAME))
-                return@tracedTabStoreLoad PersistedBrowserState()
+                runCatching {
+                    val legacy = json.decodeFromString(ListSerializer(String.serializer()), text)
+                    needsRewrite = true
+                    PersistedBrowserState(
+                        tabs = legacy.mapIndexed { index, url -> PersistedTab(index.toLong() + 1, url) },
+                    )
+                }.getOrElse {
+                    quarantineCorruptFile(target, File(dir, CORRUPT_FILE_NAME))
+                    return@synchronized PersistedBrowserState()
+                }
             }
+            val sanitized = sanitizePersistedBrowserState(decoded)
+            if (needsRewrite || sanitized != decoded) {
+                runCatching { writeStateLocked(dir, sanitized) }
+            }
+            sanitized
         }
-        sanitizePersistedBrowserState(decoded)
     }
 }

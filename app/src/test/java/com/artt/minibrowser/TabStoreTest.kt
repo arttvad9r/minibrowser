@@ -123,6 +123,11 @@ class TabStoreTest {
         assertNull(state.selectedId)
         assertEquals(listOf(1L, 5L), state.tabs.map { it.id })
         assertEquals(listOf("https://safe.example", "about:blank"), state.tabs.map { it.url })
+        val rewritten = File(dir, "open_tabs.json").readText()
+        assertFalse(rewritten.contains("file:///"))
+        assertFalse(rewritten.contains("javascript:"))
+        assertFalse(rewritten.contains("ABOUT:BLANK"))
+        assertTrue(rewritten.contains("about:blank"))
         dir.deleteRecursively()
     }
 
@@ -147,12 +152,20 @@ class TabStoreTest {
         assertEquals(2L, state.selectedId)
         assertEquals(listOf(2L, 4L), state.tabs.map { it.id })
         assertEquals(listOf("First", "Four"), state.tabs.map { it.title })
+        val rewritten = File(dir, "open_tabs.json").readText()
+        assertFalse(rewritten.contains("Zero"))
+        assertFalse(rewritten.contains("Duplicate"))
+        assertFalse(rewritten.contains("Negative"))
         dir.deleteRecursively()
     }
 
-    @Test fun readsPreviousUrlOnlyFormat() {
+    @Test fun readsPreviousUrlOnlyFormatAndMigratesIt() {
         val dir = File(System.getProperty("java.io.tmpdir"), "tabs-legacy-${System.nanoTime()}").apply { mkdirs() }
-        File(dir, "open_tabs.json").writeText("[\"https://legacy.example\"]")
+        val target = File(dir, "open_tabs.json")
+        target.writeText("[\"https://legacy.example\"]")
+
+        assertEquals(listOf("https://legacy.example"), TabStore.load(dir))
+        assertTrue(target.readText().trimStart().startsWith("{"))
         assertEquals(listOf("https://legacy.example"), TabStore.load(dir))
         dir.deleteRecursively()
     }
