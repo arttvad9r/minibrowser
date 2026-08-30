@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -79,7 +79,7 @@ fun CompactChoiceSheet(
     }
 }
 
-/** 48dp radio-button target; the trailing slot is fixed so selection never causes layout motion. */
+/** At least 48dp radio-button target; large text may expand the row instead of being clipped. */
 @Composable
 fun CompactChoiceRow(
     title: String,
@@ -89,7 +89,7 @@ fun CompactChoiceRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .heightIn(min = 48.dp)
             .selectable(
                 selected = selected,
                 role = Role.RadioButton,
