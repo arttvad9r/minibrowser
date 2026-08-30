@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +28,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -303,7 +303,11 @@ private fun BrowserTabCard(
             .clip(Radius.card)
             .background(cardColor)
             .border(if (isCurrent) 1.5.dp else 1.dp, borderColor, Radius.card)
-            .clickable(role = Role.Button, onClick = onSelect),
+            .selectable(
+                selected = isCurrent,
+                role = Role.Tab,
+                onClick = onSelect,
+            ),
     ) {
         if (tab.isPrivate) {
             Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
