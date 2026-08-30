@@ -15,6 +15,8 @@
     <string name="action_rename">Переименовать</string>
     <string name="action_delete">Удалить</string>
     <string name="action_ok">ОК</string>
+    <string name="action_allow">Разрешить</string>
+    <string name="action_deny">Запретить</string>
     <string name="add_bookmark_content_description">Добавить закладку</string>
     <string name="recent_title">Недавние</string>
     <string name="refresh_recent_content_description">Обновить недавние</string>
@@ -71,6 +73,24 @@
     <string name="action_download">Скачать</string>
     <string name="downloads_folder_permission_error">Нет доступа к папке Downloads</string>
     <string name="download_storage_permission_denied">Загрузка отменена: нет доступа к хранилищу</string>
+
+    <string name="context_open_new_tab">Открыть в новой вкладке</string>
+    <string name="context_open_media_new_tab">Открыть медиа в новой вкладке</string>
+    <string name="context_copy_link">Копировать ссылку</string>
+    <string name="context_copy_address">Копировать адрес</string>
+    <string name="context_copy_media_address">Копировать адрес медиа</string>
+    <string name="clipboard_label_link">Ссылка</string>
+    <string name="clipboard_label_address">Адрес</string>
+    <string name="copied_to_clipboard">Скопировано</string>
+
+    <string name="site_fallback">Сайт</string>
+    <string name="permission_geolocation_message">%1$s хочет получить доступ к местоположению.</string>
+    <string name="permission_drm_message">%1$s хочет использовать защищённое DRM-медиа.</string>
+    <string name="permission_storage_access_message">%1$s хочет получить доступ к cookies на %2$s.</string>
+    <string name="permission_storage_access_generic">Стороннее содержимое хочет получить доступ к cookies этого сайта.</string>
+    <string name="permission_camera_message">Разрешить доступ к камере?</string>
+    <string name="permission_microphone_message">Разрешить доступ к микрофону?</string>
+    <string name="permission_camera_microphone_message">Разрешить доступ к камере и микрофону?</string>
 
     <string name="settings_title">Настройки</string>
     <string name="settings_group_search">Поиск</string>

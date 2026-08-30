@@ -6,6 +6,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.annotation.StringRes
+import com.artt.minibrowser.R
 import org.mozilla.geckoview.GeckoSession
 
 /** Minimal browser context menu for long-pressed links and media. */
@@ -26,20 +28,24 @@ class GeckoContextMenuController(
 
             if (link != null) {
                 if (isAllowedWebUri(link)) {
-                    labels += "Открыть в новой вкладке"
+                    labels += activity.getString(R.string.context_open_new_tab)
                     actions += { openTab(link, private) }
                 }
-                labels += "Копировать ссылку"
-                actions += { copy(link, "Ссылка") }
+                labels += activity.getString(R.string.context_copy_link)
+                actions += { copy(link, R.string.clipboard_label_link) }
             }
 
             if (media != null) {
                 if (isAllowedWebUri(media)) {
-                    labels += if (link == null) "Открыть в новой вкладке" else "Открыть медиа в новой вкладке"
+                    labels += activity.getString(
+                        if (link == null) R.string.context_open_new_tab else R.string.context_open_media_new_tab,
+                    )
                     actions += { openTab(media, private) }
                 }
-                labels += if (link == null) "Копировать адрес" else "Копировать адрес медиа"
-                actions += { copy(media, "Адрес") }
+                labels += activity.getString(
+                    if (link == null) R.string.context_copy_address else R.string.context_copy_media_address,
+                )
+                actions += { copy(media, R.string.clipboard_label_address) }
             }
 
             if (labels.isNotEmpty()) {
@@ -50,10 +56,10 @@ class GeckoContextMenuController(
         }
     }
 
-    private fun copy(value: String, label: String) {
+    private fun copy(value: String, @StringRes labelRes: Int) {
         if (activity.isFinishing || activity.isDestroyed) return
         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
-        Toast.makeText(activity, "Скопировано", Toast.LENGTH_SHORT).show()
+        clipboard.setPrimaryClip(ClipData.newPlainText(activity.getString(labelRes), value))
+        Toast.makeText(activity, activity.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
     }
 }

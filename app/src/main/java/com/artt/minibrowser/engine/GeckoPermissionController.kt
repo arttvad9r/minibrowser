@@ -6,6 +6,7 @@ import android.app.AlertDialog
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import com.artt.minibrowser.R
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -83,17 +84,19 @@ class GeckoPermissionController(
             return GeckoResult.fromValue(resolvedValue)
         }
         val result = GeckoResult<Int>()
-        val host = hostOfPermission(perm.uri)
-        val topHost = hostOfPermission(perm.uri)
+        val hostName = hostOfPermission(perm.uri)
+        val host = hostName ?: activity.getString(R.string.site_fallback)
         val message = when (action) {
-            PermissionAction.PROMPT_GEOLOCATION -> "$host хочет получить доступ к местоположению."
-            PermissionAction.PROMPT_DRM -> "$host хочет использовать защищённое DRM-медиа."
+            PermissionAction.PROMPT_GEOLOCATION ->
+                activity.getString(R.string.permission_geolocation_message, host)
+            PermissionAction.PROMPT_DRM ->
+                activity.getString(R.string.permission_drm_message, host)
             PermissionAction.PROMPT_STORAGE_ACCESS -> {
                 val thirdParty = hostOfPermission(perm.thirdPartyOrigin)
-                if (thirdParty != "Сайт" && topHost != "Сайт") {
-                    "$thirdParty хочет получить доступ к cookies на $topHost."
+                if (thirdParty != null && hostName != null) {
+                    activity.getString(R.string.permission_storage_access_message, thirdParty, hostName)
                 } else {
-                    "Стороннее содержимое хочет получить доступ к cookies этого сайта."
+                    activity.getString(R.string.permission_storage_access_generic)
                 }
             }
             PermissionAction.ALLOW, PermissionAction.DENY -> ""
@@ -107,9 +110,15 @@ class GeckoPermissionController(
                 val dialog = AlertDialog.Builder(activity)
                     .setTitle(host)
                     .setMessage(message)
-                    .setNegativeButton("Запретить") { _, _ -> result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
-                    .setPositiveButton("Разрешить") { _, _ -> result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) }
-                    .setOnCancelListener { result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY) }
+                    .setNegativeButton(activity.getString(R.string.action_deny)) { _, _ ->
+                        result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                    }
+                    .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
+                        result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+                    }
+                    .setOnCancelListener {
+                        result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+                    }
                     .create()
                 dialog.setOnShowListener { perm.notifyShown() }
                 dialog.show()
@@ -131,8 +140,12 @@ class GeckoPermissionController(
             callback.reject()
             return
         }
-        val camera = video.orEmpty().firstOrNull { it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_CAMERA }
-        val microphone = audio.orEmpty().firstOrNull { it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_MICROPHONE }
+        val camera = video.orEmpty().firstOrNull {
+            it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_CAMERA
+        }
+        val microphone = audio.orEmpty().firstOrNull {
+            it.source == GeckoSession.PermissionDelegate.MediaSource.SOURCE_MICROPHONE
+        }
         val unsupported = (video.orEmpty().asList() + audio.orEmpty().asList()).any {
             it.source != GeckoSession.PermissionDelegate.MediaSource.SOURCE_CAMERA &&
                 it.source != GeckoSession.PermissionDelegate.MediaSource.SOURCE_MICROPHONE
@@ -141,11 +154,13 @@ class GeckoPermissionController(
             callback.reject()
             return
         }
-        val host = runCatching { android.net.Uri.parse(uri).host }.getOrNull().orEmpty().ifBlank { "Сайт" }
-        val requested = buildList {
-            if (camera != null) add("камере")
-            if (microphone != null) add("микрофону")
-        }.joinToString(" и ")
+        val host = hostOfPermission(uri) ?: activity.getString(R.string.site_fallback)
+        val message = when {
+            camera != null && microphone != null ->
+                activity.getString(R.string.permission_camera_microphone_message)
+            camera != null -> activity.getString(R.string.permission_camera_message)
+            else -> activity.getString(R.string.permission_microphone_message)
+        }
         activity.runOnUiThread {
             if (!canShowUi()) {
                 callback.reject()
@@ -154,9 +169,11 @@ class GeckoPermissionController(
             runCatching {
                 AlertDialog.Builder(activity)
                     .setTitle(host)
-                    .setMessage("Разрешить доступ к $requested?")
-                    .setNegativeButton("Запретить") { _, _ -> callback.reject() }
-                    .setPositiveButton("Разрешить") { _, _ -> requestAndroidMediaPermissions(camera, microphone, callback) }
+                    .setMessage(message)
+                    .setNegativeButton(activity.getString(R.string.action_deny)) { _, _ -> callback.reject() }
+                    .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
+                        requestAndroidMediaPermissions(camera, microphone, callback)
+                    }
                     .setOnCancelListener { callback.reject() }
                     .show()
             }.onFailure {
@@ -191,7 +208,7 @@ class GeckoPermissionController(
 
     private fun canShowUi(): Boolean = !activity.isFinishing && !activity.isDestroyed
 
-    private fun hostOfPermission(uri: String?): String = runCatching {
+    private fun hostOfPermission(uri: String?): String? = runCatching {
         android.net.Uri.parse(uri.orEmpty()).host
-    }.getOrNull().orEmpty().ifBlank { "Сайт" }
+    }.getOrNull()?.takeIf { it.isNotBlank() }
 }
