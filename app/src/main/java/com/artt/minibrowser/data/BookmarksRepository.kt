@@ -16,8 +16,14 @@ internal fun bookmarkForPersistence(url: String, title: String, position: Int): 
 }
 
 private fun sanitizedBookmark(entry: Bookmark): Bookmark? {
-    val safe = bookmarkForPersistence(entry.url, entry.title, entry.position) ?: return null
-    return if (safe == entry) entry else safe
+    val safeUrl = sanitizeWebUriForPersistence(entry.url) ?: return null
+    if (safeUrl == entry.url) return entry
+    val safeHost = runCatching { URI(safeUrl).host.orEmpty() }.getOrDefault("")
+    return entry.copy(
+        url = safeUrl,
+        title = if (entry.title == entry.url) safeUrl else entry.title,
+        host = safeHost,
+    )
 }
 
 /** Drops malformed rows and strips HTTP user-info before stored bookmarks reach browser UI. */
