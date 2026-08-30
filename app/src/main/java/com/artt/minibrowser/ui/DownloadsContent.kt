@@ -36,6 +36,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
@@ -186,14 +190,27 @@ private fun DownloadCard(
                 style = MaterialTheme.typography.bodyLarge,
             )
             Spacer(Modifier.height(3.dp))
-            val statusText = when (item.status) {
-                DownloadStatusUiState.Downloading -> stringResource(R.string.download_status_downloading)
+            val statusText: String
+            val statusDescription: String
+            when (item.status) {
+                DownloadStatusUiState.Downloading -> {
+                    statusText = stringResource(R.string.download_status_downloading)
+                    statusDescription = stringResource(
+                        R.string.download_status_downloading_accessibility,
+                        item.name,
+                    )
+                }
                 DownloadStatusUiState.Completed -> {
                     val whenDone = item.finishedAt ?: item.startedAt
-                    stringResource(
+                    statusText = stringResource(
                         R.string.download_completed_subtitle,
                         Formatter.formatShortFileSize(context, item.bytes.coerceAtLeast(0L)),
                         dateFormat.format(Date(whenDone)),
+                    )
+                    statusDescription = stringResource(
+                        R.string.download_status_completed_accessibility,
+                        item.name,
+                        statusText,
                     )
                 }
                 DownloadStatusUiState.Failed -> {
@@ -202,11 +219,20 @@ private fun DownloadCard(
                         DownloadFailureUiState.SaveFailed -> stringResource(R.string.download_save_error)
                         DownloadFailureUiState.Unknown -> stringResource(R.string.download_failed_default)
                     }
-                    stringResource(R.string.download_failed_subtitle, failure)
+                    statusText = stringResource(R.string.download_failed_subtitle, failure)
+                    statusDescription = stringResource(
+                        R.string.download_status_failed_accessibility,
+                        item.name,
+                        failure,
+                    )
                 }
             }
             Text(
                 statusText,
+                Modifier.clearAndSetSemantics {
+                    contentDescription = statusDescription
+                    liveRegion = LiveRegionMode.Polite
+                },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,

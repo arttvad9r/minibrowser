@@ -1,0 +1,5 @@
+<resources>
+    <string name="download_status_downloading_accessibility">Файл %1$s скачивается</string>
+    <string name="download_status_completed_accessibility">Файл %1$s скачан. %2$s</string>
+    <string name="download_status_failed_accessibility">Не удалось скачать файл %1$s. %2$s</string>
+</resources>
