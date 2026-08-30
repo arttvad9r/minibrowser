@@ -3,6 +3,7 @@ package com.artt.minibrowser
 import com.artt.minibrowser.browser.PageBookmarkOperation
 import com.artt.minibrowser.browser.PageBookmarkUiState
 import com.artt.minibrowser.browser.PageBookmarkViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -106,6 +107,42 @@ class PageBookmarkViewModelTest {
 
         assertEquals("https://example.com", removed)
         assertEquals(PageBookmarkUiState(url = "https://example.com"), viewModel.uiState.value)
+    }
+
+    @Test
+    fun syncSameUrlDuringToggleDoesNotCompeteWithMutation() {
+        val gate = CompletableDeferred<Unit>()
+        var checks = 0
+        val viewModel = pageBookmarkViewModel(
+            checkBookmarked = {
+                checks++
+                false
+            },
+            addBookmark = { _, _ -> gate.await() },
+        )
+        val url = "https://example.com"
+        viewModel.sync(url)
+
+        viewModel.toggle(url, "Example")
+        assertEquals(1, checks)
+        assertEquals(
+            PageBookmarkUiState(url = url, isLoading = true),
+            viewModel.uiState.value,
+        )
+
+        viewModel.sync(url)
+
+        assertEquals(1, checks)
+        assertEquals(
+            PageBookmarkUiState(url = url, isLoading = true),
+            viewModel.uiState.value,
+        )
+
+        gate.complete(Unit)
+        assertEquals(
+            PageBookmarkUiState(url = url, isBookmarked = true),
+            viewModel.uiState.value,
+        )
     }
 
     @Test

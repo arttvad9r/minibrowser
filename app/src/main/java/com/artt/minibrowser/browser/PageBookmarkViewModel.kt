@@ -60,6 +60,7 @@ internal class PageBookmarkViewModel : ViewModel {
             _uiState.value = PageBookmarkUiState()
             return
         }
+        if (toggleJob?.isActive == true && _uiState.value.url == target) return
 
         _uiState.value = PageBookmarkUiState(url = target, isLoading = true)
         syncJob = viewModelScope.launch {
