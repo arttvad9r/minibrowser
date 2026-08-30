@@ -12,6 +12,7 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.artt.minibrowser.browser.BrowserDataClearer
 import com.artt.minibrowser.browser.BrowserDataViewModel
 import com.artt.minibrowser.browser.BrowserIntentController
 import com.artt.minibrowser.browser.BrowserRootEffects
@@ -64,6 +65,7 @@ internal fun BrowserRoute(
     tabManager: TabManager,
     settingsViewModel: SettingsViewModel,
     browserDataViewModel: BrowserDataViewModel,
+    browserDataClearer: BrowserDataClearer,
     browserViewModel: BrowserViewModel,
     pageBookmarkViewModel: PageBookmarkViewModel,
     omniboxSuggestionsViewModel: OmniboxSuggestionsViewModel,
@@ -296,7 +298,9 @@ internal fun BrowserRoute(
                         onVot = toggleVot,
                         onRetryVot = retryVot,
                         onDownloads = { browserViewModel.screen(BrowserScreen.Downloads) },
-                        onClearData = browserDataViewModel::clear,
+                        onClearData = { withBookmarks ->
+                            browserDataViewModel.clear(withBookmarks, browserDataClearer)
+                        },
                         onTranslateLang = settingsViewModel::setTranslateTarget,
                     )
                 }
