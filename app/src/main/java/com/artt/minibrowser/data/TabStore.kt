@@ -144,18 +144,10 @@ object TabStore {
                     tabs = legacy.mapIndexed { index, url -> PersistedTab(index.toLong() + 1, url) },
                 )
             }.getOrElse {
-                quarantineCorruptStore(target, File(dir, CORRUPT_FILE_NAME))
+                quarantineCorruptFile(target, File(dir, CORRUPT_FILE_NAME))
                 return@tracedTabStoreLoad PersistedBrowserState()
             }
         }
         sanitizePersistedBrowserState(decoded)
-    }
-
-    private fun quarantineCorruptStore(target: File, backup: File) {
-        val moved = runCatching {
-            Files.move(target.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            true
-        }.getOrDefault(false)
-        if (!moved) target.delete()
     }
 }
