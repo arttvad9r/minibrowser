@@ -1,10 +1,7 @@
 package com.artt.minibrowser.browser
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,10 +19,10 @@ internal data class BrowserDataUiState(
 
 /** Owns UI state for the cross-feature browser-data clearing operation. */
 internal class BrowserDataViewModel : ViewModel {
-    private val clearBrowserData: suspend (Boolean) -> Unit
+    private val testClearBrowserData: (suspend (Boolean) -> Unit)?
 
-    constructor(clearer: BrowserDataClearer) : super() {
-        clearBrowserData = clearer::clear
+    constructor() : super() {
+        testClearBrowserData = null
     }
 
     internal constructor(
@@ -36,7 +33,7 @@ internal class BrowserDataViewModel : ViewModel {
         clearWebData: suspend () -> Unit,
         viewModelScope: CoroutineScope,
     ) : super(viewModelScope) {
-        clearBrowserData = BrowserDataClearer(
+        testClearBrowserData = BrowserDataClearer(
             clearTabPreviews = clearTabPreviews,
             clearHistory = clearHistory,
             clearBookmarks = clearBookmarks,
@@ -48,8 +45,17 @@ internal class BrowserDataViewModel : ViewModel {
     private val _uiState = MutableStateFlow(BrowserDataUiState())
     val uiState = _uiState.asStateFlow()
 
-    fun clear(withBookmarks: Boolean) {
+    /**
+     * The production clearer is supplied per operation instead of being retained by this ViewModel.
+     * BrowserDataViewModel survives Activity recreation, while BrowserDataClearer intentionally owns
+     * the current Activity's TabManager. Retaining that clearer here would keep a destroyed browser
+     * host alive and could send a later clear request to an already-closed TabManager.
+     */
+    fun clear(withBookmarks: Boolean, clearer: BrowserDataClearer? = null) {
         if (_uiState.value.status == BrowserDataStatus.Clearing) return
+        val clearBrowserData = clearer?.let { current -> current::clear }
+            ?: testClearBrowserData
+            ?: error("BrowserDataClearer is required for production clear operations")
         _uiState.value = BrowserDataUiState(BrowserDataStatus.Clearing)
         viewModelScope.launch {
             try {
@@ -66,12 +72,6 @@ internal class BrowserDataViewModel : ViewModel {
     fun dismissError() {
         if (_uiState.value.status == BrowserDataStatus.Failed) {
             _uiState.value = BrowserDataUiState()
-        }
-    }
-
-    companion object {
-        fun factory(clearer: BrowserDataClearer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { BrowserDataViewModel(clearer) }
         }
     }
 }
