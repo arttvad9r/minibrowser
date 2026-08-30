@@ -39,5 +39,6 @@ fun buildTranslateUri(url: String, target: String): String? {
     val query = u.rawQuery
     val translateQuery = "_x_tr_sl=auto&_x_tr_tl=$language&_x_tr_hl=$language"
     val q = if (query.isNullOrEmpty()) "?$translateQuery" else "?$query&$translateQuery"
-    return "https://$translatedHost.translate.goog${u.rawPath ?: ""}$q"
+    val fragment = u.rawFragment?.let { "#$it" }.orEmpty()
+    return "https://$translatedHost.translate.goog${u.rawPath ?: ""}$q$fragment"
 }

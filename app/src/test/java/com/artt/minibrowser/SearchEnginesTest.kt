@@ -49,6 +49,11 @@ class SearchEnginesTest {
         assertEquals(
             "https://my--site-com.translate.goog/a?b=1&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en",
             buildTranslateUri("https://my-site.com/a?b=1", "en"))
+    @Test fun translateUriPreservesFragment() =
+        assertEquals(
+            "https://example-com.translate.goog/a?b=1&_x_tr_sl=auto&_x_tr_tl=de&_x_tr_hl=de#section-2",
+            buildTranslateUri("https://example.com/a?b=1#section-2", "de"),
+        )
     @Test fun translateUriNormalizesSupportedTarget() =
         assertEquals(
             "https://example-com.translate.goog/a?_x_tr_sl=auto&_x_tr_tl=de&_x_tr_hl=de",
