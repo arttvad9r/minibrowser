@@ -1,9 +1,10 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.engine.NavigationTarget
+import com.artt.minibrowser.engine.isAllowedPopupTarget
+import com.artt.minibrowser.engine.navigationDebugLabel
 import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.selectSafeExternalUri
-import com.artt.minibrowser.engine.isAllowedPopupTarget
 import com.artt.minibrowser.browser.NavigationController
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,6 +49,18 @@ class NavigationPolicyTest {
         assertEquals(null, selectSafeExternalUri("evil://payload", "https:"))
         assertEquals(null, selectSafeExternalUri("evil://payload", "https://"))
         assertEquals(null, selectSafeExternalUri("evil://payload", "mailto:test@example.com"))
+    }
+
+    @Test fun navigationDebugLabelsNeverExposeSensitiveUrlParts() {
+        assertEquals(
+            "https://example.com",
+            navigationDebugLabel("https://user:secret@example.com/private/path?q=token#part"),
+        )
+        assertEquals("mailto:", navigationDebugLabel("mailto:private@example.com?body=secret"))
+        assertEquals("intent:", navigationDebugLabel("intent://private.example/#Intent;S.secret=value;end"))
+        assertEquals("about:", navigationDebugLabel("about:config"))
+        assertEquals("<empty>", navigationDebugLabel(null))
+        assertEquals("<invalid>", navigationDebugLabel("not a uri"))
     }
 
     @Test fun popupPolicyAllowsWebAndBlankBootstrapTargetsOnly() {
