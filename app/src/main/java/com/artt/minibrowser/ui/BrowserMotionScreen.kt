@@ -1,6 +1,6 @@
 package com.artt.minibrowser.ui
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.collect
 
 /**
  * Full-screen app destination over the browser.
@@ -38,9 +40,10 @@ fun BrowserMotionScreen(
 ) {
     val reveal = remember(fromBottom) { Animatable(if (fromBottom) 0f else 1f) }
     var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var predictiveBackActive by remember { mutableStateOf(false) }
     var activeAnimations by remember { mutableIntStateOf(0) }
 
-    HighFrameRateDuringMotion(activeAnimations > 0)
+    HighFrameRateDuringMotion(activeAnimations > 0 || predictiveBackActive)
 
     suspend fun animateReveal(target: Float) {
         activeAnimations++
@@ -63,11 +66,29 @@ fun BrowserMotionScreen(
     }
 
     fun requestExit(action: () -> Unit) {
-        if (pendingExit != null) return
+        if (pendingExit != null || predictiveBackActive) return
         pendingExit = action
     }
 
-    BackHandler(enabled = pendingExit == null) { requestExit(onBack) }
+    PredictiveBackHandler(enabled = pendingExit == null) { progress ->
+        predictiveBackActive = true
+        try {
+            if (fromBottom) {
+                progress.collect { event ->
+                    reveal.snapTo(predictiveBackReveal(event.progress))
+                }
+                reveal.snapTo(0f)
+            } else {
+                progress.collect { }
+            }
+            predictiveBackActive = false
+            onBack()
+        } catch (cancelled: CancellationException) {
+            if (fromBottom) animateReveal(1f)
+            predictiveBackActive = false
+            throw cancelled
+        }
+    }
 
     val density = LocalDensity.current
     val travelPx = with(density) { 28.dp.toPx() }
@@ -93,3 +114,5 @@ fun BrowserMotionScreen(
         }
     }
 }
+
+internal fun predictiveBackReveal(progress: Float): Float = 1f - progress.coerceIn(0f, 1f)
