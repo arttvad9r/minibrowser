@@ -6,6 +6,23 @@ import java.nio.charset.StandardCharsets
 fun Map<String, String>.header(name: String): String? =
     entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
 
+private fun sanitizeFilenameChars(value: String, maxChars: Int = 120): String = buildString(minOf(value.length, maxChars)) {
+    var offset = 0
+    while (offset < value.length) {
+        val codePoint = value.codePointAt(offset)
+        offset += Character.charCount(codePoint)
+        val type = Character.getType(codePoint)
+        val unsafe = Character.isISOControl(codePoint) ||
+            type == Character.FORMAT.toInt() ||
+            type == Character.LINE_SEPARATOR.toInt() ||
+            type == Character.PARAGRAPH_SEPARATOR.toInt()
+        if (unsafe) continue
+        val width = Character.charCount(codePoint)
+        if (length + width > maxChars) break
+        appendCodePoint(codePoint)
+    }
+}
+
 fun sanitizeFilename(raw: String?, fallback: String): String {
     val safeFallback = fallback.replace(Regex("[^A-Za-z0-9._-]"), "_")
         .trim('.', ' ', '_')
@@ -14,9 +31,7 @@ fun sanitizeFilename(raw: String?, fallback: String): String {
         .replace('\\', '_')
         .replace('/', '_')
         .replace("..", "")
-        .filterNot { it.isISOControl() }
-        .trim('.', ' ', '_')
-        .take(120)
+        .let(::sanitizeFilenameChars)
         .trim('.', ' ', '_')
     return candidate.ifBlank { safeFallback }
 }

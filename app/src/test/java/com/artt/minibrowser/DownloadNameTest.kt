@@ -47,6 +47,20 @@ class DownloadNameTest {
         assert(sanitizeFilename("x".repeat(300), "file").length <= 120)
     }
 
+    @Test fun stripsUnicodeBidiAndInvisibleFormatControls() {
+        assertEquals("reportfdp.exe", sanitizeFilename("report\u202Efdp.exe", "file"))
+        assertEquals("ab.txt", sanitizeFilename("a\u200Db.txt", "file"))
+        assertEquals("ab.txt", sanitizeFilename("a\u2029b.txt", "file"))
+    }
+
+    @Test fun lengthLimitNeverSplitsSupplementaryCodePoint() {
+        val value = "x".repeat(118) + "😀.txt"
+        val sanitized = sanitizeFilename(value, "file")
+
+        assertEquals("x".repeat(118) + "😀", sanitized)
+        assertEquals(120, sanitized.length)
+    }
+
     @Test fun headersAreCaseInsensitive() {
         assertEquals(
             "attachment; filename=\"x.txt\"",
