@@ -3,6 +3,7 @@ package com.artt.minibrowser.engine
 import android.content.Intent
 import android.net.Uri
 import com.artt.minibrowser.net.isValidWebUri as isSharedValidWebUri
+import com.artt.minibrowser.net.webUriHost
 
 sealed interface NavigationTarget {
     data class Web(val uri: String) : NavigationTarget
@@ -18,6 +19,19 @@ private val BLOCKED_INTENT_DATA_SCHEMES = setOf(
 )
 
 fun isExternalScheme(value: String): Boolean = value.substringBefore(':', "").lowercase() in EXTERNAL_SCHEMES
+
+/** Debug-only navigation label that never exposes path/query/user-info or external payload data. */
+internal fun navigationDebugLabel(value: String?): String {
+    val raw = value?.trim().orEmpty()
+    if (raw.isEmpty()) return "<empty>"
+    val scheme = raw.substringBefore(':', "").lowercase()
+    val host = webUriHost(raw)
+    return when {
+        host != null && scheme.isNotEmpty() -> "$scheme://$host"
+        scheme.isNotEmpty() && raw.contains(':') -> "$scheme:"
+        else -> "<invalid>"
+    }
+}
 
 internal fun selectSafeExternalUri(direct: String?, fallback: String?): String? {
     val directScheme = direct?.substringBefore(':', "")?.lowercase()
