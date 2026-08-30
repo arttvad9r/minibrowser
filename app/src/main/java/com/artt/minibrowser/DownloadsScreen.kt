@@ -17,6 +17,7 @@ import com.artt.minibrowser.data.BrowserDownload
 import com.artt.minibrowser.data.DownloadFailureReason
 import com.artt.minibrowser.data.DownloadStatus
 import com.artt.minibrowser.data.DownloadsRepository
+import com.artt.minibrowser.data.normalizeDownloadMime
 import com.artt.minibrowser.ui.DownloadFailureUiState
 import com.artt.minibrowser.ui.DownloadItemUiState
 import com.artt.minibrowser.ui.DownloadStatusUiState
@@ -109,7 +110,7 @@ private fun openDownload(context: Context, item: BrowserDownload) {
     }
 
     val opened = runCatching {
-        launch(item.mime.ifBlank { "application/octet-stream" }) || launch("*/*")
+        launch(normalizeDownloadMime(item.mime)) || launch("*/*")
     }.getOrDefault(false)
     if (!opened) {
         Toast.makeText(context, context.getString(R.string.no_app_to_open_file), Toast.LENGTH_SHORT).show()
