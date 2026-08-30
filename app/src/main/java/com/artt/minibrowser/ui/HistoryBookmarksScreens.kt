@@ -321,8 +321,10 @@ internal fun BookmarksScreenContent(
                                 val bookmarkActionLabel = bookmark.title.ifBlank {
                                     bookmark.host.ifBlank { hostOf(bookmark.url).ifBlank { bookmark.url } }
                                 }
-                                val actionsDescription =
-                                    "${stringResource(R.string.actions_content_description)}: $bookmarkActionLabel"
+                                val actionsDescription = stringResource(
+                                    R.string.bookmark_actions_named_content_description,
+                                    bookmarkActionLabel,
+                                )
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
