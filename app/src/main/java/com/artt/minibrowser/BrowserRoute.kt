@@ -25,11 +25,13 @@ import com.artt.minibrowser.browser.SettingsViewModel
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.engine.NavigationTarget
+import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
 import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.toggleDesktopMode
+import com.artt.minibrowser.ui.BrowserChromeUiState
 import com.artt.minibrowser.ui.BrowserPageActions
 import com.artt.minibrowser.ui.BrowserPageContent
 import com.artt.minibrowser.ui.BrowserPageUiState
@@ -119,10 +121,19 @@ internal fun BrowserRoute(
     val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
     val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
     val retryVot: () -> Unit = settingsViewModel::retryVot
+    val chromeState = BrowserChromeUiState(
+        url = currentTab?.url.orEmpty(),
+        isPrivate = currentTab?.isPrivate == true,
+        securityState = currentTab?.securityState ?: SecurityState.Unknown,
+        canGoBack = currentTab?.canGoBack == true,
+        canGoForward = currentTab?.canGoForward == true,
+        desktop = currentTab?.desktop == true,
+    )
 
     val pageState = BrowserPageUiState(
         tabs = tabs,
         currentTab = currentTab,
+        chrome = chromeState,
         bookmarked = bookmarked,
         suggestions = omniboxSuggestionsUi.suggestions,
         adblockStatus = adblockStatus,
@@ -278,7 +289,7 @@ internal fun BrowserRoute(
                 )
             }
             if (showSiteInfo && currentTab != null) {
-                SiteInfoSheet(currentTab, prefs.adblockEnabled) {
+                SiteInfoSheet(chromeState, prefs.adblockEnabled) {
                     browserViewModel.showSiteInfo(false)
                 }
             }
