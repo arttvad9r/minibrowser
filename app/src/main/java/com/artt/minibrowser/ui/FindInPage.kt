@@ -28,7 +28,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
-import com.artt.minibrowser.engine.formatFindCounter
 import kotlinx.coroutines.delay
 import org.mozilla.geckoview.GeckoSession
 
@@ -37,6 +36,9 @@ internal data class FindBarUiState(
     val current: Int = 0,
     val total: Int = 0,
 )
+
+internal fun formatFindCounter(current: Int, total: Int): String =
+    if (current > 0 && total > 0) "$current/$total" else ""
 
 /** Owns Gecko finder interaction while keeping [FindBarContent] state/callback driven. */
 @Composable
