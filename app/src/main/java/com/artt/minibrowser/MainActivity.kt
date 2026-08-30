@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
 import com.artt.minibrowser.browser.BrowserActivityRequestController
+import com.artt.minibrowser.browser.BrowserDataClearer
 import com.artt.minibrowser.browser.BrowserDataViewModel
 import com.artt.minibrowser.browser.BrowserIntentController
 import com.artt.minibrowser.browser.BrowserTabLifecycleController
@@ -23,12 +24,14 @@ import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.engine.Engine
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.ui.TabPreviewStore
+import com.artt.minibrowser.ui.clearFaviconCaches
 import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val settingsRepo by lazy { SettingsRepository(this) }
     private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
+    private val iconsDir by lazy { File(filesDir, "icons") }
     private lateinit var tabManager: TabManager
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
@@ -37,21 +40,22 @@ class MainActivity : ComponentActivity() {
             SettingsViewModel.factory(settingsRepo, Engine.runtime),
         )[SettingsViewModel::class.java]
     }
+    private val browserDataClearer by lazy {
+        BrowserDataClearer(
+            clearTabPreviews = TabPreviewStore::clear,
+            clearHistory = { historyRepo.clear() },
+            clearBookmarks = { bookmarksRepo.clearAll() },
+            clearFaviconCaches = { clearFaviconCaches(iconsDir) },
+            clearWebData = {
+                tabManager.clearWebData()
+                Unit
+            },
+        )
+    }
     private val browserDataViewModel by lazy {
         ViewModelProvider(
             this,
-            BrowserDataViewModel.factory(
-                clearTabPreviews = TabPreviewStore::clear,
-                clearHistory = { historyRepo.clear() },
-                clearBookmarks = { bookmarksRepo.clearAll() },
-                clearFaviconCaches = {
-                    com.artt.minibrowser.ui.clearFaviconCaches(File(filesDir, "icons"))
-                },
-                clearWebData = {
-                    tabManager.clearWebData()
-                    Unit
-                },
-            ),
+            BrowserDataViewModel.factory(browserDataClearer),
         )[BrowserDataViewModel::class.java]
     }
     private val pageBookmarkViewModel by lazy {
@@ -109,7 +113,7 @@ class MainActivity : ComponentActivity() {
                 browserWindow = browserWindow,
                 browserIntents = browserIntents,
                 externalNavigation = externalNavigation,
-                iconsDir = File(filesDir, "icons"),
+                iconsDir = iconsDir,
             )
         }
         externalNavigation.accept(intent?.data?.toString())
