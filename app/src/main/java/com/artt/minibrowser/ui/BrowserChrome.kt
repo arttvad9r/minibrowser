@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -109,6 +110,7 @@ internal fun TopBar(
     val siteInfoDescription = stringResource(R.string.site_info_content_description)
     val searchActionDescription = stringResource(R.string.action_search)
     val searchDescription = stringResource(R.string.search_content_description)
+    val omniboxDescription = stringResource(R.string.omnibox_hint)
     val newTabDescription = stringResource(R.string.new_tab_title)
     val tabsDescription = pluralStringResource(R.plurals.tabs_count, tabCount, tabCount)
     val menuDescription = stringResource(R.string.menu_content_description)
@@ -211,7 +213,8 @@ internal fun TopBar(
                 Box(Modifier.weight(1f)) {
                     if (shown.isEmpty()) {
                         Text(
-                            stringResource(R.string.omnibox_hint),
+                            omniboxDescription,
+                            Modifier.clearAndSetSemantics { },
                             maxLines = 1,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyLarge,
@@ -229,7 +232,8 @@ internal fun TopBar(
                                 }
                                 focused = it.isFocused
                                 if (!it.isFocused) text = ""
-                            },
+                            }
+                            .semantics { contentDescription = omniboxDescription },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
