@@ -11,6 +11,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.browser.BrowserDataClearer
 import com.artt.minibrowser.browser.BrowserDataViewModel
@@ -244,51 +246,59 @@ internal fun BrowserRoute(
                 .background(MaterialTheme.colorScheme.background)
                 .focusable(),
         ) {
-            BrowserPageContent(
-                state = pageState,
-                actions = pageActions,
-                iconsDir = iconsDir,
-                browserContent = {
-                    GeckoContent(currentTab, Modifier.fillMaxSize())
-                    BrowserPageProgress(currentTab?.progress ?: -1f)
-                },
-                findContent = if (currentTab != null) {
-                    {
-                        key(currentTab.id) {
-                            FindInPageRoute(currentTab.session, pageActions.onCloseFind)
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .hideFromAccessibilityWhen(
+                        screen != BrowserScreen.Browser || showSwitcher,
+                    ),
+            ) {
+                BrowserPageContent(
+                    state = pageState,
+                    actions = pageActions,
+                    iconsDir = iconsDir,
+                    browserContent = {
+                        GeckoContent(currentTab, Modifier.fillMaxSize())
+                        BrowserPageProgress(currentTab?.progress ?: -1f)
+                    },
+                    findContent = if (currentTab != null) {
+                        {
+                            key(currentTab.id) {
+                                FindInPageRoute(currentTab.session, pageActions.onCloseFind)
+                            }
                         }
-                    }
-                } else {
-                    null
-                },
-                startPageContent = {
-                    if (currentTab?.isPrivate == true) {
-                        StartPage(
-                            bookmarks = emptyList(),
-                            iconsDir = iconsDir,
-                            recent = emptyList(),
-                            isPrivate = true,
-                            onOpen = { uri -> currentTab.session.loadUri(uri) },
-                            onAllBookmarks = {},
-                            onAllHistory = {},
-                            onRefreshRecent = {},
-                            onRename = { _, _ -> },
-                            onDelete = {},
-                            onAdd = { _, _ -> },
-                        )
                     } else {
-                        StartPageRoute(
-                            bookmarksRepository = bookmarksRepository,
-                            historyRepository = historyRepository,
-                            iconsDir = iconsDir,
-                            refreshKey = currentTab?.id,
-                            onOpen = { uri -> currentTab?.session?.loadUri(uri) },
-                            onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
-                            onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
-                        )
-                    }
-                },
-            )
+                        null
+                    },
+                    startPageContent = {
+                        if (currentTab?.isPrivate == true) {
+                            StartPage(
+                                bookmarks = emptyList(),
+                                iconsDir = iconsDir,
+                                recent = emptyList(),
+                                isPrivate = true,
+                                onOpen = { uri -> currentTab.session.loadUri(uri) },
+                                onAllBookmarks = {},
+                                onAllHistory = {},
+                                onRefreshRecent = {},
+                                onRename = { _, _ -> },
+                                onDelete = {},
+                                onAdd = { _, _ -> },
+                            )
+                        } else {
+                            StartPageRoute(
+                                bookmarksRepository = bookmarksRepository,
+                                historyRepository = historyRepository,
+                                iconsDir = iconsDir,
+                                refreshKey = currentTab?.id,
+                                onOpen = { uri -> currentTab?.session?.loadUri(uri) },
+                                onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
+                                onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
+                            )
+                        }
+                    },
+                )
+            }
 
             if (screen == BrowserScreen.Settings) {
                 Box(Modifier.fillMaxSize()) {
@@ -361,6 +371,9 @@ internal fun BrowserRoute(
         }
     }
 }
+
+internal fun Modifier.hideFromAccessibilityWhen(hidden: Boolean): Modifier =
+    if (hidden) semantics { hideFromAccessibility() } else this
 
 private fun ExtensionLoader.Status?.toExtensionUiState(): BrowserExtensionUiState = when (this) {
     ExtensionLoader.Status.Error -> BrowserExtensionUiState.Error
