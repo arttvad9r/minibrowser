@@ -1,5 +1,9 @@
 package com.artt.minibrowser
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
@@ -120,15 +124,18 @@ class StartPageSemanticsTest {
             }
         }
 
+        val buttonRole = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
         composeRule
             .onNodeWithText(recentTitle)
             .assertIsDisplayed()
             .assertHasClickAction()
+            .assert(buttonRole)
             .assertHeightIsAtLeast(48.dp)
         composeRule
             .onNodeWithText(showAllHistory)
             .assertIsDisplayed()
             .assertHasClickAction()
+            .assert(buttonRole)
             .assertHeightIsAtLeast(48.dp)
     }
 }
