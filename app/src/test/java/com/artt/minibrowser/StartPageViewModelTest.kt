@@ -3,6 +3,7 @@ package com.artt.minibrowser
 import com.artt.minibrowser.browser.StartPageOperation
 import com.artt.minibrowser.browser.StartPageUiState
 import com.artt.minibrowser.browser.StartPageViewModel
+import com.artt.minibrowser.browser.normalizeBookmarkInputUrl
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.HistoryEntry
 import kotlinx.coroutines.CompletableDeferred
@@ -101,6 +102,16 @@ class StartPageViewModelTest {
     }
 
     @Test
+    fun bookmarkInputNormalizationPreservesValidSchemesAndAddsMissingHttps() {
+        assertEquals("HTTPS://example.com/path", normalizeBookmarkInputUrl(" HTTPS://example.com/path "))
+        assertEquals("http://example.com/path", normalizeBookmarkInputUrl("http://example.com/path"))
+        assertEquals("https://example.com/path", normalizeBookmarkInputUrl(" example.com/path "))
+        assertEquals("https://пример.рф/путь", normalizeBookmarkInputUrl("пример.рф/путь"))
+        assertEquals(null, normalizeBookmarkInputUrl("https://"))
+        assertEquals(null, normalizeBookmarkInputUrl("javascript:alert(1)"))
+    }
+
+    @Test
     fun addReloadsBookmarksWithoutReloadingRecent() {
         val recent = listOf(HistoryEntry("https://recent.example", "Recent", 10L, 1))
         val added = Bookmark("https://added.example", "Added", "added.example", 1)
@@ -125,6 +136,20 @@ class StartPageViewModelTest {
             StartPageUiState(listOf(added), recent, isLoading = false),
             viewModel.uiState.value,
         )
+    }
+
+    @Test
+    fun addNormalizesHostOnlyInputBeforeRepository() {
+        var addRequest: Pair<String, String>? = null
+        val viewModel = startPageViewModel(
+            addBookmark = { url, title -> addRequest = url to title },
+        )
+        viewModel.refresh()
+
+        viewModel.add(" example.com/path ", "Example")
+
+        assertEquals("https://example.com/path" to "Example", addRequest)
+        assertEquals(null, viewModel.uiState.value.error)
     }
 
     @Test
