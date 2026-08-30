@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -42,19 +43,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.MotionDownloadsScreen
+import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Prefs
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.SearchEngine
 
-private val translationLanguages = listOf(
-    "Русский" to "ru",
-    "English" to "en",
-    "Deutsch" to "de",
-    "Français" to "fr",
-)
+private val translationLanguageCodes = listOf("ru", "en", "de", "fr")
 
-private fun translationLanguageLabel(code: String): String =
-    translationLanguages.firstOrNull { it.second == code }?.first ?: code.uppercase()
+@Composable
+private fun translationLanguageLabel(code: String): String = when (code) {
+    "ru" -> stringResource(R.string.language_russian)
+    "en" -> stringResource(R.string.language_english)
+    "de" -> stringResource(R.string.language_german)
+    "fr" -> stringResource(R.string.language_french)
+    else -> code.uppercase()
+}
 
 @Composable
 fun SettingsScreen(
@@ -86,9 +89,9 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { requestExit(onBack) }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
                 }
-                Text("Настройки", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleLarge)
             }
             Column(
                 Modifier
@@ -97,23 +100,23 @@ fun SettingsScreen(
                     .padding(horizontal = 20.dp)
                     .imePadding(),
             ) {
-                GroupLabel("Поиск")
+                GroupLabel(stringResource(R.string.settings_group_search))
                 SettingsGroup {
                     SettingsRow(
-                        title = "Поисковая система",
+                        title = stringResource(R.string.settings_search_engine),
                         value = prefs.searchEngine.label,
                         onClick = { showEnginePicker = true },
                         trailing = { PickerChevron() },
                     )
                 }
 
-                GroupLabel("Внешний вид")
+                GroupLabel(stringResource(R.string.settings_group_appearance))
                 ThemeSelector(prefs.theme, onTheme)
 
-                GroupLabel("Перевод")
+                GroupLabel(stringResource(R.string.settings_group_translation))
                 SettingsGroup {
                     SettingsRow(
-                        title = "Язык перевода",
+                        title = stringResource(R.string.settings_translation_language),
                         value = translationLanguageLabel(prefs.translateTarget),
                         onClick = { showLanguagePicker = true },
                         trailing = { PickerChevron() },
@@ -121,55 +124,55 @@ fun SettingsScreen(
                     HorizontalDividerThin()
                     if (votStatus == ExtensionLoader.Status.Error) {
                         SettingsRow(
-                            "Перевод видео",
-                            subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
+                            stringResource(R.string.settings_video_translation),
+                            subtitle = stringResource(R.string.settings_extension_retry_subtitle),
                             onClick = onRetryVot,
                         )
                     } else {
                         ToggleRow(
                             AppIcons.Globe,
-                            "Перевод видео",
+                            stringResource(R.string.settings_video_translation),
                             votEnabled,
                             onVot,
-                            subtitle = "VOT · перевод видео с поддерживаемых сайтов",
+                            subtitle = stringResource(R.string.settings_video_translation_subtitle),
                         )
                     }
                 }
 
-                GroupLabel("Файлы")
+                GroupLabel(stringResource(R.string.settings_group_files))
                 SettingsGroup {
                     SettingsRow(
-                        "Загрузки",
-                        subtitle = "История файлов, скачанных через Minibrowser",
+                        stringResource(R.string.downloads_title),
+                        subtitle = stringResource(R.string.settings_downloads_subtitle),
                         onClick = { showDownloads = true },
                         trailing = { PickerChevron() },
                     )
                 }
 
-                GroupLabel("Конфиденциальность")
+                GroupLabel(stringResource(R.string.settings_group_privacy))
                 SettingsGroup {
                     if (adblockStatus == ExtensionLoader.Status.Error) {
                         SettingsRow(
-                            "Блокировка рекламы",
-                            subtitle = "Ошибка запуска · Нажмите, чтобы повторить",
+                            stringResource(R.string.settings_adblock),
+                            subtitle = stringResource(R.string.settings_extension_retry_subtitle),
                             onClick = onRetryAdblock,
                         )
                     } else {
                         ToggleRow(
                             AppIcons.Shield,
-                            "Блокировка рекламы",
+                            stringResource(R.string.settings_adblock),
                             prefs.adblockEnabled,
                             onAdblock,
-                            subtitle = "Блокирует рекламу и трекеры",
+                            subtitle = stringResource(R.string.settings_adblock_subtitle),
                         )
                     }
                     HorizontalDividerThin()
                     SettingsRow(
-                        "Очистить данные",
+                        stringResource(R.string.settings_clear_data),
                         subtitle = when {
-                            clearDataInProgress -> "Очистка данных…"
-                            clearDataFailed -> "Не удалось полностью очистить данные · Нажмите, чтобы повторить"
-                            else -> "История, cookies, данные сайтов и кэш"
+                            clearDataInProgress -> stringResource(R.string.settings_clear_data_in_progress)
+                            clearDataFailed -> stringResource(R.string.settings_clear_data_failed)
+                            else -> stringResource(R.string.settings_clear_data_subtitle)
                         },
                         onClick = if (clearDataInProgress) null else ({ showClearDialog = true }),
                     )
@@ -181,7 +184,7 @@ fun SettingsScreen(
 
     if (showEnginePicker) {
         CompactChoiceSheet(onDismissRequest = { showEnginePicker = false }) { dismiss ->
-            Text("Поисковая система", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_search_engine), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
             SearchEngine.entries.forEach { engine ->
                 CompactChoiceRow(engine.label, engine == prefs.searchEngine) {
@@ -194,9 +197,10 @@ fun SettingsScreen(
 
     if (showLanguagePicker) {
         CompactChoiceSheet(onDismissRequest = { showLanguagePicker = false }) { dismiss ->
-            Text("Язык перевода", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.settings_translation_language), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
-            translationLanguages.forEach { (label, code) ->
+            translationLanguageCodes.forEach { code ->
+                val label = translationLanguageLabel(code)
                 CompactChoiceRow(label, code == prefs.translateTarget) {
                     onTranslateLang(code)
                     dismiss()
@@ -209,13 +213,13 @@ fun SettingsScreen(
         var withBookmarks by remember { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
-            title = { Text("Очистить данные") },
+            title = { Text(stringResource(R.string.settings_clear_data)) },
             text = {
                 Column {
-                    Text("Будут удалены:\n• история посещений;\n• cookies и данные сайтов;\n• кэш браузера;\n• кэш иконок.\n\nВозможно, потребуется снова войти в аккаунты на сайтах.")
+                    Text(stringResource(R.string.settings_clear_data_dialog_message))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = withBookmarks, onCheckedChange = { withBookmarks = it })
-                        Text("Также удалить все закладки")
+                        Text(stringResource(R.string.settings_clear_bookmarks))
                     }
                 }
             },
@@ -226,11 +230,13 @@ fun SettingsScreen(
                         onClearData(withBookmarks)
                     },
                 ) {
-                    Text("Очистить")
+                    Text(stringResource(R.string.action_clear))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDialog = false }) { Text("Отмена") }
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
             },
         )
     }
@@ -278,9 +284,30 @@ private fun HorizontalDividerThin() {
 @Composable
 private fun ThemeSelector(selected: Int, onSelect: (Int) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ThemeOption("Системная", AppIcons.SystemTheme, 0, selected, onSelect, Modifier.weight(1f))
-        ThemeOption("Светлая", AppIcons.Sun, 1, selected, onSelect, Modifier.weight(1f))
-        ThemeOption("Тёмная", AppIcons.Moon, 2, selected, onSelect, Modifier.weight(1f))
+        ThemeOption(
+            stringResource(R.string.theme_system),
+            AppIcons.SystemTheme,
+            0,
+            selected,
+            onSelect,
+            Modifier.weight(1f),
+        )
+        ThemeOption(
+            stringResource(R.string.theme_light),
+            AppIcons.Sun,
+            1,
+            selected,
+            onSelect,
+            Modifier.weight(1f),
+        )
+        ThemeOption(
+            stringResource(R.string.theme_dark),
+            AppIcons.Moon,
+            2,
+            selected,
+            onSelect,
+            Modifier.weight(1f),
+        )
     }
 }
 
