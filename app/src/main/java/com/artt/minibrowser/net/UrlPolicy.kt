@@ -29,11 +29,14 @@ private fun webAuthority(value: String): WebAuthority? = runCatching {
     WebAuthority(host, url.port)
 }.getOrNull()
 
+private fun WebAuthority.hasValidPort(): Boolean = port == -1 || port in 1..65535
+
 /** Shared HTTP(S) URL validation for navigation, persistence and user-entered browser data. */
-internal fun isValidWebUri(value: String): Boolean {
-    val authority = webAuthority(value) ?: return false
-    return authority.port == -1 || authority.port in 1..65535
-}
+internal fun isValidWebUri(value: String): Boolean = webAuthority(value)?.hasValidPort() == true
+
+/** Returns the validated host using the same Unicode/IDN parsing rules as navigation policy. */
+internal fun webUriHost(value: String): String? =
+    webAuthority(value)?.takeIf(WebAuthority::hasValidPort)?.host
 
 /**
  * History and other automatic persistence must never retain HTTP user-info credentials. Preserve
