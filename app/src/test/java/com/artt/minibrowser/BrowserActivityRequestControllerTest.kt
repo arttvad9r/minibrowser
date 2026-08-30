@@ -8,7 +8,7 @@ class BrowserActivityRequestControllerTest {
     @Test
     fun acceptedMimeTypesNormalizesAndFiltersInvalidValues() {
         assertArrayEquals(
-            arrayOf("image/png", "text/plain", "image/*"),
+            arrayOf("image/png", "text/plain", "image/*", "*/*", "application/vnd.api+json"),
             acceptedMimeTypes(
                 arrayOf(
                     "",
@@ -18,6 +18,12 @@ class BrowserActivityRequestControllerTest {
                     "text/plain",
                     "text/",
                     "image/*",
+                    "*/*",
+                    "*/png",
+                    "text/ht ml",
+                    "text/html/extra",
+                    "text/html; charset=utf-8",
+                    "application/vnd.api+json",
                 ),
             ),
         )
@@ -27,7 +33,7 @@ class BrowserActivityRequestControllerTest {
     fun acceptedMimeTypesFallsBackToWildcard() {
         assertArrayEquals(
             arrayOf("*/*"),
-            acceptedMimeTypes(arrayOf("", "invalid", "text/")),
+            acceptedMimeTypes(arrayOf("", "invalid", "text/", "*/png", "text/ht ml")),
         )
     }
 }
