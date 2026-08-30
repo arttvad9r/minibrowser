@@ -43,6 +43,34 @@ class ActivityRequestCoordinatorTest {
     }
 
     @Test
+    fun failedStartCancellationCanReenterCoordinator() {
+        val coordinator = ActivityRequestCoordinator<String>()
+        val events = mutableListOf<String>()
+
+        coordinator.enqueue(
+            start = {
+                events += "failed-start"
+                error("launcher unavailable")
+            },
+            cancel = {
+                events += "failed-cancel"
+                coordinator.enqueue(
+                    start = { finish ->
+                        events += "replacement-start"
+                        finish("done")
+                    },
+                    cancel = { events += "replacement-cancel" },
+                )
+            },
+        )
+
+        assertEquals(
+            listOf("failed-start", "failed-cancel", "replacement-start"),
+            events,
+        )
+    }
+
+    @Test
     fun cancelAllCancelsActiveAndQueuedRequestsAndAllowsNewRequest() {
         val coordinator = ActivityRequestCoordinator<String>()
         val events = mutableListOf<String>()
