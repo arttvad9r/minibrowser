@@ -57,9 +57,16 @@ internal class BrowserActivityRequestController(
                     callback(granted)
                     complete(granted)
                 }
+                // Let ActivityRequestCoordinator own synchronous launcher failure. It invokes the
+                // cancel callback after releasing its lock, so Gecko/user callbacks never re-enter
+                // this coordinator from inside request.start().
                 permissionLauncher.launch(permissions)
             },
-            cancel = { callback(false) },
+            cancel = {
+                pendingPermissionRequest = emptySet()
+                permissionCompletion = null
+                callback(false)
+            },
         )
     }
 
@@ -72,25 +79,23 @@ internal class BrowserActivityRequestController(
                         callback(uris)
                         complete(uris)
                     }
-                    runCatching {
-                        when (type) {
-                            GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
-                                multipleFilePickerLauncher.launch(accepted)
-                            GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
-                                folderPickerLauncher.launch(null)
-                            GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE ->
-                                singleFilePickerLauncher.launch(accepted)
-                            else ->
-                                singleFilePickerLauncher.launch(accepted)
-                        }
-                    }.onFailure {
-                        fileCompletion = null
-                        val none = emptyArray<Uri>()
-                        callback(none)
-                        complete(none)
+                    // Do not catch launcher failure here: ActivityRequestCoordinator deliberately
+                    // converts a thrown start failure into cancel() outside its internal lock.
+                    when (type) {
+                        GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
+                            multipleFilePickerLauncher.launch(accepted)
+                        GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER ->
+                            folderPickerLauncher.launch(null)
+                        GeckoSession.PromptDelegate.FilePrompt.Type.SINGLE ->
+                            singleFilePickerLauncher.launch(accepted)
+                        else ->
+                            singleFilePickerLauncher.launch(accepted)
                     }
                 },
-                cancel = { callback(emptyArray()) },
+                cancel = {
+                    fileCompletion = null
+                    callback(emptyArray())
+                },
             )
         }
     }
