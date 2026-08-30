@@ -7,6 +7,7 @@ import com.artt.minibrowser.data.Bookmark
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -149,6 +150,34 @@ class BookmarksViewModelTest {
             ),
             viewModel.uiState.value,
         )
+    }
+
+    @Test
+    fun mutationCancelsInFlightRefreshSoStaleRowsCannotWin() {
+        val existing = Bookmark("https://example.com", "Example", "example.com", 1)
+        var reads = 0
+        var deleted: String? = null
+        val viewModel = bookmarksViewModel(
+            loadBookmarks = {
+                reads++
+                when (reads) {
+                    1 -> listOf(existing)
+                    2 -> awaitCancellation()
+                    else -> emptyList()
+                }
+            },
+            deleteBookmark = { deleted = it },
+        )
+
+        viewModel.refresh()
+        viewModel.refresh()
+        assertEquals(2, reads)
+
+        viewModel.delete(existing.url)
+
+        assertEquals(existing.url, deleted)
+        assertEquals(3, reads)
+        assertEquals(BookmarksUiState(isLoading = false), viewModel.uiState.value)
     }
 
     private fun bookmarksViewModel(

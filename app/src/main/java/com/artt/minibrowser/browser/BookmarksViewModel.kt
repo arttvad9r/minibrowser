@@ -9,6 +9,7 @@ import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.BookmarksRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -25,6 +26,7 @@ internal class BookmarksViewModel : ViewModel {
     private val loadBookmarks: suspend () -> List<Bookmark>
     private val renameBookmark: suspend (String, String) -> Unit
     private val deleteBookmark: suspend (String) -> Unit
+    private var operationJob: Job? = null
 
     constructor(repository: BookmarksRepository) : super() {
         loadBookmarks = repository::all
@@ -47,7 +49,8 @@ internal class BookmarksViewModel : ViewModel {
     val uiState = _uiState.asStateFlow()
 
     fun refresh() {
-        viewModelScope.launch {
+        operationJob?.cancel()
+        operationJob = viewModelScope.launch {
             val previous = _uiState.value
             _uiState.value = previous.copy(
                 isLoading = previous.bookmarks.isEmpty(),
@@ -63,32 +66,12 @@ internal class BookmarksViewModel : ViewModel {
         }
     }
 
-    fun rename(url: String, title: String) {
-        viewModelScope.launch {
-            try {
-                renameBookmark(url, title)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Throwable) {
-                publishMutationFailure(BookmarksOperation.Rename)
-                return@launch
-            }
-            reloadAfterMutation()
-        }
+    fun rename(url: String, title: String) = mutate(BookmarksOperation.Rename) {
+        renameBookmark(url, title)
     }
 
-    fun delete(url: String) {
-        viewModelScope.launch {
-            try {
-                deleteBookmark(url)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Throwable) {
-                publishMutationFailure(BookmarksOperation.Delete)
-                return@launch
-            }
-            reloadAfterMutation()
-        }
+    fun delete(url: String) = mutate(BookmarksOperation.Delete) {
+        deleteBookmark(url)
     }
 
     fun retryLoad() = refresh()
@@ -97,8 +80,27 @@ internal class BookmarksViewModel : ViewModel {
         _uiState.value = _uiState.value.copy(error = null)
     }
 
-    private suspend fun reloadAfterMutation() {
-        val previous = _uiState.value
+    private fun mutate(
+        operation: BookmarksOperation,
+        mutation: suspend () -> Unit,
+    ) {
+        operationJob?.cancel()
+        operationJob = viewModelScope.launch {
+            val previous = _uiState.value
+            _uiState.value = previous.copy(error = null)
+            try {
+                mutation()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                publishMutationFailure(operation)
+                return@launch
+            }
+            reloadAfterMutation(previous)
+        }
+    }
+
+    private suspend fun reloadAfterMutation(previous: BookmarksUiState) {
         try {
             publishBookmarks(loadBookmarks())
         } catch (cancelled: CancellationException) {
