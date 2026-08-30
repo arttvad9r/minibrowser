@@ -32,6 +32,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.StorageController
+import org.mozilla.geckoview.WebRequestError
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
@@ -53,6 +54,13 @@ internal class ProgressGate(private val intervalMs: Long = 100) {
 }
 
 enum class SecurityState { Unknown, Secure, Insecure, Exception }
+enum class PageLoadError { Security, Network, Generic }
+
+internal fun pageLoadErrorForCategory(category: Int): PageLoadError = when (category) {
+    WebRequestError.ERROR_CATEGORY_SECURITY -> PageLoadError.Security
+    WebRequestError.ERROR_CATEGORY_NETWORK -> PageLoadError.Network
+    else -> PageLoadError.Generic
+}
 
 internal fun shouldCloseSession(isOpen: Boolean): Boolean = isOpen
 
@@ -248,7 +256,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var desktop by mutableStateOf(false)
     var fullscreen by mutableStateOf(false)
     var securityState by mutableStateOf(SecurityState.Unknown)
-    var loadError by mutableStateOf<String?>(null)
+    var loadError by mutableStateOf<PageLoadError?>(null)
     internal val progressGate = ProgressGate()
     internal var restoreUrlOnOpen = false
     @Volatile internal var latestSessionState: GeckoSession.SessionState? = null
@@ -713,13 +721,9 @@ class TabManager(
             override fun onLoadError(
                 session: GeckoSession,
                 uri: String?,
-                error: org.mozilla.geckoview.WebRequestError,
+                error: WebRequestError,
             ): GeckoResult<String>? {
-                tab.loadError = when (error.category) {
-                    org.mozilla.geckoview.WebRequestError.ERROR_CATEGORY_SECURITY -> "Проблема безопасности соединения"
-                    org.mozilla.geckoview.WebRequestError.ERROR_CATEGORY_NETWORK -> "Проверьте интернет-соединение"
-                    else -> "Не удалось открыть страницу"
-                }
+                tab.loadError = pageLoadErrorForCategory(error.category)
                 return GeckoResult.fromValue(null)
             }
 
