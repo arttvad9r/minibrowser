@@ -13,6 +13,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import com.artt.minibrowser.R
 import com.artt.minibrowser.data.DownloadHistory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,13 +91,20 @@ private object DownloadIo {
             result.fold(
                 onSuccess = { saved ->
                     historyId?.let { DownloadHistory.complete(it, saved.location, saved.bytes) }
-                    withContext(Dispatchers.Main) { toast(appContext, "Скачано: $name") }
+                    withContext(Dispatchers.Main) {
+                        toast(appContext, appContext.getString(R.string.download_saved, name))
+                    }
                 },
                 onFailure = { error ->
                     historyId?.let {
-                        DownloadHistory.fail(it, error.localizedMessage ?: "Не удалось сохранить файл")
+                        DownloadHistory.fail(
+                            it,
+                            error.localizedMessage ?: appContext.getString(R.string.download_save_error),
+                        )
                     }
-                    withContext(Dispatchers.Main) { toast(appContext, "Не удалось скачать файл") }
+                    withContext(Dispatchers.Main) {
+                        toast(appContext, appContext.getString(R.string.download_failed_toast))
+                    }
                 },
             )
         }
@@ -158,7 +166,7 @@ class GeckoDownloadController(
     fun handle(response: WebResponse, isPrivate: Boolean = false) {
         val body = response.body
         if (body == null) {
-            toast(activity.applicationContext, "Не удалось получить файл")
+            toast(activity.applicationContext, activity.getString(R.string.download_response_missing))
             return
         }
 
@@ -187,10 +195,10 @@ class GeckoDownloadController(
                 return@runOnUiThread
             }
             AlertDialog.Builder(activity)
-                .setTitle("Скачать файл?")
+                .setTitle(activity.getString(R.string.download_confirm_title))
                 .setMessage(name)
-                .setNegativeButton("Отмена") { _, _ -> body.closeQuietly() }
-                .setPositiveButton("Скачать") { _, _ -> begin() }
+                .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ -> body.closeQuietly() }
+                .setPositiveButton(activity.getString(R.string.action_download)) { _, _ -> begin() }
                 .setOnCancelListener { body.closeQuietly() }
                 .show()
         }
@@ -213,7 +221,7 @@ class GeckoDownloadController(
         val requester = requestPermissions
         if (requester == null) {
             body.closeQuietly()
-            toast(activity.applicationContext, "Нет доступа к папке Downloads")
+            toast(activity.applicationContext, activity.getString(R.string.downloads_folder_permission_error))
             return
         }
         requester(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)) { granted ->
@@ -221,7 +229,7 @@ class GeckoDownloadController(
                 DownloadIo.save(activity.applicationContext, body, name, mime, sourceUrl, persistHistory)
             } else {
                 body.closeQuietly()
-                toast(activity.applicationContext, "Загрузка отменена: нет доступа к хранилищу")
+                toast(activity.applicationContext, activity.getString(R.string.download_storage_permission_denied))
             }
         }
     }
