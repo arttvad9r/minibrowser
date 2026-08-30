@@ -1,5 +1,6 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.browser.BrowserDataStatus
 import com.artt.minibrowser.browser.BrowserDataUiState
 import com.artt.minibrowser.browser.BrowserDataViewModel
 import kotlinx.coroutines.CompletableDeferred
@@ -8,6 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class BrowserDataViewModelTest {
     @Test
@@ -59,14 +62,16 @@ class BrowserDataViewModelTest {
         viewModel.clear(withBookmarks = true)
 
         assertEquals(1, historyCalls)
-        assertEquals(BrowserDataUiState(isClearing = true), viewModel.uiState.value)
+        assertEquals(BrowserDataStatus.Clearing, viewModel.uiState.value.status)
+        assertTrue(viewModel.uiState.value.isClearing)
+        assertFalse(viewModel.uiState.value.clearFailed)
 
         gate.complete(Unit)
         assertEquals(BrowserDataUiState(), viewModel.uiState.value)
     }
 
     @Test
-    fun failureStopsRemainingOperationsAndPublishesError() {
+    fun failureStopsRemainingOperationsAndPublishesExclusiveErrorState() {
         val events = mutableListOf<String>()
         val viewModel = browserDataViewModel(
             clearTabPreviews = { events += "previews" },
@@ -82,10 +87,24 @@ class BrowserDataViewModelTest {
         viewModel.clear(withBookmarks = true)
 
         assertEquals(listOf("previews", "history"), events)
-        assertEquals(BrowserDataUiState(clearFailed = true), viewModel.uiState.value)
+        assertEquals(BrowserDataStatus.Failed, viewModel.uiState.value.status)
+        assertTrue(viewModel.uiState.value.clearFailed)
+        assertFalse(viewModel.uiState.value.isClearing)
 
         viewModel.dismissError()
         assertEquals(BrowserDataUiState(), viewModel.uiState.value)
+    }
+
+    @Test
+    fun dismissErrorDoesNotChangeNonErrorState() {
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = browserDataViewModel(clearHistory = { gate.await() })
+
+        viewModel.clear(withBookmarks = false)
+        viewModel.dismissError()
+
+        assertEquals(BrowserDataStatus.Clearing, viewModel.uiState.value.status)
+        gate.complete(Unit)
     }
 
     private fun browserDataViewModel(

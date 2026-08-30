@@ -11,10 +11,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+internal enum class BrowserDataStatus { Idle, Clearing, Failed }
+
 internal data class BrowserDataUiState(
-    val isClearing: Boolean = false,
-    val clearFailed: Boolean = false,
-)
+    val status: BrowserDataStatus = BrowserDataStatus.Idle,
+) {
+    val isClearing: Boolean get() = status == BrowserDataStatus.Clearing
+    val clearFailed: Boolean get() = status == BrowserDataStatus.Failed
+}
 
 /** Coordinates the cross-feature "clear browser data" operation outside the UI renderer. */
 internal class BrowserDataViewModel : ViewModel {
@@ -57,8 +61,8 @@ internal class BrowserDataViewModel : ViewModel {
     val uiState = _uiState.asStateFlow()
 
     fun clear(withBookmarks: Boolean) {
-        if (_uiState.value.isClearing) return
-        _uiState.value = BrowserDataUiState(isClearing = true)
+        if (_uiState.value.status == BrowserDataStatus.Clearing) return
+        _uiState.value = BrowserDataUiState(BrowserDataStatus.Clearing)
         viewModelScope.launch {
             try {
                 // Preserve the previous user-visible ordering while keeping every storage detail
@@ -72,13 +76,15 @@ internal class BrowserDataViewModel : ViewModel {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
-                _uiState.value = BrowserDataUiState(clearFailed = true)
+                _uiState.value = BrowserDataUiState(BrowserDataStatus.Failed)
             }
         }
     }
 
     fun dismissError() {
-        _uiState.value = _uiState.value.copy(clearFailed = false)
+        if (_uiState.value.status == BrowserDataStatus.Failed) {
+            _uiState.value = BrowserDataUiState()
+        }
     }
 
     companion object {
