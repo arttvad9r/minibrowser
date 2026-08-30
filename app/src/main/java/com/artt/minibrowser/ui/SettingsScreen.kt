@@ -44,17 +44,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.MotionDownloadsScreen
 import com.artt.minibrowser.R
-import com.artt.minibrowser.data.Prefs
-import com.artt.minibrowser.engine.SearchEngine
 
 private val translationLanguageCodes = listOf("ru", "en", "de", "fr")
 
 @Composable
-private fun searchEngineLabel(engine: SearchEngine): String = when (engine) {
-    SearchEngine.GOOGLE -> stringResource(R.string.search_engine_google)
-    SearchEngine.DUCKDUCKGO -> stringResource(R.string.search_engine_duckduckgo)
-    SearchEngine.YANDEX -> stringResource(R.string.search_engine_yandex)
-    SearchEngine.BING -> stringResource(R.string.search_engine_bing)
+private fun searchEngineLabel(engine: SettingsSearchEngineUiState): String = when (engine) {
+    SettingsSearchEngineUiState.Google -> stringResource(R.string.search_engine_google)
+    SettingsSearchEngineUiState.DuckDuckGo -> stringResource(R.string.search_engine_duckduckgo)
+    SettingsSearchEngineUiState.Yandex -> stringResource(R.string.search_engine_yandex)
+    SettingsSearchEngineUiState.Bing -> stringResource(R.string.search_engine_bing)
 }
 
 @Composable
@@ -67,21 +65,16 @@ private fun translationLanguageLabel(code: String): String = when (code) {
 }
 
 @Composable
-fun SettingsScreen(
-    prefs: Prefs,
+internal fun SettingsScreen(
+    state: SettingsScreenUiState,
     onBack: () -> Unit,
-    onEngine: (SearchEngine) -> Unit,
+    onEngine: (SettingsSearchEngineUiState) -> Unit,
     onTheme: (Int) -> Unit,
     onAdblock: (Boolean) -> Unit,
     onRetryAdblock: () -> Unit,
-    adblockStatus: BrowserExtensionUiState,
-    votEnabled: Boolean,
-    votStatus: BrowserExtensionUiState,
     onVot: (Boolean) -> Unit,
     onRetryVot: () -> Unit,
     onClearData: (withBookmarks: Boolean) -> Unit,
-    clearDataInProgress: Boolean,
-    clearDataFailed: Boolean,
     onTranslateLang: (String) -> Unit,
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
@@ -112,25 +105,25 @@ fun SettingsScreen(
                     SettingsGroup {
                         SettingsRow(
                             title = stringResource(R.string.settings_search_engine),
-                            value = searchEngineLabel(prefs.searchEngine),
+                            value = searchEngineLabel(state.searchEngine),
                             onClick = { showEnginePicker = true },
                             trailing = { PickerChevron() },
                         )
                     }
 
                     GroupLabel(stringResource(R.string.settings_group_appearance))
-                    ThemeSelector(prefs.theme, onTheme)
+                    ThemeSelector(state.theme, onTheme)
 
                     GroupLabel(stringResource(R.string.settings_group_translation))
                     SettingsGroup {
                         SettingsRow(
                             title = stringResource(R.string.settings_translation_language),
-                            value = translationLanguageLabel(prefs.translateTarget),
+                            value = translationLanguageLabel(state.translateTarget),
                             onClick = { showLanguagePicker = true },
                             trailing = { PickerChevron() },
                         )
                         HorizontalDividerThin()
-                        if (votStatus == BrowserExtensionUiState.Error) {
+                        if (state.votStatus == BrowserExtensionUiState.Error) {
                             SettingsRow(
                                 stringResource(R.string.settings_video_translation),
                                 subtitle = stringResource(R.string.settings_extension_retry_subtitle),
@@ -140,7 +133,7 @@ fun SettingsScreen(
                             ToggleRow(
                                 AppIcons.Globe,
                                 stringResource(R.string.settings_video_translation),
-                                votEnabled,
+                                state.votEnabled,
                                 onVot,
                                 subtitle = stringResource(R.string.settings_video_translation_subtitle),
                             )
@@ -159,7 +152,7 @@ fun SettingsScreen(
 
                     GroupLabel(stringResource(R.string.settings_group_privacy))
                     SettingsGroup {
-                        if (adblockStatus == BrowserExtensionUiState.Error) {
+                        if (state.adblockStatus == BrowserExtensionUiState.Error) {
                             SettingsRow(
                                 stringResource(R.string.settings_adblock),
                                 subtitle = stringResource(R.string.settings_extension_retry_subtitle),
@@ -169,7 +162,7 @@ fun SettingsScreen(
                             ToggleRow(
                                 AppIcons.Shield,
                                 stringResource(R.string.settings_adblock),
-                                prefs.adblockEnabled,
+                                state.adblockEnabled,
                                 onAdblock,
                                 subtitle = stringResource(R.string.settings_adblock_subtitle),
                             )
@@ -178,11 +171,11 @@ fun SettingsScreen(
                         SettingsRow(
                             stringResource(R.string.settings_clear_data),
                             subtitle = when {
-                                clearDataInProgress -> stringResource(R.string.settings_clear_data_in_progress)
-                                clearDataFailed -> stringResource(R.string.settings_clear_data_failed)
+                                state.clearDataInProgress -> stringResource(R.string.settings_clear_data_in_progress)
+                                state.clearDataFailed -> stringResource(R.string.settings_clear_data_failed)
                                 else -> stringResource(R.string.settings_clear_data_subtitle)
                             },
-                            onClick = if (clearDataInProgress) null else ({ showClearDialog = true }),
+                            onClick = if (state.clearDataInProgress) null else ({ showClearDialog = true }),
                         )
                     }
                     Spacer(Modifier.height(32.dp))
@@ -195,8 +188,8 @@ fun SettingsScreen(
         CompactChoiceSheet(onDismissRequest = { showEnginePicker = false }) { dismiss ->
             Text(stringResource(R.string.settings_search_engine), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(4.dp))
-            SearchEngine.entries.forEach { engine ->
-                CompactChoiceRow(searchEngineLabel(engine), engine == prefs.searchEngine) {
+            SettingsSearchEngineUiState.entries.forEach { engine ->
+                CompactChoiceRow(searchEngineLabel(engine), engine == state.searchEngine) {
                     onEngine(engine)
                     dismiss()
                 }
@@ -210,7 +203,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(4.dp))
             translationLanguageCodes.forEach { code ->
                 val label = translationLanguageLabel(code)
-                CompactChoiceRow(label, code == prefs.translateTarget) {
+                CompactChoiceRow(label, code == state.translateTarget) {
                     onTranslateLang(code)
                     dismiss()
                 }
