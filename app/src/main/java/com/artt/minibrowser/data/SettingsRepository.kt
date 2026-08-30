@@ -21,7 +21,10 @@ data class Prefs(
     val translateTarget: String = "ru",
 )
 
-class SettingsRepository(private val context: Context) {
+class SettingsRepository(context: Context) {
+    // SettingsViewModel can survive Activity recreation; never retain an Activity context here.
+    private val context = context.applicationContext
+
     private object K {
         val engine = stringPreferencesKey("search_engine")
         val theme = intPreferencesKey("theme")
@@ -30,7 +33,7 @@ class SettingsRepository(private val context: Context) {
         val translate = stringPreferencesKey("translate_target")
     }
 
-    val prefs: Flow<Prefs> = context.dataStore.data.map { p ->
+    val prefs: Flow<Prefs> = this.context.dataStore.data.map { p ->
         Prefs(
             searchEngine = p[K.engine]?.let { runCatching { SearchEngine.valueOf(it) }.getOrNull() }
                 ?: SearchEngine.YANDEX,
