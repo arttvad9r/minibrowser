@@ -44,11 +44,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.artt.minibrowser.R
 import com.artt.minibrowser.data.Bookmark
 import com.artt.minibrowser.data.HistoryEntry
 import java.io.File
@@ -89,14 +91,14 @@ fun StartPage(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Приватная вкладка",
+                stringResource(R.string.private_tab_title),
                 Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.titleLarge.copy(fontSize = 26.sp, fontWeight = FontWeight.Medium),
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "История посещений не сохраняется",
+                stringResource(R.string.private_tab_subtitle),
                 Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodyMedium,
@@ -105,7 +107,7 @@ fun StartPage(
             Spacer(Modifier.height(24.dp))
         } else {
             Text(
-                "Minibrowser",
+                stringResource(R.string.app_name),
                 Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.titleLarge.copy(fontSize = 30.sp, fontWeight = FontWeight.Medium),
@@ -114,7 +116,11 @@ fun StartPage(
         }
 
         if (!isPrivate) {
-            SectionHeader("Закладки", actionLabel = "Все", onAction = onAllBookmarks)
+            SectionHeader(
+                stringResource(R.string.bookmarks_title),
+                actionLabel = stringResource(R.string.action_all),
+                onAction = onAllBookmarks,
+            )
             Spacer(Modifier.height(8.dp))
             BookmarkRow(
                 bookmarks,
@@ -209,14 +215,14 @@ private fun BookmarkRow(
             ) {
                 Icon(
                     Icons.Filled.Add,
-                    "Добавить закладку",
+                    stringResource(R.string.add_bookmark_content_description),
                     Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.height(5.dp))
             Text(
-                "Добавить",
+                stringResource(R.string.action_add),
                 maxLines = 1,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -247,7 +253,7 @@ private fun RecentCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "Недавние",
+                stringResource(R.string.recent_title),
                 Modifier.weight(1f),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
@@ -255,7 +261,7 @@ private fun RecentCard(
             IconButton(onClick = onRefresh, modifier = Modifier.size(48.dp)) {
                 Icon(
                     Icons.Filled.Refresh,
-                    "Обновить недавние",
+                    stringResource(R.string.refresh_recent_content_description),
                     Modifier.size(20.dp),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -298,7 +304,7 @@ private fun RecentCard(
                 .clickable(onClick = onShowAll)
                 .padding(horizontal = 16.dp, vertical = 9.dp),
         ) {
-            Text("Показать всю историю", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.show_all_history), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -309,14 +315,26 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
     var title by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
     BrowserBottomSheet(onDismissRequest = onDismiss) {
-        Text("Добавить закладку", style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.add_bookmark_title), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(20.dp))
-        Field(label = "Название", value = title, onChange = { title = it }, placeholder = "YouTube")
+        Field(
+            label = stringResource(R.string.field_title),
+            value = title,
+            onChange = { title = it },
+            placeholder = stringResource(R.string.bookmark_title_placeholder),
+        )
         Spacer(Modifier.height(12.dp))
-        Field(label = "Адрес", value = url, onChange = { url = it }, placeholder = "youtube.com")
+        Field(
+            label = stringResource(R.string.field_address),
+            value = url,
+            onChange = { url = it },
+            placeholder = stringResource(R.string.bookmark_url_placeholder),
+        )
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Отмена") }
+            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.action_cancel))
+            }
             Button(
                 onClick = { onAdd(normalizeUrl(url), title.trim()) },
                 enabled = url.isNotBlank(),
@@ -325,7 +343,7 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
-            ) { Text("Добавить") }
+            ) { Text(stringResource(R.string.action_add)) }
         }
     }
 }
