@@ -9,6 +9,7 @@ import com.artt.minibrowser.data.HistoryEntry
 import com.artt.minibrowser.data.HistoryRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +21,10 @@ internal enum class HistoryOperation { Load, Clear }
 
 internal sealed interface HistoryUiState {
     data object Loading : HistoryUiState
-    data class Content(val entries: List<HistoryEntry>) : HistoryUiState
+    data class Content(
+        val entries: List<HistoryEntry>,
+        val error: HistoryOperation? = null,
+    ) : HistoryUiState
     data object Empty : HistoryUiState
     data class Error(val operation: HistoryOperation) : HistoryUiState
 }
@@ -28,6 +32,7 @@ internal sealed interface HistoryUiState {
 internal class HistoryViewModel : ViewModel {
     private val loadEntries: suspend () -> List<HistoryEntry>
     private val clearEntries: suspend () -> Unit
+    private var operationJob: Job? = null
 
     constructor(repository: HistoryRepository) : super() {
         loadEntries = { repository.recent(HISTORY_SCREEN_LIMIT) }
@@ -47,39 +52,66 @@ internal class HistoryViewModel : ViewModel {
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
 
     fun refresh() {
-        viewModelScope.launch {
-            if (_uiState.value !is HistoryUiState.Content) {
-                _uiState.value = HistoryUiState.Loading
+        operationJob?.cancel()
+        operationJob = viewModelScope.launch {
+            val previous = _uiState.value
+            _uiState.value = if (previous is HistoryUiState.Content) {
+                previous.copy(error = null)
+            } else {
+                HistoryUiState.Loading
             }
-            _uiState.value = try {
+            try {
                 val entries = loadEntries()
-                if (entries.isEmpty()) HistoryUiState.Empty else HistoryUiState.Content(entries)
+                _uiState.value = if (entries.isEmpty()) {
+                    HistoryUiState.Empty
+                } else {
+                    HistoryUiState.Content(entries)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
-                HistoryUiState.Error(HistoryOperation.Load)
+                _uiState.value = if (previous is HistoryUiState.Content) {
+                    previous.copy(error = HistoryOperation.Load)
+                } else {
+                    HistoryUiState.Error(HistoryOperation.Load)
+                }
             }
         }
     }
 
     fun clear() {
-        viewModelScope.launch {
-            _uiState.value = try {
+        operationJob?.cancel()
+        operationJob = viewModelScope.launch {
+            val previous = _uiState.value
+            if (previous is HistoryUiState.Content) {
+                _uiState.value = previous.copy(error = null)
+            }
+            try {
                 clearEntries()
-                HistoryUiState.Empty
+                _uiState.value = HistoryUiState.Empty
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Throwable) {
-                HistoryUiState.Error(HistoryOperation.Clear)
+                _uiState.value = if (previous is HistoryUiState.Content) {
+                    previous.copy(error = HistoryOperation.Clear)
+                } else {
+                    HistoryUiState.Error(HistoryOperation.Clear)
+                }
             }
         }
     }
 
     fun retry() {
-        when ((_uiState.value as? HistoryUiState.Error)?.operation) {
+        when (currentError()) {
             HistoryOperation.Clear -> clear()
             HistoryOperation.Load, null -> refresh()
         }
+    }
+
+    private fun currentError(): HistoryOperation? = when (val state = _uiState.value) {
+        is HistoryUiState.Content -> state.error
+        is HistoryUiState.Error -> state.operation
+        HistoryUiState.Empty, HistoryUiState.Loading -> null
     }
 
     companion object {

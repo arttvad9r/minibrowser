@@ -7,6 +7,7 @@ import com.artt.minibrowser.data.HistoryEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -20,10 +21,7 @@ class HistoryViewModelTest {
 
     @Test
     fun refreshPublishesContent() {
-        val entries = listOf(
-            HistoryEntry("https://example.com", "Example", 10L, 1),
-            HistoryEntry("https://example.org", "Example Org", 5L, 2),
-        )
+        val entries = historyEntries()
         val viewModel = historyViewModel(loadEntries = { entries })
 
         viewModel.refresh()
@@ -41,12 +39,32 @@ class HistoryViewModelTest {
     }
 
     @Test
-    fun refreshPublishesLoadError() {
+    fun initialRefreshPublishesLoadError() {
         val viewModel = historyViewModel(loadEntries = { error("read failed") })
 
         viewModel.refresh()
 
         assertEquals(HistoryUiState.Error(HistoryOperation.Load), viewModel.uiState.value)
+    }
+
+    @Test
+    fun refreshFailurePreservesExistingContent() {
+        val entries = historyEntries()
+        var reads = 0
+        val viewModel = historyViewModel(
+            loadEntries = {
+                reads++
+                if (reads == 1) entries else error("refresh failed")
+            },
+        )
+
+        viewModel.refresh()
+        viewModel.refresh()
+
+        assertEquals(
+            HistoryUiState.Content(entries, error = HistoryOperation.Load),
+            viewModel.uiState.value,
+        )
     }
 
     @Test
@@ -58,6 +76,23 @@ class HistoryViewModelTest {
 
         assertEquals(true, cleared)
         assertEquals(HistoryUiState.Empty, viewModel.uiState.value)
+    }
+
+    @Test
+    fun clearFailurePreservesExistingContent() {
+        val entries = historyEntries()
+        val viewModel = historyViewModel(
+            loadEntries = { entries },
+            clearEntries = { error("clear failed") },
+        )
+
+        viewModel.refresh()
+        viewModel.clear()
+
+        assertEquals(
+            HistoryUiState.Content(entries, error = HistoryOperation.Clear),
+            viewModel.uiState.value,
+        )
     }
 
     @Test
@@ -78,6 +113,31 @@ class HistoryViewModelTest {
         assertEquals(2, attempts)
         assertEquals(HistoryUiState.Empty, viewModel.uiState.value)
     }
+
+    @Test
+    fun clearCancelsInFlightRefreshSoOldRowsCannotReturn() {
+        val entries = historyEntries()
+        var reads = 0
+        val viewModel = historyViewModel(
+            loadEntries = {
+                reads++
+                if (reads == 1) entries else awaitCancellation()
+            },
+        )
+
+        viewModel.refresh()
+        viewModel.refresh()
+        assertEquals(2, reads)
+
+        viewModel.clear()
+
+        assertEquals(HistoryUiState.Empty, viewModel.uiState.value)
+    }
+
+    private fun historyEntries(): List<HistoryEntry> = listOf(
+        HistoryEntry("https://example.com", "Example", 10L, 1),
+        HistoryEntry("https://example.org", "Example Org", 5L, 2),
+    )
 
     private fun historyViewModel(
         loadEntries: suspend () -> List<HistoryEntry> = { emptyList() },

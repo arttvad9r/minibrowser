@@ -153,6 +153,26 @@ private fun HistoryScreen(
                         }
                     }
                     is HistoryUiState.Content -> {
+                        state.error?.let { operation ->
+                            val message = when (operation) {
+                                HistoryOperation.Load -> stringResource(R.string.history_load_error)
+                                HistoryOperation.Clear -> stringResource(R.string.history_clear_error)
+                            }
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    message,
+                                    Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                TextButton(onClick = onRetry) {
+                                    Text(stringResource(R.string.action_retry))
+                                }
+                            }
+                        }
                         val groups = remember(state.entries) { motionGroupByDay(state.entries) }
                         LazyColumn(Modifier.fillMaxSize()) {
                             groups.forEach { (group, groupEntries) ->
