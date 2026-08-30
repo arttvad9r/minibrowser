@@ -16,6 +16,7 @@ import android.widget.TimePicker
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import com.artt.minibrowser.BuildConfig
+import com.artt.minibrowser.R
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -98,8 +99,12 @@ class GeckoPromptController(
                 .setTitle(prompt.title.orEmpty())
                 .setMessage(prompt.message.orEmpty())
                 .setView(input)
-                .setNegativeButton("Отмена") { _, _ -> guard.complete { prompt.dismiss() } }
-                .setPositiveButton("ОК") { _, _ -> guard.complete { prompt.confirm(input.text.toString()) } }
+                .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ ->
+                    guard.complete { prompt.dismiss() }
+                }
+                .setPositiveButton(activity.getString(R.string.action_ok)) { _, _ ->
+                    guard.complete { prompt.confirm(input.text.toString()) }
+                }
                 .setOnCancelListener { guard.complete { prompt.dismiss() } }
                 .create()
             bindPromptDialog(prompt, dialog)
@@ -123,11 +128,11 @@ class GeckoPromptController(
         activity.runOnUiThread {
             if (!isPromptOpen(prompt)) return@runOnUiThread
             val user = EditText(activity).apply {
-                hint = "Имя пользователя"
+                hint = activity.getString(R.string.prompt_auth_username_hint)
                 setText(prompt.authOptions.username)
             }
             val password = EditText(activity).apply {
-                hint = "Пароль"
+                hint = activity.getString(R.string.prompt_auth_password_hint)
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                 setText(prompt.authOptions.password)
             }
@@ -140,8 +145,12 @@ class GeckoPromptController(
                 .setTitle(prompt.title.orEmpty())
                 .setMessage(prompt.message.orEmpty())
                 .setView(fields)
-                .setNegativeButton("Отмена") { _, _ -> guard.complete { prompt.dismiss() } }
-                .setPositiveButton("Войти") { _, _ -> guard.complete { prompt.confirm(user.text.toString(), password.text.toString()) } }
+                .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ ->
+                    guard.complete { prompt.dismiss() }
+                }
+                .setPositiveButton(activity.getString(R.string.action_sign_in)) { _, _ ->
+                    guard.complete { prompt.confirm(user.text.toString(), password.text.toString()) }
+                }
                 .setOnCancelListener { guard.complete { prompt.dismiss() } }
                 .create()
             bindPromptDialog(prompt, dialog)
@@ -165,10 +174,11 @@ class GeckoPromptController(
                 val selected = choices.map { it.selected }.toBooleanArray()
                 builder.setMultiChoiceItems(choices.map { it.label }.toTypedArray(), selected) { _, index, checked ->
                     selected[index] = checked
-                }.setNegativeButton("Отмена") { _, _ -> guard.complete { prompt.dismiss() } }
-                    .setPositiveButton("ОК") { _, _ ->
-                        guard.complete { prompt.confirm(choices.filterIndexed { index, _ -> selected[index] }.toTypedArray()) }
-                    }
+                }.setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ ->
+                    guard.complete { prompt.dismiss() }
+                }.setPositiveButton(activity.getString(R.string.action_ok)) { _, _ ->
+                    guard.complete { prompt.confirm(choices.filterIndexed { index, _ -> selected[index] }.toTypedArray()) }
+                }
             } else {
                 builder.setItems(choices.map { it.label }.toTypedArray()) { _, index ->
                     guard.complete { prompt.confirm(choices[index]) }
@@ -185,7 +195,13 @@ class GeckoPromptController(
         session: GeckoSession,
         prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt,
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> =
-        dialog(prompt, prompt.title.orEmpty(), "Покинуть страницу?", { prompt.confirm(AllowOrDeny.ALLOW) }, { prompt.confirm(AllowOrDeny.DENY) })
+        dialog(
+            prompt,
+            prompt.title.orEmpty(),
+            activity.getString(R.string.prompt_before_unload_message),
+            { prompt.confirm(AllowOrDeny.ALLOW) },
+            { prompt.confirm(AllowOrDeny.DENY) },
+        )
 
     override fun onRepostConfirmPrompt(
         session: GeckoSession,
@@ -193,8 +209,8 @@ class GeckoPromptController(
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> =
         dialog(
             prompt,
-            "Отправить данные повторно?",
-            "Для обновления страницы нужно повторно отправить данные формы.",
+            activity.getString(R.string.prompt_repost_title),
+            activity.getString(R.string.prompt_repost_message),
             { prompt.confirm(AllowOrDeny.ALLOW) },
             { prompt.confirm(AllowOrDeny.DENY) },
         )
@@ -205,11 +221,17 @@ class GeckoPromptController(
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
         val folder = prompt.directoryName?.takeIf { it.isNotBlank() }
         val message = if (folder == null) {
-            "Сайт получит файлы из выбранной папки."
+            activity.getString(R.string.prompt_folder_upload_generic)
         } else {
-            "Сайт получит файлы из папки «$folder»."
+            activity.getString(R.string.prompt_folder_upload_named, folder)
         }
-        return dialog(prompt, "Разрешить загрузку папки?", message, { prompt.confirm(AllowOrDeny.ALLOW) }, { prompt.confirm(AllowOrDeny.DENY) })
+        return dialog(
+            prompt,
+            activity.getString(R.string.prompt_folder_upload_title),
+            message,
+            { prompt.confirm(AllowOrDeny.ALLOW) },
+            { prompt.confirm(AllowOrDeny.DENY) },
+        )
     }
 
     override fun onRedirectPrompt(
@@ -217,8 +239,18 @@ class GeckoPromptController(
         prompt: GeckoSession.PromptDelegate.RedirectPrompt,
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
         val host = runCatching { Uri.parse(prompt.targetUri).host }.getOrNull().orEmpty()
-        val message = if (host.isBlank()) "Разрешить перенаправление?" else "Разрешить перенаправление на $host?"
-        return dialog(prompt, "Разрешить перенаправление?", message, { prompt.confirm(AllowOrDeny.ALLOW) }, { prompt.confirm(AllowOrDeny.DENY) })
+        val message = if (host.isBlank()) {
+            activity.getString(R.string.prompt_redirect_title)
+        } else {
+            activity.getString(R.string.prompt_redirect_named, host)
+        }
+        return dialog(
+            prompt,
+            activity.getString(R.string.prompt_redirect_title),
+            message,
+            { prompt.confirm(AllowOrDeny.ALLOW) },
+            { prompt.confirm(AllowOrDeny.DENY) },
+        )
     }
 
     override fun onSharePrompt(
@@ -238,7 +270,9 @@ class GeckoPromptController(
                 if (share.resolveActivity(activity.packageManager) == null) {
                     guard.complete { prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.FAILURE) }
                 } else {
-                    activity.startActivity(Intent.createChooser(share, "Поделиться"))
+                    activity.startActivity(
+                        Intent.createChooser(share, activity.getString(R.string.action_share)),
+                    )
                     guard.complete { prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS) }
                 }
             } catch (_: Exception) {
@@ -275,8 +309,10 @@ class GeckoPromptController(
             val dialog = AlertDialog.Builder(activity)
                 .setTitle(prompt.title.orEmpty())
                 .setView(input)
-                .setNegativeButton("Отмена") { _, _ -> guard.complete { prompt.dismiss() } }
-                .setPositiveButton("ОК", null)
+                .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ ->
+                    guard.complete { prompt.dismiss() }
+                }
+                .setPositiveButton(activity.getString(R.string.action_ok), null)
                 .setOnCancelListener { guard.complete { prompt.dismiss() } }
                 .create()
             bindPromptDialog(prompt, dialog)
@@ -287,7 +323,7 @@ class GeckoPromptController(
                         guard.complete { prompt.confirm(value) }
                         dialog.dismiss()
                     } else {
-                        input.error = "Введите цвет в формате #RRGGBB"
+                        input.error = activity.getString(R.string.prompt_color_format_error)
                     }
                 }
             }
@@ -318,7 +354,11 @@ class GeckoPromptController(
         val dialog = DatePickerDialog(activity, { _, year, month, day ->
             val date = LocalDate.of(year, month + 1, day)
             if (!dateWithinDateRange(prompt, date)) {
-                Toast.makeText(activity, "Дата вне допустимого диапазона", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    activity,
+                    activity.getString(R.string.prompt_date_out_of_range),
+                    Toast.LENGTH_SHORT,
+                ).show()
                 return@DatePickerDialog
             }
             if (prompt.type == GeckoSession.PromptDelegate.DateTimePrompt.Type.DATETIME_LOCAL) {
@@ -384,8 +424,10 @@ class GeckoPromptController(
         val dialog = AlertDialog.Builder(activity)
             .setTitle(prompt.title.orEmpty())
             .setView(picker)
-            .setNegativeButton("Отмена") { _, _ -> guard.complete { prompt.dismiss() } }
-            .setPositiveButton("ОК", null)
+            .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ ->
+                guard.complete { prompt.dismiss() }
+            }
+            .setPositiveButton(activity.getString(R.string.action_ok), null)
             .setOnCancelListener { guard.complete { prompt.dismiss() } }
             .create()
         bindPromptDialog(prompt, dialog)
@@ -403,7 +445,11 @@ class GeckoPromptController(
                     (min != null && selected < min) || (max != null && selected > max)
                 }
                 if (outOfRange) {
-                    Toast.makeText(activity, "Время вне допустимого диапазона", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        activity,
+                        activity.getString(R.string.prompt_time_out_of_range),
+                        Toast.LENGTH_SHORT,
+                    ).show()
                 } else {
                     val value = if (date == null) formatTimeValue(time) else formatDateTimeLocal(date, time)
                     guard.complete { prompt.confirm(value) }
@@ -429,15 +475,19 @@ class GeckoPromptController(
             if (!isPromptOpen(prompt)) return@runOnUiThread
             val host = runCatching { Uri.parse(targetUri).host }.getOrNull().orEmpty()
             val message = if (host.isBlank()) {
-                "Сайт пытается открыть новую страницу."
+                activity.getString(R.string.prompt_popup_generic)
             } else {
-                "Сайт пытается открыть страницу на $host."
+                activity.getString(R.string.prompt_popup_named, host)
             }
             val dialog = AlertDialog.Builder(activity)
-                .setTitle("Открыть новое окно?")
+                .setTitle(activity.getString(R.string.prompt_popup_title))
                 .setMessage(message)
-                .setNegativeButton("Отмена") { _, _ -> guard.complete { prompt.confirm(AllowOrDeny.DENY) } }
-                .setPositiveButton("Открыть") { _, _ -> guard.complete { prompt.confirm(AllowOrDeny.ALLOW) } }
+                .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ ->
+                    guard.complete { prompt.confirm(AllowOrDeny.DENY) }
+                }
+                .setPositiveButton(activity.getString(R.string.action_open)) { _, _ ->
+                    guard.complete { prompt.confirm(AllowOrDeny.ALLOW) }
+                }
                 .setOnCancelListener { guard.complete { prompt.confirm(AllowOrDeny.DENY) } }
                 .create()
             bindPromptDialog(prompt, dialog)
@@ -617,8 +667,8 @@ class GeckoPromptController(
             val dialog = AlertDialog.Builder(activity)
                 .setTitle(title)
                 .setMessage(message)
-                .setNegativeButton("Отмена") { _, _ -> guard.complete(negative) }
-                .setPositiveButton("ОК") { _, _ -> guard.complete(positive) }
+                .setNegativeButton(activity.getString(R.string.action_cancel)) { _, _ -> guard.complete(negative) }
+                .setPositiveButton(activity.getString(R.string.action_ok)) { _, _ -> guard.complete(positive) }
                 .setOnCancelListener { guard.complete(negative) }
                 .create()
             bindPromptDialog(prompt, dialog)

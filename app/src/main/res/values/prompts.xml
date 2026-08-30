@@ -1,0 +1,21 @@
+<resources>
+    <string name="action_sign_in">Войти</string>
+    <string name="action_share">Поделиться</string>
+
+    <string name="prompt_auth_username_hint">Имя пользователя</string>
+    <string name="prompt_auth_password_hint">Пароль</string>
+    <string name="prompt_before_unload_message">Покинуть страницу?</string>
+    <string name="prompt_repost_title">Отправить данные повторно?</string>
+    <string name="prompt_repost_message">Для обновления страницы нужно повторно отправить данные формы.</string>
+    <string name="prompt_folder_upload_title">Разрешить загрузку папки?</string>
+    <string name="prompt_folder_upload_generic">Сайт получит файлы из выбранной папки.</string>
+    <string name="prompt_folder_upload_named">Сайт получит файлы из папки «%1$s».</string>
+    <string name="prompt_redirect_title">Разрешить перенаправление?</string>
+    <string name="prompt_redirect_named">Разрешить перенаправление на %1$s?</string>
+    <string name="prompt_color_format_error">Введите цвет в формате #RRGGBB</string>
+    <string name="prompt_date_out_of_range">Дата вне допустимого диапазона</string>
+    <string name="prompt_time_out_of_range">Время вне допустимого диапазона</string>
+    <string name="prompt_popup_title">Открыть новое окно?</string>
+    <string name="prompt_popup_generic">Сайт пытается открыть новую страницу.</string>
+    <string name="prompt_popup_named">Сайт пытается открыть страницу на %1$s.</string>
+</resources>
