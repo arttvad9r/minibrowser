@@ -96,10 +96,16 @@ fun resolveNavigation(input: String): NavigationTarget {
     if (value.startsWith("about:", ignoreCase = true)) return NavigationTarget.Search(value)
 
     val localhost = Regex("^localhost(?::\\d+)?(?:/.*)?$", RegexOption.IGNORE_CASE).matches(value)
-    if (localhost) return NavigationTarget.Web("http://$value")
+    if (localhost) {
+        val candidate = "http://$value"
+        if (isValidWebUri(candidate)) return NavigationTarget.Web(candidate)
+    }
 
     val hostLike = Regex("^[\\w-]+(\\.[\\w-]+)+(?:\\:\\d+)?(?:/.*)?$").matches(value)
-    if (hostLike) return NavigationTarget.Web("https://$value")
+    if (hostLike) {
+        val candidate = "https://$value"
+        if (isValidWebUri(candidate)) return NavigationTarget.Web(candidate)
+    }
     return NavigationTarget.Search(value)
 }
 

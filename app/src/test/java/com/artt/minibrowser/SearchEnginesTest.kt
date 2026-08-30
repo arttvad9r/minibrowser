@@ -23,6 +23,18 @@ class SearchEnginesTest {
                      buildLoadUri("лиса", SearchEngine.GOOGLE))
     @Test fun localhostStaysLocal() =
         assertEquals("http://localhost:8080/x", buildLoadUri("http://localhost:8080/x", SearchEngine.GOOGLE))
+    @Test fun shorthandLocalhostUsesHttp() =
+        assertEquals("http://localhost:8080/x", buildLoadUri("localhost:8080/x", SearchEngine.GOOGLE))
+    @Test fun shorthandInvalidPortsFallBackToSearch() {
+        assertEquals(
+            "https://www.google.com/search?q=example.com%3A99999",
+            buildLoadUri("example.com:99999", SearchEngine.GOOGLE),
+        )
+        assertEquals(
+            "https://www.google.com/search?q=localhost%3A99999",
+            buildLoadUri("localhost:99999", SearchEngine.GOOGLE),
+        )
+    }
     @Test fun emptyIsBlank() =
         assertEquals("about:blank", buildLoadUri("  ", SearchEngine.GOOGLE))
     @Test fun translateUriBuildsProxyUrl() =
