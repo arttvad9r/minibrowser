@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,18 @@ internal data class FindBarUiState(
     val resultsReady: Boolean = false,
 )
 
+internal class FindRequestTracker {
+    private var revision = 0L
+
+    fun begin(): Long = ++revision
+
+    fun invalidate() {
+        revision++
+    }
+
+    fun isCurrent(requestRevision: Long): Boolean = requestRevision == revision
+}
+
 internal fun formatFindCounter(current: Int, total: Int): String =
     if (current >= 0 && total >= 0) "$current/$total" else ""
 
@@ -58,20 +71,29 @@ internal fun FindInPageRoute(
     var current by remember { mutableIntStateOf(0) }
     var total by remember { mutableIntStateOf(0) }
     var resultsReady by remember { mutableStateOf(false) }
+    val requestTracker = remember { FindRequestTracker() }
+    val activeSession by rememberUpdatedState(session)
 
     val find: (Boolean) -> Unit = { backward ->
         if (query.isBlank()) {
+            requestTracker.invalidate()
             session.finder.clear()
             current = 0
             total = 0
             resultsReady = false
         } else {
             val requestedQuery = query
+            val requestedSession = session
+            val requestRevision = requestTracker.begin()
             session.finder.find(
                 requestedQuery,
                 if (backward) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD,
             ).accept { result ->
-                if (query == requestedQuery) {
+                if (
+                    requestTracker.isCurrent(requestRevision) &&
+                    activeSession === requestedSession &&
+                    query == requestedQuery
+                ) {
                     current = result?.current ?: 0
                     total = result?.total ?: 0
                     resultsReady = true
@@ -93,6 +115,7 @@ internal fun FindInPageRoute(
             resultsReady = resultsReady,
         ),
         onQueryChange = {
+            requestTracker.invalidate()
             query = it
             current = 0
             total = 0
@@ -101,6 +124,7 @@ internal fun FindInPageRoute(
         onPrevious = { find(true) },
         onNext = { find(false) },
         onClose = {
+            requestTracker.invalidate()
             session.finder.clear()
             onClose()
         },
