@@ -17,8 +17,8 @@ internal fun bookmarkForPersistence(url: String, title: String, position: Int): 
 private fun sanitizedBookmark(entry: Bookmark): Bookmark? {
     val safeUrl = sanitizeWebUriForPersistence(entry.url) ?: return null
     val safeTitle = bookmarkTitleForPersistence(entry.title)
-    if (safeUrl == entry.url && safeTitle == entry.title) return entry
-    val safeHost = if (safeUrl == entry.url) entry.host else webUriHost(safeUrl).orEmpty()
+    val safeHost = webUriHost(safeUrl).orEmpty()
+    if (safeUrl == entry.url && safeTitle == entry.title && safeHost == entry.host) return entry
     return entry.copy(
         url = safeUrl,
         title = safeTitle,
@@ -26,7 +26,7 @@ private fun sanitizedBookmark(entry: Bookmark): Bookmark? {
     )
 }
 
-/** Drops malformed rows and strips HTTP user-info before stored bookmarks reach browser UI. */
+/** Drops malformed rows and normalizes URL, title and host before bookmarks reach browser UI. */
 internal fun webBookmarks(entries: List<Bookmark>): List<Bookmark> {
     val canonicalUrls = HashSet<String>()
     entries.forEach { entry ->
@@ -93,11 +93,11 @@ class BookmarksRepository(private val dao: AppDao) {
     }
 
     /**
-     * Legacy builds could persist valid HTTP(S) URLs or URL-shaped titles containing user-info
-     * credentials. Publish only sanitized copies immediately, then converge storage in the
-     * background path used to load the bookmark screen. Upsert the safe key before deleting the old
-     * key so process death cannot lose a bookmark; if the safe key already exists, simply discard
-     * the credential-bearing duplicate.
+     * Legacy builds could persist malformed host metadata or valid HTTP(S) URLs/titles containing
+     * user-info credentials. Publish only normalized copies immediately, then converge storage in
+     * the background path used to load the bookmark screen. Upsert the safe key before deleting the
+     * old key so process death cannot lose a bookmark; if the safe key already exists, simply
+     * discard the credential-bearing duplicate.
      */
     private suspend fun migrateLegacyRows(stored: List<Bookmark>) {
         stored.forEach { entry ->
