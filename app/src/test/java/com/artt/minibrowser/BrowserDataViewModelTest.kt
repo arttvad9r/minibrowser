@@ -143,7 +143,7 @@ class BrowserDataViewModelTest {
         clearTabPreviews: () -> Unit = {},
         clearHistory: suspend () -> Unit = {},
         clearBookmarks: suspend () -> Unit = {},
-        clearFaviconCaches: () -> Unit = {},
+        clearFaviconCaches: suspend () -> Unit = {},
         clearWebData: suspend () -> Unit = {},
     ): BrowserDataViewModel = BrowserDataViewModel(
         clearTabPreviews = clearTabPreviews,
