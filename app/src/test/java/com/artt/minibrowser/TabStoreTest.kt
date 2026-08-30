@@ -99,6 +99,12 @@ class TabStoreTest {
         assertEquals(emptyList(), TabStore.loadState(dir).tabs)
         assertEquals("second-corrupt", backup.readText())
         assertEquals(1, dir.listFiles()?.count { it.name.startsWith("open_tabs.json.corrupt") })
+
+        TabStore.saveState(
+            dir,
+            PersistedBrowserState(1, listOf(PersistedTab(1, "https://recovered.example", "Recovered"))),
+        )
+        assertFalse(backup.exists())
         dir.deleteRecursively()
     }
 

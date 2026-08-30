@@ -124,6 +124,7 @@ object TabStore {
             }.recoverCatching {
                 Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }.getOrThrow()
+            File(dir, CORRUPT_FILE_NAME).delete()
         } finally {
             temp.delete()
         }
