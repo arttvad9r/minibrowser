@@ -61,6 +61,30 @@ class DownloadHistoryTest {
         assertNull(normalized.error)
     }
 
+    @Test fun restoredMalformedMimeIsNormalizedAndRewritten() {
+        val restored = BrowserDownload(
+            id = "mime",
+            name = "page.html",
+            sourceUrl = "https://example.com",
+            mime = "text/html\r\nInjected: value",
+            status = DownloadStatus.Completed,
+            startedAt = 10L,
+            finishedAt = 20L,
+        )
+
+        val normalized = normalizeRestoredDownload(restored, now = 42L)
+
+        assertEquals("application/octet-stream", normalized.mime)
+        assertTrue(
+            shouldPersistRestoredDownloadMerge(
+                live = emptyList(),
+                rawRestored = listOf(restored),
+                normalizedRestored = listOf(normalized),
+                discardRestoredHistory = false,
+            ),
+        )
+    }
+
     @Test fun legacyInterruptedFailureMigratesToStructuredReason() {
         val restored = BrowserDownload(
             id = "legacy",
