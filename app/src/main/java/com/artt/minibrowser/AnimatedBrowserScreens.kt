@@ -272,12 +272,12 @@ private fun BookmarksScreen(
                     EmptyState(AppIcons.Star, "Закладок пока нет", "Сохранённые страницы появятся здесь.")
                 }
                 else -> {
-                    val mutationError = state.error?.takeIf { it != BookmarksOperation.Load }
-                    if (mutationError != null) {
-                        val message = when (mutationError) {
+                    val visibleError = state.error
+                    if (visibleError != null) {
+                        val message = when (visibleError) {
+                            BookmarksOperation.Load -> "Не удалось обновить закладки"
                             BookmarksOperation.Rename -> "Не удалось переименовать закладку"
                             BookmarksOperation.Delete -> "Не удалось удалить закладку"
-                            BookmarksOperation.Load -> error("handled above")
                         }
                         Row(
                             Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
@@ -289,7 +289,11 @@ private fun BookmarksScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
-                            TextButton(onClick = onDismissError) { Text("Скрыть") }
+                            TextButton(
+                                onClick = if (visibleError == BookmarksOperation.Load) onRetryLoad else onDismissError,
+                            ) {
+                                Text(if (visibleError == BookmarksOperation.Load) "Повторить" else "Скрыть")
+                            }
                         }
                     }
                     LazyColumn(Modifier.fillMaxSize()) {
