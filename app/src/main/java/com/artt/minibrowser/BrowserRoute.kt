@@ -26,6 +26,7 @@ import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildTranslateUri
+import com.artt.minibrowser.engine.toggleDesktopMode
 import com.artt.minibrowser.ui.BrowserPageActions
 import com.artt.minibrowser.ui.BrowserPageContent
 import com.artt.minibrowser.ui.BrowserPageUiState
@@ -158,6 +159,9 @@ internal fun BrowserRoute(
             currentTab?.let { tab ->
                 buildTranslateUri(tab.url, prefs.translateTarget)?.let(tab.session::loadUri)
             }
+        },
+        onToggleDesktop = {
+            currentTab?.let(::toggleDesktopMode)
         },
     )
 
