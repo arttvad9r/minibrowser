@@ -18,6 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import com.artt.minibrowser.R
 import java.io.File
 
@@ -130,7 +132,15 @@ internal fun BrowserPageContent(
                 .weight(1f)
                 .windowInsetsPadding(bottomSafeInsets),
         ) {
-            browserContent()
+            val browserContentOccluded = state.showStart || state.loadError != null
+            val browserContentModifier = if (browserContentOccluded) {
+                Modifier.fillMaxSize().semantics { hideFromAccessibility() }
+            } else {
+                Modifier.fillMaxSize()
+            }
+            Box(browserContentModifier) {
+                browserContent()
+            }
             if (state.showStart) {
                 startPageContent()
             }
