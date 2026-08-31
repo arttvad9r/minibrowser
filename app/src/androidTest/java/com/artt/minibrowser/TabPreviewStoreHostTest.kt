@@ -17,32 +17,28 @@ class TabPreviewStoreHostTest {
         val context = instrumentation.targetContext
 
         instrumentation.runOnMainSync {
+            val previewStore = TabPreviewStore()
             val firstHost = GeckoView(context)
-            TabPreviewStore.attach(firstHost, tabId = null, url = "", isPrivate = false)
-            TabPreviewStore.remove(42L)
-            assertTrue(removedTabIds().contains(42L))
+            previewStore.attach(firstHost, tabId = null, url = "", isPrivate = false)
+            previewStore.remove(42L)
+            assertTrue(removedTabIds(previewStore).contains(42L))
 
             // A late update from the same AndroidView host must stay blocked.
-            TabPreviewStore.attach(firstHost, tabId = 42L, url = "https://old.example", isPrivate = false)
-            assertTrue(removedTabIds().contains(42L))
+            previewStore.attach(firstHost, tabId = 42L, url = "https://old.example", isPrivate = false)
+            assertTrue(removedTabIds(previewStore).contains(42L))
 
             // Activity/AndroidView recreation creates a new GeckoView. Old capture callbacks are
             // invalidated by the host generation change, so a legitimately reused tab id is safe.
             val secondHost = GeckoView(context)
-            TabPreviewStore.attach(secondHost, tabId = 42L, url = "https://new.example", isPrivate = false)
-            assertFalse(removedTabIds().contains(42L))
-
-            // Leave the process-global store neutral for other instrumentation tests.
-            val cleanupHost = GeckoView(context)
-            TabPreviewStore.attach(cleanupHost, tabId = null, url = "", isPrivate = false)
-            TabPreviewStore.clear()
+            previewStore.attach(secondHost, tabId = 42L, url = "https://new.example", isPrivate = false)
+            assertFalse(removedTabIds(previewStore).contains(42L))
         }
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun removedTabIds(): Set<Long> {
+    private fun removedTabIds(previewStore: TabPreviewStore): Set<Long> {
         val field = TabPreviewStore::class.java.getDeclaredField("removedTabs")
         field.isAccessible = true
-        return field.get(TabPreviewStore) as Set<Long>
+        return field.get(previewStore) as Set<Long>
     }
 }
