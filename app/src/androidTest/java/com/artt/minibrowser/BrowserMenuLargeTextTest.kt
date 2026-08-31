@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -94,8 +95,9 @@ class BrowserMenuLargeTextTest {
             assertTrue("$label ends outside the window", bounds.right <= windowWidthPx)
         }
 
-        composeRule.onNode(hasScrollAction())
-            .performScrollToNode(hasText(settingsLabel))
+        composeRule.onNode(
+            hasScrollAction() and hasAnyDescendant(hasText(settingsLabel)),
+        ).performScrollToNode(hasText(settingsLabel))
         composeRule.onNodeWithText(settingsLabel).assertIsDisplayed()
     }
 }
