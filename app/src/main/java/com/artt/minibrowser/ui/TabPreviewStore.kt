@@ -16,12 +16,14 @@ import kotlin.math.roundToInt
  * Normal-tab previews stay memory-only and are kept in a byte-bounded LRU. Private tabs are
  * deliberately excluded even from this transient cache.
  */
-object TabPreviewStore {
-    private const val MAX_PREVIEW_WIDTH = 320
-    private const val DEFAULT_MAX_CACHE_BYTES = 16L * 1024L * 1024L
-    private const val DEFAULT_BACKGROUND_CACHE_BYTES = 4L * 1024L * 1024L
-    private const val RETIRE_DELAY_MS = 1_000L
-    private const val OVERVIEW_CAPTURE_DELAY_MS = 420L
+internal class TabPreviewStore {
+    private companion object {
+        const val MAX_PREVIEW_WIDTH = 320
+        const val DEFAULT_MAX_CACHE_BYTES = 16L * 1024L * 1024L
+        const val DEFAULT_BACKGROUND_CACHE_BYTES = 4L * 1024L * 1024L
+        const val RETIRE_DELAY_MS = 1_000L
+        const val OVERVIEW_CAPTURE_DELAY_MS = 420L
+    }
 
     private data class DeferredPreview(val bitmap: Bitmap, val url: String)
 
