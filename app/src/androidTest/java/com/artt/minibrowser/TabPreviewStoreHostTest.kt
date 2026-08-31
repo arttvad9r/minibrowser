@@ -35,6 +35,21 @@ class TabPreviewStoreHostTest {
         }
     }
 
+    @Test
+    fun storesDoNotShareRemovedTabIds() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+        instrumentation.runOnMainSync {
+            val firstStore = TabPreviewStore()
+            val secondStore = TabPreviewStore()
+
+            firstStore.remove(7L)
+
+            assertTrue(removedTabIds(firstStore).contains(7L))
+            assertFalse(removedTabIds(secondStore).contains(7L))
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun removedTabIds(previewStore: TabPreviewStore): Set<Long> {
         val field = TabPreviewStore::class.java.getDeclaredField("removedTabs")
