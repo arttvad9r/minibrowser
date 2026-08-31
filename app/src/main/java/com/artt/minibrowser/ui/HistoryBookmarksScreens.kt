@@ -405,13 +405,13 @@ private fun InitialLoadErrorState(
     }
 }
 
-private enum class HistoryDayGroup { Today, Yesterday, Earlier }
+internal enum class HistoryDayGroup { Today, Yesterday, Earlier }
 
-private fun groupHistoryByDay(
+internal fun groupHistoryByDay(
     entries: List<HistoryItemUiState>,
+    zone: ZoneId = ZoneId.systemDefault(),
+    today: LocalDate = LocalDate.now(zone),
 ): List<Pair<HistoryDayGroup, List<HistoryItemUiState>>> {
-    val zone = ZoneId.systemDefault()
-    val today = LocalDate.now(zone)
     val todayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
     val yesterdayStart = today.minusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
     val groups = linkedMapOf(
