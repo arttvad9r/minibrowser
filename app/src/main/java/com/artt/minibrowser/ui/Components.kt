@@ -24,6 +24,8 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -55,6 +57,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
@@ -137,6 +140,8 @@ fun BrowserTextField(
     modifier: Modifier = Modifier,
     placeholder: String = "",
     textStyle: TextStyle = MaterialTheme.typography.bodyLarge,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(),
+    keyboardActions: KeyboardActions = KeyboardActions(),
 ) {
     BasicTextField(
         value = value,
@@ -145,6 +150,8 @@ fun BrowserTextField(
             if (placeholder.isNotEmpty()) contentDescription = placeholder
         },
         singleLine = true,
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         textStyle = textStyle.copy(color = MaterialTheme.colorScheme.onSurface),
         cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.onSurface),
         decorationBox = { inner ->
@@ -403,6 +410,7 @@ fun BookmarkActionsSheet(
 ) {
     var renaming by remember { mutableStateOf(false) }
     var text by remember(bookmarkKey) { mutableStateOf(bookmarkTitle) }
+    val submitRename: () -> Unit = { onRename(text.trim().ifBlank { bookmarkTitle }) }
     BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
         Column {
             if (renaming) {
@@ -420,10 +428,12 @@ fun BookmarkActionsSheet(
                             { text = it },
                             Modifier.fillMaxWidth(),
                             placeholder = stringResource(R.string.field_title),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { submitRename() }),
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { onRename(text.trim().ifBlank { bookmarkTitle }) }) {
+                    TextButton(onClick = submitRename) {
                         Text(stringResource(R.string.action_ok))
                     }
                 }
