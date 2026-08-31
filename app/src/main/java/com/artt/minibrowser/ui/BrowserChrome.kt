@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -52,6 +54,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -105,6 +112,7 @@ internal fun TopBar(
     var text by remember { mutableStateOf("") }
     var focused by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var selectedSuggestionIndex by remember { mutableStateOf(-1) }
     var fieldSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val rawUrl = state.url
     val newTab = rawUrl.isBlank() || rawUrl == "about:blank"
@@ -122,6 +130,9 @@ internal fun TopBar(
         onSuggestionQueryChanged(
             text.takeIf { focused && it.isNotBlank() && userHasEdited },
         )
+    }
+    LaunchedEffect(focused, text, suggestions) {
+        selectedSuggestionIndex = -1
     }
     val navigate: (String) -> Unit = { query ->
         onSubmitQuery(query)
@@ -236,6 +247,51 @@ internal fun TopBar(
                                 focused = it.isFocused
                                 if (!it.isFocused) text = ""
                             }
+                            .onPreviewKeyEvent { event ->
+                                if (
+                                    event.type != KeyEventType.KeyDown ||
+                                    !focused ||
+                                    suggestions.isEmpty()
+                                ) {
+                                    return@onPreviewKeyEvent false
+                                }
+                                when (event.key) {
+                                    Key.DirectionDown -> {
+                                        selectedSuggestionIndex =
+                                            if (
+                                                selectedSuggestionIndex < 0 ||
+                                                selectedSuggestionIndex >= suggestions.lastIndex
+                                            ) {
+                                                0
+                                            } else {
+                                                selectedSuggestionIndex + 1
+                                            }
+                                        true
+                                    }
+                                    Key.DirectionUp -> {
+                                        selectedSuggestionIndex =
+                                            if (selectedSuggestionIndex <= 0) {
+                                                suggestions.lastIndex
+                                            } else {
+                                                selectedSuggestionIndex - 1
+                                            }
+                                        true
+                                    }
+                                    Key.Enter -> {
+                                        val selected =
+                                            suggestions.getOrNull(selectedSuggestionIndex)
+                                                ?: return@onPreviewKeyEvent false
+                                        focusManager.clearFocus(force = true)
+                                        onNavigate(selected.url)
+                                        true
+                                    }
+                                    Key.Escape -> {
+                                        focusManager.clearFocus(force = true)
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            }
                             .semantics { contentDescription = omniboxDescription },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
@@ -264,8 +320,12 @@ internal fun TopBar(
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
                     ) {
                         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                            suggestions.forEach { s ->
-                                SuggestionRow(s, iconsDir) {
+                            suggestions.forEachIndexed { index, s ->
+                                SuggestionRow(
+                                    s = s,
+                                    iconsDir = iconsDir,
+                                    selected = index == selectedSuggestionIndex,
+                                ) {
                                     focusManager.clearFocus()
                                     onNavigate(s.url)
                                 }
@@ -327,11 +387,31 @@ internal fun TopBar(
 }
 
 @Composable
-private fun SuggestionRow(s: BrowserSuggestionUiState, iconsDir: File, onClick: () -> Unit) {
+private fun SuggestionRow(
+    s: BrowserSuggestionUiState,
+    iconsDir: File,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    LaunchedEffect(selected) {
+        if (selected) bringIntoViewRequester.bringIntoView()
+    }
     Row(
         Modifier
             .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester)
             .heightIn(min = 56.dp)
+            .clip(Radius.small)
+            .then(
+                if (selected) {
+                    Modifier
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .border(1.dp, MaterialTheme.colorScheme.primary, Radius.small)
+                } else {
+                    Modifier
+                },
+            )
             .softClickable(onClick = onClick)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
