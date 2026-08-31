@@ -132,11 +132,15 @@ class BrowserPageAccessibilityTest {
         }
 
         composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
-            platformAccessibilityTreeContains(nativeLabel)
+            platformAccessibilityTreeContainsImportant(nativeLabel)
         }
         composeRule.runOnIdle { showStart = true }
         composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
-            !platformAccessibilityTreeContains(nativeLabel)
+            !platformAccessibilityTreeContainsImportant(nativeLabel)
+        }
+        composeRule.runOnIdle { showStart = false }
+        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
+            platformAccessibilityTreeContainsImportant(nativeLabel)
         }
     }
 
@@ -188,10 +192,11 @@ class BrowserPageAccessibilityTest {
         loadError = loadError,
     )
 
-    private fun platformAccessibilityTreeContains(text: String): Boolean {
+    private fun platformAccessibilityTreeContainsImportant(text: String): Boolean {
         val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
             ?: return false
-        return root.findAccessibilityNodeInfosByText(text).isNotEmpty()
+        return root.findAccessibilityNodeInfosByText(text)
+            .any { it.isImportantForAccessibility }
     }
 
     private companion object {
