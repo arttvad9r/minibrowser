@@ -89,6 +89,7 @@ internal fun BrowserTabSwitcher(
     tabs: List<BrowserTabItemUiState>,
     currentId: Long?,
     iconsDir: File,
+    previewStore: TabPreviewStore,
     onSelect: (Long) -> Unit,
     onClose: (Long) -> Unit,
     onNew: () -> Unit,
@@ -108,9 +109,9 @@ internal fun BrowserTabSwitcher(
 
     HighFrameRateDuringMotion(activeAnimations > 0 || predictiveBackActive)
 
-    DisposableEffect(Unit) {
-        TabPreviewStore.setOverviewVisible(true)
-        onDispose { TabPreviewStore.setOverviewVisible(false) }
+    DisposableEffect(previewStore) {
+        previewStore.setOverviewVisible(true)
+        onDispose { previewStore.setOverviewVisible(false) }
     }
 
     suspend fun animateReveal(target: Float) {
@@ -229,6 +230,7 @@ internal fun BrowserTabSwitcher(
                             tab = tab,
                             isCurrent = tab.id == overviewCurrentId,
                             iconsDir = iconsDir,
+                            previewStore = previewStore,
                             modifier = Modifier.width(224.dp),
                             onSelect = { activateAndExit(tab.id) },
                             onClose = { if (inputEnabled) onClose(tab.id) },
@@ -252,6 +254,7 @@ internal fun BrowserTabSwitcher(
                                 tab = tab,
                                 isCurrent = tab.id == overviewCurrentId,
                                 iconsDir = iconsDir,
+                                previewStore = previewStore,
                                 onSelect = { activateAndExit(tab.id) },
                                 onClose = { if (inputEnabled) onClose(tab.id) },
                             )
@@ -276,12 +279,13 @@ private fun BrowserTabCard(
     tab: BrowserTabItemUiState,
     isCurrent: Boolean,
     iconsDir: File,
+    previewStore: TabPreviewStore,
     modifier: Modifier = Modifier,
     onSelect: () -> Unit,
     onClose: () -> Unit,
 ) {
     val host = hostOf(tab.url)
-    val preview = if (tab.isPrivate) null else TabPreviewStore[tab.id]
+    val preview = if (tab.isPrivate) null else previewStore[tab.id]
     val newTabTitle = stringResource(R.string.new_tab_title)
     val privateTabTitle = stringResource(R.string.private_tab_title)
     val displayTitle = when {
