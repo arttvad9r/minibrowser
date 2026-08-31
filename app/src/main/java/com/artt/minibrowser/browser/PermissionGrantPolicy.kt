@@ -4,6 +4,11 @@ private const val FINE_LOCATION = "android.permission.ACCESS_FINE_LOCATION"
 private const val COARSE_LOCATION = "android.permission.ACCESS_COARSE_LOCATION"
 private val LOCATION_PERMISSIONS = setOf(FINE_LOCATION, COARSE_LOCATION)
 
+internal fun isCurrentPermissionRequestTab(
+    requestTabId: Long?,
+    currentTabId: Long?,
+): Boolean = requestTabId != null && requestTabId == currentTabId
+
 /** Android may grant approximate location (coarse) while denying fine location. */
 internal fun areRequestedPermissionsSatisfied(
     requested: Set<String>,

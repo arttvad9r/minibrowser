@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.artt.minibrowser.BuildConfig
+import com.artt.minibrowser.browser.isCurrentPermissionRequestTab
 import com.artt.minibrowser.data.HistorySink
 import com.artt.minibrowser.data.PersistedBrowserState
 import com.artt.minibrowser.data.PersistedTab
@@ -279,7 +280,7 @@ class TabManager(
 ) {
     private val promptController = (context as? Activity)?.let { GeckoPromptController(it, filePicker) }
     private val permissionController = (context as? Activity)?.let {
-        GeckoPermissionController(it, permissionRequester)
+        GeckoPermissionController(it, permissionRequester, ::isCurrentPermissionSession)
     }
     private val downloadController = (context as? Activity)?.let {
         GeckoDownloadController(it, permissionRequester)
@@ -451,6 +452,12 @@ class TabManager(
     }
 
     fun current(): Tab? = _tabs.value.firstOrNull { it.id == currentId.value }
+
+    private fun isCurrentPermissionSession(session: GeckoSession): Boolean =
+        isCurrentPermissionRequestTab(
+            requestTabId = _tabs.value.firstOrNull { it.session === session }?.id,
+            currentTabId = currentId.value,
+        )
 
     fun setAppVisible(visible: Boolean) {
         if (closed) return

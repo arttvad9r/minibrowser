@@ -44,13 +44,14 @@ internal fun permissionHost(uri: String?): String? = uri?.let(::webUriHost)
 class GeckoPermissionController(
     private val activity: Activity,
     private val requestPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)?,
+    private val isSessionCurrent: (GeckoSession) -> Boolean,
 ) : GeckoSession.PermissionDelegate {
     override fun onAndroidPermissionsRequest(
         session: GeckoSession,
         permissions: Array<String>?,
         callback: GeckoSession.PermissionDelegate.Callback,
     ) {
-        if (!canShowUi()) {
+        if (!canHandle(session)) {
             callback.reject()
             return
         }
@@ -72,7 +73,7 @@ class GeckoPermissionController(
             return
         }
         requestPermissions?.invoke(missing) { granted ->
-            if (granted && canShowUi()) callback.grant() else callback.reject()
+            if (granted && canHandle(session)) callback.grant() else callback.reject()
         } ?: callback.reject()
     }
 
@@ -85,6 +86,9 @@ class GeckoPermissionController(
         val resolvedValue = resolveContentPermissionValue(action, perm.value)
         if (resolvedValue != GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT) {
             return GeckoResult.fromValue(resolvedValue)
+        }
+        if (!canHandle(session)) {
+            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
         }
         val result = GeckoResult<Int>()
         val hostName = permissionHost(perm.uri)
@@ -111,7 +115,7 @@ class GeckoPermissionController(
                 runCatching { result.complete(value) }.onSuccess { completed = true }
             }
 
-            if (!canShowUi()) {
+            if (!canHandle(session)) {
                 complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
                 return@runOnUiThread
             }
@@ -123,7 +127,13 @@ class GeckoPermissionController(
                         complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
                     }
                     .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
-                        complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+                        complete(
+                            if (canHandle(session)) {
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                            } else {
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                            },
+                        )
                     }
                     .setOnCancelListener {
                         complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
@@ -148,7 +158,7 @@ class GeckoPermissionController(
         audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     ) {
-        if (!canShowUi()) {
+        if (!canHandle(session)) {
             callback.reject()
             return
         }
@@ -174,7 +184,7 @@ class GeckoPermissionController(
             else -> activity.getString(R.string.permission_microphone_message)
         }
         activity.runOnUiThread {
-            if (!canShowUi()) {
+            if (!canHandle(session)) {
                 callback.reject()
                 return@runOnUiThread
             }
@@ -189,7 +199,7 @@ class GeckoPermissionController(
                     }
                     .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
                         actionTaken = true
-                        requestAndroidMediaPermissions(camera, microphone, callback)
+                        requestAndroidMediaPermissions(session, camera, microphone, callback)
                     }
                     .setOnCancelListener {
                         actionTaken = true
@@ -207,11 +217,12 @@ class GeckoPermissionController(
     }
 
     private fun requestAndroidMediaPermissions(
+        session: GeckoSession,
         camera: GeckoSession.PermissionDelegate.MediaSource?,
         microphone: GeckoSession.PermissionDelegate.MediaSource?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     ) {
-        if (!canShowUi()) {
+        if (!canHandle(session)) {
             callback.reject()
             return
         }
@@ -225,10 +236,12 @@ class GeckoPermissionController(
             callback.grant(camera, microphone)
         } else {
             requestPermissions?.invoke(needed) { granted ->
-                if (granted && canShowUi()) callback.grant(camera, microphone) else callback.reject()
+                if (granted && canHandle(session)) callback.grant(camera, microphone) else callback.reject()
             } ?: callback.reject()
         }
     }
+
+    private fun canHandle(session: GeckoSession): Boolean = canShowUi() && isSessionCurrent(session)
 
     private fun canShowUi(): Boolean = !activity.isFinishing && !activity.isDestroyed
 }

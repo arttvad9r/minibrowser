@@ -1,6 +1,7 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.browser.areRequestedPermissionsSatisfied
+import com.artt.minibrowser.browser.isCurrentPermissionRequestTab
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -40,5 +41,12 @@ class PermissionGrantPolicyTest {
     @Test fun ordinaryPermissionMustBeGranted() {
         assertTrue(areRequestedPermissionsSatisfied(setOf(camera), mapOf(camera to true)))
         assertFalse(areRequestedPermissionsSatisfied(setOf(camera), mapOf(camera to false)))
+    }
+
+    @Test fun permissionRequestMustBelongToCurrentTab() {
+        assertTrue(isCurrentPermissionRequestTab(requestTabId = 7L, currentTabId = 7L))
+        assertFalse(isCurrentPermissionRequestTab(requestTabId = 7L, currentTabId = 8L))
+        assertFalse(isCurrentPermissionRequestTab(requestTabId = null, currentTabId = 7L))
+        assertFalse(isCurrentPermissionRequestTab(requestTabId = 7L, currentTabId = null))
     }
 }
