@@ -22,23 +22,24 @@ import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.engine.BrowserApp
-import com.artt.minibrowser.engine.Engine
 import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+    private val browserApp by lazy { application as BrowserApp }
+    private val runtime by lazy { browserApp.runtime }
     private val settingsRepo by lazy { SettingsRepository(this) }
     private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private val iconsDir by lazy { File(filesDir, "icons") }
-    private val tabPreviewStore by lazy { (application as BrowserApp).tabPreviewStore }
+    private val tabPreviewStore by lazy { browserApp.tabPreviewStore }
     private lateinit var tabManager: TabManager
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
         ViewModelProvider(
             this,
-            SettingsViewModel.factory(settingsRepo, Engine.runtime),
+            SettingsViewModel.factory(settingsRepo, runtime),
         )[SettingsViewModel::class.java]
     }
     private val browserDataClearer by lazy {
@@ -87,7 +88,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         tabManager = TabManager(
-            Engine.runtime,
+            runtime,
             File(filesDir, "tabs"),
             this,
             permissionRequester = activityRequests::requestPermissions,
