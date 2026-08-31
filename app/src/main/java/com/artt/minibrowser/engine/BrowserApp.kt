@@ -23,7 +23,7 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
     currentProcess == null || currentProcess == mainProcess
 
 class BrowserApp : Application() {
-    internal val tabPreviewStore = TabPreviewStore()
+    internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
     private var mainProcess = false
 
     override fun onCreate() {
@@ -33,8 +33,7 @@ class BrowserApp : Application() {
         mainProcess = isMainApplicationProcess(currentProcessName(), applicationInfo.processName)
         if (!mainProcess) return
 
-        // Keep the singleton configured, but do not construct Room during Application startup.
-        // History/bookmark access creates it on demand after the browser UI has started composing.
+        // Keep Room lazy: history/bookmark access creates it only after browser UI startup.
         DbHolder.init(this)
 
         val performance = BrowserPerformance.configure(this)
