@@ -1,5 +1,6 @@
 package com.artt.minibrowser
 
+import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,7 +37,7 @@ import org.robolectric.annotation.GraphicsMode
 
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35])
+@Config(sdk = [35], application = Application::class)
 class ComposeScreenshotTest {
     @OptIn(ExperimentalRoborazziApi::class)
     @Test
