@@ -1,6 +1,9 @@
 package com.artt.minibrowser
 
 import android.content.Context
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
@@ -97,6 +100,34 @@ class OmniboxKeyboardNavigationTest {
         composeRule.onNodeWithText(suggestion.label).assertDoesNotExist()
         composeRule.runOnIdle {
             assertNull(navigatedTo)
+        }
+    }
+
+    @Test
+    fun systemBackExitsOmniboxBeforeBrowserBack() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val suggestion = BrowserSuggestionUiState("First", "https://first.example")
+        var browserBackCount = 0
+        var dispatcher: OnBackPressedDispatcher? = null
+
+        composeRule.setContent {
+            dispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+            BackHandler(enabled = true) { browserBackCount++ }
+            TestTopBar(context, listOf(suggestion)) { }
+        }
+
+        focusOmnibox(context)
+        composeRule.onNodeWithText(suggestion.label).assertIsDisplayed()
+
+        composeRule.runOnIdle {
+            checkNotNull(dispatcher).onBackPressed()
+        }
+
+        composeRule.onNodeWithText(suggestion.label).assertDoesNotExist()
+        composeRule.runOnIdle {
+            assertEquals(0, browserBackCount)
+            checkNotNull(dispatcher).onBackPressed()
+            assertEquals(1, browserBackCount)
         }
     }
 

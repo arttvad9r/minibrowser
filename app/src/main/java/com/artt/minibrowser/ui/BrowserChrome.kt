@@ -5,6 +5,7 @@
 
 package com.artt.minibrowser.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -118,6 +119,9 @@ internal fun TopBar(
     val newTab = rawUrl.isBlank() || rawUrl == "about:blank"
     val shown = if (focused) text else (if (newTab) "" else rawUrl)
     val focusManager = LocalFocusManager.current
+    BackHandler(enabled = focused) {
+        focusManager.clearFocus(force = true)
+    }
     val siteInfoDescription = stringResource(R.string.site_info_content_description)
     val searchActionDescription = stringResource(R.string.action_search)
     val searchDescription = stringResource(R.string.search_content_description)
