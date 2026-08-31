@@ -28,8 +28,15 @@ jobs:
       - name: Install Android SDK
         run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v6
-      - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+      - name: Unit tests and screenshot reference recording
+        run: ./gradlew :app:recordRoborazziDebug --stacktrace
+      - name: Upload screenshot references
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-references
+          path: app/src/test/snapshots
+          if-no-files-found: error
+          retention-days: 7
       - name: Lint
         run: ./gradlew :app:lintDebug --stacktrace
       - name: Debug APK
