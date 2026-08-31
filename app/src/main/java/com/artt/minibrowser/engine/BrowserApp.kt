@@ -23,6 +23,7 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
     currentProcess == null || currentProcess == mainProcess
 
 class BrowserApp : Application() {
+    internal val tabPreviewStore = TabPreviewStore()
     private var mainProcess = false
 
     override fun onCreate() {
@@ -37,7 +38,7 @@ class BrowserApp : Application() {
         DbHolder.init(this)
 
         val performance = BrowserPerformance.configure(this)
-        TabPreviewStore.configureMemoryPolicy(
+        tabPreviewStore.configureMemoryPolicy(
             maxBytes = performance.previewCacheBytes,
             backgroundBytes = performance.backgroundPreviewCacheBytes,
         )
@@ -84,14 +85,14 @@ class BrowserApp : Application() {
         super.onTrimMemory(level)
         if (!mainProcess) return
         when {
-            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> TabPreviewStore.trimMemory(aggressive = true)
-            level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> TabPreviewStore.trimMemory(aggressive = false)
+            level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> tabPreviewStore.trimMemory(aggressive = true)
+            level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> tabPreviewStore.trimMemory(aggressive = false)
         }
     }
 
     override fun onLowMemory() {
         super.onLowMemory()
-        if (mainProcess) TabPreviewStore.trimMemory(aggressive = true)
+        if (mainProcess) tabPreviewStore.trimMemory(aggressive = true)
     }
 
     private fun currentProcessName(): String? {
