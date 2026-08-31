@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -36,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.window.core.layout.WindowSizeClass
 import com.artt.minibrowser.R
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -103,6 +104,7 @@ internal fun BrowserTabSwitcher(
     val closeSwitcherDescription = stringResource(R.string.close_tab_switcher_content_description)
     val newTabTitle = stringResource(R.string.new_tab_title)
     val overviewPaneTitle = stringResource(R.string.tabs_content_description)
+    val windowSizeClass = currentWindowAdaptiveInfoV2().windowSizeClass
 
     HighFrameRateDuringMotion(activeAnimations > 0 || predictiveBackActive)
 
@@ -234,27 +236,25 @@ internal fun BrowserTabSwitcher(
                     }
                 }
                 else -> {
-                    BoxWithConstraints(Modifier.fillMaxSize()) {
-                        val columns = tabGridColumnCount(maxWidth.value)
-                        val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
-                        val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(columns),
-                            state = gridState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            items(tabs, key = { it.id }) { tab ->
-                                BrowserTabCard(
-                                    tab = tab,
-                                    isCurrent = tab.id == overviewCurrentId,
-                                    iconsDir = iconsDir,
-                                    onSelect = { activateAndExit(tab.id) },
-                                    onClose = { if (inputEnabled) onClose(tab.id) },
-                                )
-                            }
+                    val columns = tabGridColumnCount(windowSizeClass)
+                    val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
+                    val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(columns),
+                        state = gridState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(tabs, key = { it.id }) { tab ->
+                            BrowserTabCard(
+                                tab = tab,
+                                isCurrent = tab.id == overviewCurrentId,
+                                iconsDir = iconsDir,
+                                onSelect = { activateAndExit(tab.id) },
+                                onClose = { if (inputEnabled) onClose(tab.id) },
+                            )
                         }
                     }
                 }
@@ -263,9 +263,11 @@ internal fun BrowserTabSwitcher(
     }
 }
 
-internal fun tabGridColumnCount(widthDp: Float): Int = when {
-    widthDp >= 840f -> 4
-    widthDp >= 600f -> 3
+internal fun tabGridColumnCount(windowSizeClass: WindowSizeClass): Int = when {
+    windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXTRA_LARGE_LOWER_BOUND) -> 6
+    windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_LARGE_LOWER_BOUND) -> 5
+    windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXPANDED_LOWER_BOUND) -> 4
+    windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND) -> 3
     else -> 2
 }
 
