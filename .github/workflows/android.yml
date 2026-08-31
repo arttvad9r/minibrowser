@@ -61,7 +61,8 @@ jobs:
           native_tmp="$(mktemp -d)"
           trap 'rm -rf "$native_tmp"' EXIT
           unzip -q "$apk" 'lib/*.so' -d "$native_tmp"
-          mapfile -t shared_objects < <(find "$native_tmp/lib" -type f -name '*.so' -print)
+          test -d "$native_tmp/lib/arm64-v8a"
+          mapfile -t shared_objects < <(find "$native_tmp/lib/arm64-v8a" -type f -name '*.so' -print)
           test "${#shared_objects[@]}" -gt 0
 
           for so in "${shared_objects[@]}"; do
@@ -147,10 +148,8 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
-      - name: Install 16 KB emulator image
-        run: >-
-          sdkmanager "platforms;android-37.1" "build-tools;35.0.0" emulator
-          "system-images;android-36;google_apis_ps16k;x86_64"
+      - name: Install compile SDK
+        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v6
       - name: Enable KVM
         run: |
@@ -159,36 +158,21 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Startup smoke on 16 KB pages
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo no | avdmanager create avd --force \
-            -n minibrowser-16k \
-            --package 'system-images;android-36;google_apis_ps16k;x86_64' \
-            --device pixel_5
-
-          "$ANDROID_SDK_ROOT/emulator/emulator" \
-            -avd minibrowser-16k \
-            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim \
-            -camera-back none -camera-front none -no-snapshot -no-metrics \
-            > "$RUNNER_TEMP/emulator-16k.log" 2>&1 &
-          trap 'adb emu kill >/dev/null 2>&1 || true' EXIT
-
-          adb wait-for-device
-          timeout 600 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 2; done'
-          page_size="$(adb shell getconf PAGE_SIZE | tr -d '\r')"
-          echo "Emulator page size: $page_size"
-          test "$page_size" = "16384"
-
-          ./gradlew :app:connectedDebugAndroidTest \
-            -PminibrowserAbi=x86_64 \
-            -Pandroid.testInstrumentationRunnerArguments.class=com.artt.minibrowser.MainActivityStartupTest \
-            --stacktrace
-      - name: Upload 16 KB emulator log
-        if: failure()
-        uses: actions/upload-artifact@v4
+        uses: reactivecircus/android-emulator-runner@v2
         with:
-          name: emulator-16k-log
-          path: ${{ runner.temp }}/emulator-16k.log
-          if-no-files-found: ignore
-          retention-days: 7
+          api-level: 36
+          target: google_apis_ps16k
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+            -camera-back none -camera-front none -no-snapshot -no-metrics
+          script: |
+            page_size="$(adb shell getconf PAGE_SIZE | tr -d '\r')"
+            echo "Emulator page size: $page_size"
+            test "$page_size" = "16384"
+            ./gradlew :app:connectedDebugAndroidTest \
+              -PminibrowserAbi=x86_64 \
+              -Pandroid.testInstrumentationRunnerArguments.class=com.artt.minibrowser.MainActivityStartupTest \
+              --stacktrace
