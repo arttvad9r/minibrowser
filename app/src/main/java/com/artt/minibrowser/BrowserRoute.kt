@@ -1,7 +1,6 @@
 package com.artt.minibrowser
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -250,8 +249,7 @@ internal fun BrowserRoute(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .focusable(),
+                .background(MaterialTheme.colorScheme.background),
         ) {
             Box(
                 Modifier
