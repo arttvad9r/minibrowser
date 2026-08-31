@@ -80,6 +80,7 @@ internal fun BrowserRoute(
     browserWindow: BrowserWindowController,
     browserIntents: BrowserIntentController,
     externalNavigation: NavigationController,
+    tabPreviewStore: TabPreviewStore,
     iconsDir: File,
 ) {
     val settingsUi by settingsViewModel.uiState.collectAsStateWithLifecycle()
@@ -216,7 +217,7 @@ internal fun BrowserRoute(
         onReload = { currentSession?.reload() },
         onSiteInfo = { browserViewModel.showSiteInfo(true) },
         onSwitcher = {
-            TabPreviewStore.captureCurrent()
+            tabPreviewStore.captureCurrent()
             browserViewModel.showSwitcher(true)
         },
         onNewTab = { tabManager.newTab(null) },
@@ -263,7 +264,7 @@ internal fun BrowserRoute(
                     actions = pageActions,
                     iconsDir = iconsDir,
                     browserContent = {
-                        GeckoContent(currentTab, Modifier.fillMaxSize())
+                        GeckoContent(currentTab, tabPreviewStore, Modifier.fillMaxSize())
                         BrowserPageProgress(currentTab?.progress ?: -1f)
                     },
                     findContent = if (currentTab != null) {
@@ -359,12 +360,13 @@ internal fun BrowserRoute(
             }
             if (showSwitcher) {
                 BrowserTabSwitcher(
-                    tabItems,
-                    currentId,
-                    iconsDir,
+                    tabs = tabItems,
+                    currentId = currentId,
+                    iconsDir = iconsDir,
+                    previewStore = tabPreviewStore,
                     onSelect = { tabManager.select(it) },
                     onClose = {
-                        TabPreviewStore.remove(it)
+                        tabPreviewStore.remove(it)
                         tabManager.closeTab(it)
                     },
                     onNew = {
