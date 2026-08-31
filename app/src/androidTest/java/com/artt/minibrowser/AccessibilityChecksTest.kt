@@ -94,34 +94,13 @@ class AccessibilityChecksTest {
 
     @Test
     fun settingsScreenPassesAutomatedChecks() {
-        composeRule.setContent {
-            MinibrowserTheme(darkTheme = false) {
-                SettingsScreen(
-                    state = SettingsScreenUiState(
-                        searchEngine = SettingsSearchEngineUiState.Google,
-                        theme = 0,
-                        adblockEnabled = true,
-                        votEnabled = false,
-                        translateTarget = "en",
-                        adblockStatus = BrowserExtensionUiState.Enabled,
-                        votStatus = BrowserExtensionUiState.Disabled,
-                        clearDataInProgress = false,
-                        clearDataFailed = false,
-                    ),
-                    onBack = {},
-                    onEngine = {},
-                    onTheme = {},
-                    onAdblock = {},
-                    onRetryAdblock = {},
-                    onVot = {},
-                    onRetryVot = {},
-                    onDownloads = {},
-                    onClearData = {},
-                    onTranslateLang = {},
-                )
-            }
-        }
+        renderSettings(darkTheme = false)
+        assertAccessibilityChecks()
+    }
 
+    @Test
+    fun settingsDarkThemePassesAutomatedChecks() {
+        renderSettings(darkTheme = true)
         assertAccessibilityChecks()
     }
 
@@ -160,6 +139,36 @@ class AccessibilityChecksTest {
         }
 
         assertAccessibilityChecks()
+    }
+
+    private fun renderSettings(darkTheme: Boolean) {
+        composeRule.setContent {
+            MinibrowserTheme(darkTheme = darkTheme) {
+                SettingsScreen(
+                    state = SettingsScreenUiState(
+                        searchEngine = SettingsSearchEngineUiState.Google,
+                        theme = 0,
+                        adblockEnabled = true,
+                        votEnabled = false,
+                        translateTarget = "en",
+                        adblockStatus = BrowserExtensionUiState.Enabled,
+                        votStatus = BrowserExtensionUiState.Disabled,
+                        clearDataInProgress = false,
+                        clearDataFailed = false,
+                    ),
+                    onBack = {},
+                    onEngine = {},
+                    onTheme = {},
+                    onAdblock = {},
+                    onRetryAdblock = {},
+                    onVot = {},
+                    onRetryVot = {},
+                    onDownloads = {},
+                    onClearData = {},
+                    onTranslateLang = {},
+                )
+            }
+        }
     }
 
     private fun assertAccessibilityChecks() {
