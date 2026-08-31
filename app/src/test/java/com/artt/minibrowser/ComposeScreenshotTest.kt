@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artt.minibrowser.ui.ChoiceRow
@@ -46,7 +47,7 @@ class ComposeScreenshotTest {
             "${roborazziSystemPropertyOutputDirectory()}/design_foundation_light.png",
         ) {
             MinibrowserTheme(darkTheme = false) {
-                DesignFoundationFixture()
+                DesignFoundationFixture(height = 800.dp)
             }
         }
     }
@@ -61,18 +62,18 @@ class ComposeScreenshotTest {
             },
         ) {
             MinibrowserTheme(darkTheme = true) {
-                DesignFoundationFixture()
+                DesignFoundationFixture(height = 1200.dp)
             }
         }
     }
 }
 
 @Composable
-private fun DesignFoundationFixture() {
+private fun DesignFoundationFixture(height: Dp) {
     Box(
         Modifier
             .width(360.dp)
-            .height(800.dp)
+            .height(height)
             .background(MaterialTheme.colorScheme.background)
             .padding(20.dp),
     ) {
