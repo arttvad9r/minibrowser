@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
+    id("io.github.takahirom.roborazzi")
 }
 
 // Every APK is single-ABI. Phone/local builds default to arm64; CI overrides this property only
@@ -59,6 +60,11 @@ android {
         ignoreAssetsPattern =
             "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
 
@@ -67,6 +73,11 @@ kotlin {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
+
+roborazzi {
+    outputDir.set(file("src/test/snapshots"))
+}
+
 dependencies {
     implementation("org.mozilla.geckoview:geckoview:154.0.20260814215756")
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
@@ -85,6 +96,13 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.4")
     ksp("androidx.room:room-compiler:2.8.4")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:2.4.10")
+    testImplementation(platform("androidx.compose:compose-bom:2026.08.00"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.73.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.73.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.08.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4-accessibility")
