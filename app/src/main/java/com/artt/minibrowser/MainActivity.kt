@@ -17,6 +17,7 @@ import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.OmniboxSuggestionsViewModel
 import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.SettingsViewModel
+import com.artt.minibrowser.browser.initialExternalNavigationUri
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
@@ -114,7 +115,12 @@ class MainActivity : ComponentActivity() {
                 iconsDir = iconsDir,
             )
         }
-        externalNavigation.accept(intent?.data?.toString())
+        externalNavigation.accept(
+            initialExternalNavigationUri(
+                intentUri = intent?.data?.toString(),
+                hasSavedInstanceState = savedInstanceState != null,
+            ),
+        )
     }
 
     override fun onDestroy() {

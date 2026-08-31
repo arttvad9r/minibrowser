@@ -1,11 +1,12 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.browser.NavigationController
+import com.artt.minibrowser.browser.initialExternalNavigationUri
 import com.artt.minibrowser.engine.NavigationTarget
 import com.artt.minibrowser.engine.isAllowedPopupTarget
 import com.artt.minibrowser.engine.navigationDebugLabel
 import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.selectSafeExternalUri
-import com.artt.minibrowser.browser.NavigationController
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -16,6 +17,17 @@ class NavigationPolicyTest {
         controller.accept("https://example.com")
         controller.setHandler { received = it }
         assertEquals("https://example.com", received)
+    }
+
+    @Test fun initialExternalNavigationIsNotReplayedAfterActivityRecreation() {
+        assertEquals(
+            "https://example.com/start",
+            initialExternalNavigationUri("https://example.com/start", hasSavedInstanceState = false),
+        )
+        assertEquals(
+            null,
+            initialExternalNavigationUri("https://example.com/start", hasSavedInstanceState = true),
+        )
     }
 
     @Test fun acceptsOnlyWebAndWhitelistedInternalUris() {
