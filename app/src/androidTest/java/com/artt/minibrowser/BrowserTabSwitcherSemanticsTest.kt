@@ -16,6 +16,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.ui.BrowserTabItemUiState
 import com.artt.minibrowser.ui.BrowserTabSwitcher
 import com.artt.minibrowser.ui.MinibrowserTheme
+import com.artt.minibrowser.ui.TabPreviewStore
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
@@ -33,6 +34,7 @@ class BrowserTabSwitcherSemanticsTest {
         val otherTitle = "Other tab"
         val paneTitle = context.getString(R.string.tabs_content_description)
         val closeDescription = context.getString(R.string.close_named_tab_content_description, currentTitle)
+        val previewStore = TabPreviewStore()
 
         composeRule.setContent {
             MinibrowserTheme(darkTheme = false) {
@@ -53,6 +55,7 @@ class BrowserTabSwitcherSemanticsTest {
                     ),
                     currentId = 1L,
                     iconsDir = File(context.cacheDir, "tab-switcher-icons"),
+                    previewStore = previewStore,
                     onSelect = {},
                     onClose = {},
                     onNew = {},
