@@ -19,6 +19,7 @@ internal fun View.updateBrowserContentAccessibility(hidden: Boolean) {
 @Composable
 internal fun GeckoContent(
     tab: Tab?,
+    previewStore: TabPreviewStore,
     modifier: Modifier = Modifier,
 ) {
     val session = tab?.session
@@ -34,11 +35,11 @@ internal fun GeckoContent(
         update = { view ->
             view.updateBrowserContentAccessibility(hiddenFromAccessibility)
             if (view.session !== session) {
-                TabPreviewStore.captureBeforeSessionSwap(view)
+                previewStore.captureBeforeSessionSwap(view)
                 view.releaseSession()
                 session?.let(view::setSession)
             }
-            TabPreviewStore.maybeCapture(
+            previewStore.maybeCapture(
                 view = view,
                 tabId = tabId,
                 url = url,
