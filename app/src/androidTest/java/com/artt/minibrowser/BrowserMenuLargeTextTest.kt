@@ -5,7 +5,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.fetchSemanticsNode
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -20,7 +19,7 @@ import com.artt.minibrowser.ui.BrowserExtensionUiState
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.TopBar
 import java.io.File
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -90,8 +89,8 @@ class BrowserMenuLargeTextTest {
         val rootBounds = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
         quickActionLabels.forEach { label ->
             val bounds = composeRule.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
-            assertTrue(bounds.left >= rootBounds.left, "$label starts outside the window")
-            assertTrue(bounds.right <= rootBounds.right, "$label ends outside the window")
+            assertTrue("$label starts outside the window", bounds.left >= rootBounds.left)
+            assertTrue("$label ends outside the window", bounds.right <= rootBounds.right)
         }
 
         composeRule.onNodeWithText(settingsLabel)
