@@ -169,9 +169,8 @@ jobs:
             -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
             -camera-back none -camera-front none -no-snapshot -no-metrics
           script: |
-            page_size="$(adb shell getconf PAGE_SIZE | tr -d '\r')"
-            echo "Emulator page size: $page_size"
-            test "$page_size" = "16384"
+            adb shell getconf PAGE_SIZE
+            adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
             ./gradlew :app:connectedDebugAndroidTest \
               -PminibrowserAbi=x86_64 \
               -Pandroid.testInstrumentationRunnerArguments.class=com.artt.minibrowser.MainActivityStartupTest \
