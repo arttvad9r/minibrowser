@@ -144,6 +144,39 @@ class BrowserPageAccessibilityTest {
         }
     }
 
+    @Test
+    fun hiddenComposeAncestorHidesEmbeddedAndroidViewFromPlatformAccessibility() {
+        val nativeLabel = "Native child under Compose semantics"
+        var hidden by mutableStateOf(false)
+
+        composeRule.setContent {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .hideFromAccessibilityWhen(hidden),
+            ) {
+                AndroidView(
+                    factory = { context ->
+                        TextView(context).apply { text = nativeLabel }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
+            platformAccessibilityTreeContainsImportant(nativeLabel)
+        }
+        composeRule.runOnIdle { hidden = true }
+        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
+            !platformAccessibilityTreeContainsImportant(nativeLabel)
+        }
+        composeRule.runOnIdle { hidden = false }
+        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
+            platformAccessibilityTreeContainsImportant(nativeLabel)
+        }
+    }
+
     private fun render(hidden: Boolean) {
         composeRule.setContent {
             Box(Modifier.hideFromAccessibilityWhen(hidden)) {
