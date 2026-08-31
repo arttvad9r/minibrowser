@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -41,6 +43,8 @@ internal data class BrowserPageUiState(
     val inFullscreen: Boolean,
     val loadError: BrowserPageLoadErrorUiState?,
 )
+
+internal val LocalBrowserContentAccessibilityHidden = compositionLocalOf { false }
 
 internal data class BrowserPageActions(
     val onSuggestionQueryChanged: (String?) -> Unit,
@@ -139,7 +143,11 @@ internal fun BrowserPageContent(
                 Modifier.fillMaxSize()
             }
             Box(browserContentModifier) {
-                browserContent()
+                CompositionLocalProvider(
+                    LocalBrowserContentAccessibilityHidden provides browserContentOccluded,
+                ) {
+                    browserContent()
+                }
             }
             if (state.showStart) {
                 startPageContent()

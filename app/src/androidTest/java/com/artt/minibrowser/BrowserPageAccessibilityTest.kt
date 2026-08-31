@@ -25,7 +25,9 @@ import com.artt.minibrowser.ui.BrowserPageActions
 import com.artt.minibrowser.ui.BrowserPageContent
 import com.artt.minibrowser.ui.BrowserPageLoadErrorUiState
 import com.artt.minibrowser.ui.BrowserPageUiState
+import com.artt.minibrowser.ui.LocalBrowserContentAccessibilityHidden
 import com.artt.minibrowser.ui.MinibrowserTheme
+import com.artt.minibrowser.ui.updateBrowserContentAccessibility
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
@@ -107,9 +109,14 @@ class BrowserPageAccessibilityTest {
                     actions = NO_OP_ACTIONS,
                     iconsDir = File(context.cacheDir, "test-icons"),
                     browserContent = {
+                        val hiddenFromAccessibility =
+                            LocalBrowserContentAccessibilityHidden.current
                         AndroidView(
                             factory = { viewContext ->
                                 TextView(viewContext).apply { text = nativeLabel }
+                            },
+                            update = { view ->
+                                view.updateBrowserContentAccessibility(hiddenFromAccessibility)
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
