@@ -1,5 +1,6 @@
 package com.artt.minibrowser
 
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -20,7 +21,7 @@ class BookmarkActionsImeTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun renameDoneUsesSameNormalizedTitleAsOkAction() {
+    fun renameActionFocusesEditorAndDoneUsesNormalizedTitle() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val renameLabel = context.getString(R.string.action_rename)
         val titleLabel = context.getString(R.string.field_title)
@@ -41,7 +42,7 @@ class BookmarkActionsImeTest {
 
         composeRule.onNodeWithText(renameLabel).performClick()
         val titleField = composeRule.onNodeWithContentDescription(titleLabel)
-        titleField.performClick()
+        titleField.assertIsFocused()
         titleField.performImeAction()
 
         composeRule.runOnIdle {

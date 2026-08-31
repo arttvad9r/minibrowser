@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -410,7 +413,11 @@ fun BookmarkActionsSheet(
 ) {
     var renaming by remember { mutableStateOf(false) }
     var text by remember(bookmarkKey) { mutableStateOf(bookmarkTitle) }
+    val renameFocusRequester = remember { FocusRequester() }
     val submitRename: () -> Unit = { onRename(text.trim().ifBlank { bookmarkTitle }) }
+    LaunchedEffect(renaming) {
+        if (renaming) renameFocusRequester.requestFocus()
+    }
     BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
         Column {
             if (renaming) {
@@ -426,7 +433,9 @@ fun BookmarkActionsSheet(
                         BrowserTextField(
                             text,
                             { text = it },
-                            Modifier.fillMaxWidth(),
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(renameFocusRequester),
                             placeholder = stringResource(R.string.field_title),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(onDone = { submitRename() }),
