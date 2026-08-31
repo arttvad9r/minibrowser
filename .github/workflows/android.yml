@@ -151,6 +151,8 @@ jobs:
       - name: Install compile SDK
         run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v6
+      - name: Build startup smoke APKs
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace || ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -171,7 +173,9 @@ jobs:
           script: |
             adb shell getconf PAGE_SIZE
             adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
-            ./gradlew :app:connectedDebugAndroidTest -PminibrowserAbi=x86_64 -Pandroid.testInstrumentationRunnerArguments.class=com.artt.minibrowser.MainActivityStartupTest --stacktrace
+            adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+            adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
+            adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner
 
   android-17-compat:
     # Android 17 is still a preview/Beta compatibility signal. Keep infrastructure/image failures
@@ -192,6 +196,8 @@ jobs:
       - name: Install compile SDK
         run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v6
+      - name: Build startup smoke APKs
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace || ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -202,7 +208,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 37.1
-          system-image-api-level: 37.0
+          system-image-api-level: '37.0'
           target: google_apis_ps16k
           arch: x86_64
           profile: pixel_5
@@ -211,4 +217,9 @@ jobs:
           emulator-options: >-
             -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
             -camera-back none -camera-front none -no-snapshot -no-metrics
-          script: ./gradlew :app:connectedDebugAndroidTest -PminibrowserAbi=x86_64 -Pandroid.testInstrumentationRunnerArguments.class=com.artt.minibrowser.MainActivityStartupTest --stacktrace
+          script: |
+            adb shell getconf PAGE_SIZE
+            adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
+            adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+            adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
+            adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner
