@@ -15,11 +15,26 @@ class MainActivityStartupTest {
         // Smoke the real Application + MainActivity + initial Compose/Gecko wiring. Performance
         // thresholds belong to the benchmark source set; this test only guards startup correctness.
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            assertEquals(Lifecycle.State.RESUMED, scenario.state)
-            scenario.onActivity { activity ->
-                assertFalse(activity.isFinishing)
-                assertFalse(activity.isDestroyed)
-            }
+            assertResumed(scenario)
+        }
+    }
+
+    @Test
+    fun recreatesToResumedState() {
+        // Keep a real Gecko-backed browser host usable across Activity recreation. This exercises
+        // the Activity-bound TabManager shutdown plus persisted-session restore against the same
+        // application-owned GeckoRuntime instead of relying on a synthetic state-holder test.
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.recreate()
+            assertResumed(scenario)
+        }
+    }
+
+    private fun assertResumed(scenario: ActivityScenario<MainActivity>) {
+        assertEquals(Lifecycle.State.RESUMED, scenario.state)
+        scenario.onActivity { activity ->
+            assertFalse(activity.isFinishing)
+            assertFalse(activity.isDestroyed)
         }
     }
 }
