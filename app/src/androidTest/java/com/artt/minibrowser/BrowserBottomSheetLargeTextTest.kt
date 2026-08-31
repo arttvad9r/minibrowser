@@ -5,9 +5,12 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artt.minibrowser.ui.BrowserBottomSheet
@@ -46,8 +49,8 @@ class BrowserBottomSheetLargeTextTest {
         }
 
         composeRule.waitForIdle()
-        composeRule.onNodeWithText(lastAction)
-            .performScrollTo()
-            .assertIsDisplayed()
+        composeRule.onNode(hasScrollAction())
+            .performScrollToNode(hasText(lastAction))
+        composeRule.onNodeWithText(lastAction).assertIsDisplayed()
     }
 }
