@@ -182,6 +182,7 @@ internal fun BrowserRoute(
         )
     }
 
+    val browserContentHiddenByRoute = screen != BrowserScreen.Browser || showSwitcher
     val pageState = BrowserPageUiState(
         chrome = chromeState,
         tabCount = tabs.size,
@@ -192,6 +193,7 @@ internal fun BrowserRoute(
         showStart = showStart,
         inFullscreen = inFullscreen,
         loadError = currentTab?.loadError.toUiState(),
+        browserContentHiddenByRoute = browserContentHiddenByRoute,
     )
     val pageActions = BrowserPageActions(
         onSuggestionQueryChanged = omniboxSuggestionsViewModel::updateQuery,
@@ -254,9 +256,7 @@ internal fun BrowserRoute(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .hideFromAccessibilityWhen(
-                        screen != BrowserScreen.Browser || showSwitcher,
-                    ),
+                    .hideFromAccessibilityWhen(browserContentHiddenByRoute),
             ) {
                 BrowserPageContent(
                     state = pageState,

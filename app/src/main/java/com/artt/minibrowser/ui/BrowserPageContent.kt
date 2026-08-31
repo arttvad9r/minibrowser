@@ -42,6 +42,7 @@ internal data class BrowserPageUiState(
     val showStart: Boolean,
     val inFullscreen: Boolean,
     val loadError: BrowserPageLoadErrorUiState?,
+    val browserContentHiddenByRoute: Boolean = false,
 )
 
 internal val LocalBrowserContentAccessibilityHidden = compositionLocalOf { false }
@@ -136,7 +137,8 @@ internal fun BrowserPageContent(
                 .weight(1f)
                 .windowInsetsPadding(bottomSafeInsets),
         ) {
-            val browserContentOccluded = state.showStart || state.loadError != null
+            val browserContentOccluded = state.browserContentHiddenByRoute ||
+                state.showStart || state.loadError != null
             val browserContentModifier = if (browserContentOccluded) {
                 Modifier.fillMaxSize().semantics { hideFromAccessibility() }
             } else {

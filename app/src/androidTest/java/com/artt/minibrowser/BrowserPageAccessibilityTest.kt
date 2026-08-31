@@ -145,21 +145,36 @@ class BrowserPageAccessibilityTest {
     }
 
     @Test
-    fun hiddenComposeAncestorHidesEmbeddedAndroidViewFromPlatformAccessibility() {
-        val nativeLabel = "Native child under Compose semantics"
-        var hidden by mutableStateOf(false)
+    fun routeOcclusionHidesEmbeddedAndroidViewFromPlatformAccessibility() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val nativeLabel = "Native browser content behind route"
+        var routeOccluded by mutableStateOf(false)
 
         composeRule.setContent {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .hideFromAccessibilityWhen(hidden),
-            ) {
-                AndroidView(
-                    factory = { context ->
-                        TextView(context).apply { text = nativeLabel }
+            MinibrowserTheme(darkTheme = false) {
+                BrowserPageContent(
+                    state = browserPageState(browserContentHiddenByRoute = routeOccluded),
+                    actions = NO_OP_ACTIONS,
+                    iconsDir = File(context.cacheDir, "test-icons"),
+                    browserContent = {
+                        val hiddenFromAccessibility =
+                            LocalBrowserContentAccessibilityHidden.current
+                        AndroidView(
+                            factory = { viewContext ->
+                                TextView(viewContext).apply { text = nativeLabel }
+                            },
+                            update = { view ->
+                                view.updateBrowserContentAccessibility(hiddenFromAccessibility)
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     },
-                    modifier = Modifier.fillMaxSize(),
+                    findContent = null,
+                    startPageContent = {
+                        Box(Modifier.fillMaxSize()) {
+                            Text("Start page")
+                        }
+                    },
                 )
             }
         }
@@ -167,11 +182,11 @@ class BrowserPageAccessibilityTest {
         composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
             platformAccessibilityTreeContainsImportant(nativeLabel)
         }
-        composeRule.runOnIdle { hidden = true }
+        composeRule.runOnIdle { routeOccluded = true }
         composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
             !platformAccessibilityTreeContainsImportant(nativeLabel)
         }
-        composeRule.runOnIdle { hidden = false }
+        composeRule.runOnIdle { routeOccluded = false }
         composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
             platformAccessibilityTreeContainsImportant(nativeLabel)
         }
@@ -213,6 +228,7 @@ class BrowserPageAccessibilityTest {
     private fun browserPageState(
         showStart: Boolean = false,
         loadError: BrowserPageLoadErrorUiState? = null,
+        browserContentHiddenByRoute: Boolean = false,
     ) = BrowserPageUiState(
         chrome = BrowserChromeUiState(),
         tabCount = 1,
@@ -223,6 +239,7 @@ class BrowserPageAccessibilityTest {
         showStart = showStart,
         inFullscreen = true,
         loadError = loadError,
+        browserContentHiddenByRoute = browserContentHiddenByRoute,
     )
 
     private fun platformAccessibilityTreeContainsImportant(text: String): Boolean {
