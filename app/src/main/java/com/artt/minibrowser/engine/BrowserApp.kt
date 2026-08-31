@@ -24,6 +24,7 @@ class BrowserApp : Application() {
     internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
     internal lateinit var runtime: GeckoRuntime
         private set
+    internal val extensionLoader by lazy(LazyThreadSafetyMode.NONE) { ExtensionLoader(runtime) }
     private var mainProcess = false
 
     override fun onCreate() {

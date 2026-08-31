@@ -17,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
-import org.mozilla.geckoview.GeckoRuntime
 
 internal data class SettingsUiState(
     val prefs: Prefs = Prefs(),
@@ -51,7 +50,7 @@ internal class SettingsViewModel : ViewModel {
 
     constructor(
         repository: SettingsRepository,
-        runtime: GeckoRuntime,
+        extensionLoader: ExtensionLoader,
     ) : super() {
         setSearchEnginePreference = { repository.setSearchEngine(it) }
         setThemePreference = { repository.setTheme(it) }
@@ -59,19 +58,18 @@ internal class SettingsViewModel : ViewModel {
         setVotPreference = { repository.setVot(it) }
         setTranslateTargetPreference = { repository.setTranslateTarget(it) }
         initializeExtensions = { prefs ->
-            ExtensionLoader.installAll(
-                runtime,
+            extensionLoader.installAll(
                 adblockEnabled = prefs.adblockEnabled,
                 votEnabled = prefs.votEnabled,
             )
         }
-        applyAdblock = { ExtensionLoader.setAdblock(runtime, it) }
-        retryAdblockExtension = { ExtensionLoader.retryAdblock(runtime, it) }
-        applyVot = { ExtensionLoader.setVot(runtime, it) }
-        retryVotExtension = { ExtensionLoader.retryVot(runtime, it) }
+        applyAdblock = extensionLoader::setAdblock
+        retryAdblockExtension = extensionLoader::retryAdblock
+        applyVot = extensionLoader::setVot
+        retryVotExtension = extensionLoader::retryVot
         observe(
             prefs = repository.prefs,
-            extensionStates = ExtensionLoader.state,
+            extensionStates = extensionLoader.state,
             scope = viewModelScope,
         )
     }
@@ -171,9 +169,9 @@ internal class SettingsViewModel : ViewModel {
     companion object {
         fun factory(
             repository: SettingsRepository,
-            runtime: GeckoRuntime,
+            extensionLoader: ExtensionLoader,
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { SettingsViewModel(repository, runtime) }
+            initializer { SettingsViewModel(repository, extensionLoader) }
         }
     }
 }

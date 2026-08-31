@@ -30,6 +30,7 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     private val browserApp by lazy { application as BrowserApp }
     private val runtime by lazy { browserApp.runtime }
+    private val extensionLoader by lazy { browserApp.extensionLoader }
     private val settingsRepo by lazy { SettingsRepository(this) }
     private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
@@ -40,7 +41,7 @@ class MainActivity : ComponentActivity() {
     private val settingsViewModel by lazy {
         ViewModelProvider(
             this,
-            SettingsViewModel.factory(settingsRepo, runtime),
+            SettingsViewModel.factory(settingsRepo, extensionLoader),
         )[SettingsViewModel::class.java]
     }
     private val browserDataClearer by lazy {

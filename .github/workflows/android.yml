@@ -175,7 +175,9 @@ jobs:
             adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
             adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
             adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
-            adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner
+            adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner | tr -d '\r' | tee /tmp/startup-smoke.txt
+            ! grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]$' /tmp/startup-smoke.txt
+            grep -Fqx 'OK (2 tests)' /tmp/startup-smoke.txt
 
   android-17-compat:
     # Android 17 is still a preview/Beta compatibility signal. Keep infrastructure/image failures
@@ -213,6 +215,7 @@ jobs:
           arch: x86_64
           profile: pixel_5
           channel: beta
+          disk-size: 6G
           disable-animations: true
           emulator-options: >-
             -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
@@ -220,6 +223,9 @@ jobs:
           script: |
             adb shell getconf PAGE_SIZE
             adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
+            adb shell df -h /data
             adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
             adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
-            adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner
+            adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner | tr -d '\r' | tee /tmp/startup-smoke.txt
+            ! grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]$' /tmp/startup-smoke.txt
+            grep -Fqx 'OK (2 tests)' /tmp/startup-smoke.txt

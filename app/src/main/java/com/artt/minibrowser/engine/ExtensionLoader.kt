@@ -9,11 +9,9 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtensionController
 
 // id — фактические из manifest.json ассетов (см. scripts/fetch-extensions.sh).
-object ExtensionLoader {
-    const val UBLOCK_ID = "uBlock0@raymondhill.net"
-    const val VOT_ID = "vot-ext@firefox"
-    const val CHATGPT_VIEWPORT_ID = "chatgpt-viewport@minibrowser"
-
+internal class ExtensionLoader(
+    private val runtime: GeckoRuntime,
+) {
     enum class Status { Installing, Enabled, Disabled, Error }
     data class ExtensionState(val status: Status, val error: String? = null)
 
@@ -28,37 +26,33 @@ object ExtensionLoader {
     private var nextPolicyGeneration = 1L
     private var nextInstallGeneration = 1L
 
-    fun installAll(runtime: GeckoRuntime, adblockEnabled: Boolean, votEnabled: Boolean) {
-        installBuiltIn(runtime, UBLOCK_ID, "resource://android/assets/extensions/ublock/", adblockEnabled)
-        installBuiltIn(runtime, VOT_ID, "resource://android/assets/extensions/vot/", votEnabled)
+    fun installAll(adblockEnabled: Boolean, votEnabled: Boolean) {
+        installBuiltIn(UBLOCK_ID, "resource://android/assets/extensions/ublock/", adblockEnabled)
+        installBuiltIn(VOT_ID, "resource://android/assets/extensions/vot/", votEnabled)
         installBuiltIn(
-            runtime,
             CHATGPT_VIEWPORT_ID,
             "resource://android/assets/extensions/chatgpt-viewport/",
             true,
         )
     }
 
-    fun setAdblock(runtime: GeckoRuntime, enabled: Boolean) {
-        setInstalled(runtime, UBLOCK_ID, enabled)
+    fun setAdblock(enabled: Boolean) {
+        setInstalled(UBLOCK_ID, enabled)
     }
 
-    fun setVot(runtime: GeckoRuntime, enabled: Boolean) {
-        setInstalled(runtime, VOT_ID, enabled)
+    fun setVot(enabled: Boolean) {
+        setInstalled(VOT_ID, enabled)
     }
 
-    fun retryAdblock(runtime: GeckoRuntime, desiredEnabled: Boolean) {
-        installBuiltIn(runtime, UBLOCK_ID, "resource://android/assets/extensions/ublock/", desiredEnabled)
+    fun retryAdblock(desiredEnabled: Boolean) {
+        installBuiltIn(UBLOCK_ID, "resource://android/assets/extensions/ublock/", desiredEnabled)
     }
 
-    fun retryVot(runtime: GeckoRuntime, desiredEnabled: Boolean) {
-        installBuiltIn(runtime, VOT_ID, "resource://android/assets/extensions/vot/", desiredEnabled)
+    fun retryVot(desiredEnabled: Boolean) {
+        installBuiltIn(VOT_ID, "resource://android/assets/extensions/vot/", desiredEnabled)
     }
 
-    internal fun privateAllowedInPrivate(id: String): Boolean =
-        id == UBLOCK_ID || id == CHATGPT_VIEWPORT_ID
-
-    private fun installBuiltIn(runtime: GeckoRuntime, id: String, resource: String, enabled: Boolean) {
+    private fun installBuiltIn(id: String, resource: String, enabled: Boolean) {
         val controller = runtime.webExtensionController
         val desiredState = recordDesired(id, enabled)
         val installGeneration = beginInstall(id)
@@ -92,7 +86,7 @@ object ExtensionLoader {
         )
     }
 
-    private fun setInstalled(runtime: GeckoRuntime, id: String, enabled: Boolean) {
+    private fun setInstalled(id: String, enabled: Boolean) {
         val controller = runtime.webExtensionController
         val desiredState = recordDesired(id, enabled)
         // Keep the control mounted while Gecko applies the async policy change. Installing is only
@@ -249,5 +243,14 @@ object ExtensionLoader {
     private fun setState(id: String, status: Status, error: String? = null) {
         if (error != null) Log.e("MinibrowserExtension", "$id: $error")
         _state.update { it + (id to ExtensionState(status, error)) }
+    }
+
+    companion object {
+        const val UBLOCK_ID = "uBlock0@raymondhill.net"
+        const val VOT_ID = "vot-ext@firefox"
+        const val CHATGPT_VIEWPORT_ID = "chatgpt-viewport@minibrowser"
+
+        internal fun privateAllowedInPrivate(id: String): Boolean =
+            id == UBLOCK_ID || id == CHATGPT_VIEWPORT_ID
     }
 }
