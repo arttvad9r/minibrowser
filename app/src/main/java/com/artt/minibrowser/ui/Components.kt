@@ -394,8 +394,8 @@ fun BrowserBottomSheet(
     ) {
         Column(
             Modifier
-                .verticalScroll(rememberScrollState())
                 .imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 16.dp),
         ) {
