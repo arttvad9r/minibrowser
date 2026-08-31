@@ -1,5 +1,7 @@
 package com.artt.minibrowser
 
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -7,6 +9,7 @@ import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
+import com.artt.minibrowser.ui.BrowserChromeUiState
 import com.artt.minibrowser.ui.BrowserExtensionUiState
 import com.artt.minibrowser.ui.DownloadsScreenContent
 import com.artt.minibrowser.ui.DownloadsScreenUiState
@@ -17,6 +20,7 @@ import com.artt.minibrowser.ui.SettingsSearchEngineUiState
 import com.artt.minibrowser.ui.StartPage
 import com.artt.minibrowser.ui.StartPageBookmarkUiState
 import com.artt.minibrowser.ui.StartPageRecentUiState
+import com.artt.minibrowser.ui.TopBar
 import java.io.File
 import org.junit.Rule
 import org.junit.Test
@@ -27,6 +31,47 @@ import org.junit.runner.RunWith
 class AccessibilityChecksTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun browserChromePassesAutomatedChecks() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+        composeRule.setContent {
+            MinibrowserTheme(darkTheme = false) {
+                TopBar(
+                    state = BrowserChromeUiState(url = "about:blank"),
+                    tabCount = 1,
+                    bookmarked = false,
+                    iconsDir = File(context.cacheDir, "accessibility-icons"),
+                    omniboxFocus = remember { FocusRequester() },
+                    suggestions = emptyList(),
+                    onSuggestionQueryChanged = {},
+                    onSubmitQuery = {},
+                    adblockStatus = BrowserExtensionUiState.Disabled,
+                    onToggleAdblock = {},
+                    onRetryAdblock = {},
+                    onNavigate = {},
+                    onBack = {},
+                    onForward = {},
+                    onReload = {},
+                    onSiteInfo = {},
+                    onSwitcher = {},
+                    onNewTab = {},
+                    onNewPrivateTab = {},
+                    onFind = {},
+                    onShare = {},
+                    onToggleBookmark = {},
+                    onBookmarks = {},
+                    onHistory = {},
+                    onSettings = {},
+                    onTranslate = {},
+                    onToggleDesktop = {},
+                )
+            }
+        }
+
+        assertAccessibilityChecks()
+    }
 
     @Test
     fun downloadsEmptyStatePassesAutomatedChecks() {
