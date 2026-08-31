@@ -104,9 +104,9 @@ internal fun SettingsScreen(
                 Column(
                     Modifier
                         .fillMaxSize()
+                        .imePadding()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp)
-                        .imePadding(),
+                        .padding(horizontal = 20.dp),
                 ) {
                     GroupLabel(stringResource(R.string.settings_group_search))
                     SettingsGroup {
