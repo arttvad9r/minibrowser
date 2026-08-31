@@ -5,12 +5,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -40,6 +42,7 @@ class BrowserMenuLargeTextTest {
             context.getString(R.string.history_title),
         )
         val settingsLabel = context.getString(R.string.settings_title)
+        val windowWidthPx = context.resources.displayMetrics.widthPixels.toFloat()
 
         composeRule.setContent {
             val density = LocalDensity.current
@@ -86,15 +89,14 @@ class BrowserMenuLargeTextTest {
         composeRule.onNodeWithContentDescription(menuDescription).performClick()
         composeRule.waitForIdle()
 
-        val rootBounds = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
         quickActionLabels.forEach { label ->
             val bounds = composeRule.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
-            assertTrue("$label starts outside the window", bounds.left >= rootBounds.left)
-            assertTrue("$label ends outside the window", bounds.right <= rootBounds.right)
+            assertTrue("$label starts outside the window", bounds.left >= 0f)
+            assertTrue("$label ends outside the window", bounds.right <= windowWidthPx)
         }
 
-        composeRule.onNodeWithText(settingsLabel)
-            .performScrollTo()
-            .assertIsDisplayed()
+        composeRule.onNode(hasScrollAction())
+            .performScrollToNode(hasText(settingsLabel))
+        composeRule.onNodeWithText(settingsLabel).assertIsDisplayed()
     }
 }
