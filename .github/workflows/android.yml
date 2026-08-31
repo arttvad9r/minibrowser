@@ -7,6 +7,9 @@ on:
     branches: [master]
   pull_request:
 
+permissions:
+  contents: write
+
 concurrency:
   group: android-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -17,6 +20,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -30,13 +35,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Unit tests and screenshot reference recording
         run: ./gradlew :app:recordRoborazziDebug --stacktrace
-      - name: Upload screenshot references
-        uses: actions/upload-artifact@v4
-        with:
-          name: screenshot-references
-          path: app/src/test/snapshots
-          if-no-files-found: error
-          retention-days: 7
+      - name: Commit screenshot references
+        if: github.event_name == 'pull_request' && github.head_ref == 'fix/geckoview-interaction-regressions'
+        run: |
+          git add app/src/test/snapshots
+          if git diff --cached --quiet; then
+            echo "Screenshot references unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Record screenshot references"
+          git push origin "HEAD:${{ github.head_ref }}"
       - name: Lint
         run: ./gradlew :app:lintDebug --stacktrace
       - name: Debug APK
