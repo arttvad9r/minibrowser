@@ -1,7 +1,7 @@
 name: Android
 
 # Baseline/Startup Profile regeneration is intentionally kept out of normal PR CI. This workflow
-# validates the committed profile and production packaging without repeating the costly capture.
+# validates committed visual references, the packaged profile, and production packaging.
 on:
   push:
     branches: [master]
@@ -32,7 +32,15 @@ jobs:
         run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
       - uses: gradle/actions/setup-gradle@v6
       - name: Unit tests and screenshot verification
-        run: ./gradlew :app:verifyRoborazziDebug --stacktrace
+        run: ./gradlew :app:testDebugUnitTest :app:verifyRoborazziDebug --stacktrace
+      - name: Upload screenshot differences
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-differences
+          path: app/build/outputs/roborazzi
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Lint
         run: ./gradlew :app:lintDebug --stacktrace
       - name: Debug APK
