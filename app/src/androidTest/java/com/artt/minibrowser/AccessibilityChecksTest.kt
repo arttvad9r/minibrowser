@@ -90,16 +90,16 @@ class AccessibilityChecksTest {
                 StartPage(
                     bookmarks = listOf(
                         StartPageBookmarkUiState(
-                            url = "https://example.com",
-                            title = "Example",
-                            host = "example.com",
+                            url = "",
+                            title = "Saved page",
+                            host = "Saved page",
                         ),
                     ),
                     iconsDir = iconsDir,
                     recent = listOf(
                         StartPageRecentUiState(
-                            url = "https://developer.android.com",
-                            title = "Android Developers",
+                            url = "",
+                            title = "Recent page",
                         ),
                     ),
                     isPrivate = false,
