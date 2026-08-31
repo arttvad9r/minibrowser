@@ -38,10 +38,14 @@ import org.robolectric.annotation.GraphicsMode
 
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], application = Application::class)
 class ComposeScreenshotTest {
     @OptIn(ExperimentalRoborazziApi::class)
     @Test
+    @Config(
+        sdk = [35],
+        application = Application::class,
+        qualifiers = "w360dp-h800dp",
+    )
     fun designFoundationLight() {
         captureRoboImage(
             "${roborazziSystemPropertyOutputDirectory()}/design_foundation_light.png",
@@ -54,6 +58,11 @@ class ComposeScreenshotTest {
 
     @OptIn(ExperimentalRoborazziApi::class)
     @Test
+    @Config(
+        sdk = [35],
+        application = Application::class,
+        qualifiers = "w360dp-h1200dp",
+    )
     fun designFoundationDarkLargeText() {
         captureRoboImage(
             filePath = "${roborazziSystemPropertyOutputDirectory()}/design_foundation_dark_large_text.png",
