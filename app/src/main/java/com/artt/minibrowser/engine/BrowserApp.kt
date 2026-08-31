@@ -15,8 +15,6 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
 import java.io.File
 
-object Engine { lateinit var runtime: GeckoRuntime }
-
 internal const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
 
 internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: String): Boolean =
@@ -24,6 +22,8 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
 
 class BrowserApp : Application() {
     internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
+    internal lateinit var runtime: GeckoRuntime
+        private set
     private var mainProcess = false
 
     override fun onCreate() {
@@ -54,7 +54,7 @@ class BrowserApp : Application() {
             .build()
         Trace.beginSection(GECKO_RUNTIME_CREATE_TRACE)
         try {
-            Engine.runtime = GeckoRuntime.create(
+            runtime = GeckoRuntime.create(
                 this,
                 GeckoRuntimeSettings.Builder()
                     .aboutConfigEnabled(BuildConfig.DEBUG)
@@ -71,7 +71,7 @@ class BrowserApp : Application() {
         if (!performance.lowRamDevice && performance.totalMemoryBytes >= 6L * 1024L * 1024L * 1024L) {
             // Gecko documents this as a pure performance feature. On multicore/high-memory phones,
             // parallel marking trades spare CPU cores for shorter JavaScript GC marking pauses.
-            Engine.runtime.settings.setParallelMarkingEnabled(true)
+            runtime.settings.setParallelMarkingEnabled(true)
         }
     }
 
