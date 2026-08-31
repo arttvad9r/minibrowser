@@ -21,10 +21,10 @@ import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.data.SettingsRepository
+import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.Engine
 import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
-import com.artt.minibrowser.ui.TabPreviewStore
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
     private val historyRepo by lazy { HistoryRepository(DbHolder.db.dao()) }
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private val iconsDir by lazy { File(filesDir, "icons") }
+    private val tabPreviewStore by lazy { (application as BrowserApp).tabPreviewStore }
     private lateinit var tabManager: TabManager
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
@@ -42,7 +43,7 @@ class MainActivity : ComponentActivity() {
     }
     private val browserDataClearer by lazy {
         BrowserDataClearer(
-            clearTabPreviews = TabPreviewStore::clear,
+            clearTabPreviews = tabPreviewStore::clear,
             clearHistory = { historyRepo.clear() },
             clearBookmarks = { bookmarksRepo.clearAll() },
             clearFaviconCaches = { FaviconRepository.clear(iconsDir) },
@@ -108,6 +109,7 @@ class MainActivity : ComponentActivity() {
                 browserWindow = browserWindow,
                 browserIntents = browserIntents,
                 externalNavigation = externalNavigation,
+                tabPreviewStore = tabPreviewStore,
                 iconsDir = iconsDir,
             )
         }
