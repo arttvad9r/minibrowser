@@ -55,7 +55,8 @@ adb shell free -m || adb shell cat /proc/meminfo | head -n 20 || true
 output="$(mktemp)"
 trap 'rm -f "$output"' EXIT
 
-adb logcat -c
+# Clearing logcat is diagnostic-only and is not permitted by every legacy system image.
+adb logcat -c || true
 set +e
 adb shell am instrument -w -r \
   -e class com.artt.minibrowser.MainActivityStartupTest \
