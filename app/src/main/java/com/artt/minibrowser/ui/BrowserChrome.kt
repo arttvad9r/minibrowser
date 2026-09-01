@@ -150,7 +150,7 @@ internal fun TopBar(
         Box(
             Modifier
                 .weight(1f)
-                .heightIn(min = 52.dp)
+                .height(52.dp)
                 .onGloballyPositioned { fieldSize = it.size },
         ) {
             Row(
