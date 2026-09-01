@@ -153,6 +153,36 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Build startup smoke APKs
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace || ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
+      - name: Verify x86_64 smoke native alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          test -n "$apk"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
+
+          native_tmp="$(mktemp -d)"
+          trap 'rm -rf "$native_tmp"' EXIT
+          unzip -q "$apk" 'lib/*.so' -d "$native_tmp"
+          test -d "$native_tmp/lib/x86_64"
+          mapfile -t shared_objects < <(find "$native_tmp/lib/x86_64" -type f -name '*.so' -print)
+          test "${#shared_objects[@]}" -gt 0
+
+          for so in "${shared_objects[@]}"; do
+            relative="${so#"$native_tmp/"}"
+            found_load=0
+            while read -r alignment; do
+              found_load=1
+              if (( alignment < 0x4000 )); then
+                echo "::error file=$relative::ELF LOAD alignment $alignment is below 16 KB"
+                exit 1
+              fi
+            done < <(readelf -lW "$so" | awk '$1 == "LOAD" { print $NF }')
+            if (( found_load == 0 )); then
+              echo "::error file=$relative::No ELF LOAD segments found"
+              exit 1
+            fi
+          done
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -175,9 +205,11 @@ jobs:
             adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
             adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
             adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
+            adb logcat -c
             adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner | tr -d '\r' | tee /tmp/startup-smoke.txt
+            ! grep -Fq 'shortMsg=Process crashed.' /tmp/startup-smoke.txt
             ! grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]$' /tmp/startup-smoke.txt
-            grep -Fqx 'OK (2 tests)' /tmp/startup-smoke.txt
+            grep -Fqx 'OK (2 tests)' /tmp/startup-smoke.txt || (echo '--- crash buffer ---'; adb logcat -b crash -d -v threadtime; echo '--- recent logcat ---'; adb logcat -d -v threadtime | tail -n 800; false)
 
   android-17-compat:
     # Android 17 is still a preview/Beta compatibility signal. Keep infrastructure/image failures
@@ -200,6 +232,36 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Build startup smoke APKs
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace || ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
+      - name: Verify x86_64 smoke native alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
+          test -n "$apk"
+          "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
+
+          native_tmp="$(mktemp -d)"
+          trap 'rm -rf "$native_tmp"' EXIT
+          unzip -q "$apk" 'lib/*.so' -d "$native_tmp"
+          test -d "$native_tmp/lib/x86_64"
+          mapfile -t shared_objects < <(find "$native_tmp/lib/x86_64" -type f -name '*.so' -print)
+          test "${#shared_objects[@]}" -gt 0
+
+          for so in "${shared_objects[@]}"; do
+            relative="${so#"$native_tmp/"}"
+            found_load=0
+            while read -r alignment; do
+              found_load=1
+              if (( alignment < 0x4000 )); then
+                echo "::error file=$relative::ELF LOAD alignment $alignment is below 16 KB"
+                exit 1
+              fi
+            done < <(readelf -lW "$so" | awk '$1 == "LOAD" { print $NF }')
+            if (( found_load == 0 )); then
+              echo "::error file=$relative::No ELF LOAD segments found"
+              exit 1
+            fi
+          done
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -226,6 +288,8 @@ jobs:
             adb shell df -h /data
             adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
             adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
+            adb logcat -c
             adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner | tr -d '\r' | tee /tmp/startup-smoke.txt
+            ! grep -Fq 'shortMsg=Process crashed.' /tmp/startup-smoke.txt
             ! grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]$' /tmp/startup-smoke.txt
-            grep -Fqx 'OK (2 tests)' /tmp/startup-smoke.txt
+            grep -Fqx 'OK (2 tests)' /tmp/startup-smoke.txt || (echo '--- crash buffer ---'; adb logcat -b crash -d -v threadtime; echo '--- recent logcat ---'; adb logcat -d -v threadtime | tail -n 800; false)
