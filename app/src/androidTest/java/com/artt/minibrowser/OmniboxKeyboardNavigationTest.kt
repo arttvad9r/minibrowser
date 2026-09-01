@@ -33,6 +33,7 @@ import com.artt.minibrowser.ui.TopBar
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -136,6 +137,7 @@ class OmniboxKeyboardNavigationTest {
         val newTabDescription = context.getString(R.string.new_tab_title)
         val menuDescription = context.getString(R.string.menu_content_description)
         val tabsDescription = context.resources.getQuantityString(R.plurals.tabs_count, 1, 1)
+        val maxChromeBottomPx = 120f * context.resources.displayMetrics.density
 
         composeRule.setContent {
             TestTopBar(context, emptyList()) { }
@@ -145,11 +147,16 @@ class OmniboxKeyboardNavigationTest {
         composeRule.onNodeWithContentDescription(tabsDescription).assertIsDisplayed()
         composeRule.onNodeWithContentDescription(menuDescription).assertIsDisplayed()
 
-        focusOmnibox(context)
+        val omnibox = focusOmnibox(context)
 
         composeRule.onNodeWithContentDescription(newTabDescription).assertDoesNotExist()
         composeRule.onNodeWithContentDescription(tabsDescription).assertDoesNotExist()
         composeRule.onNodeWithContentDescription(menuDescription).assertDoesNotExist()
+        val focusedBounds = omnibox.fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Focused omnibox must remain in the top chrome instead of filling the viewport: $focusedBounds",
+            focusedBounds.bottom <= maxChromeBottomPx,
+        )
     }
 
     @Test
