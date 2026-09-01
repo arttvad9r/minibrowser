@@ -205,11 +205,7 @@ jobs:
             adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
             adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
             adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
-            adb logcat -c
-            adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner | tr -d '\r' | tee /tmp/startup-smoke.txt
-            ! grep -Fq 'shortMsg=Process crashed.' /tmp/startup-smoke.txt
-            ! grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]$' /tmp/startup-smoke.txt
-            grep -Fqx 'OK (2 tests)' /tmp/startup-smoke.txt || (echo '--- crash buffer ---'; adb logcat -b crash -d -v threadtime; echo '--- recent logcat ---'; adb logcat -d -v threadtime | tail -n 800; false)
+            bash scripts/run-startup-smoke.sh
 
   android-17-compat:
     # Android 17 is still a preview/Beta compatibility signal. Keep infrastructure/image failures
@@ -288,8 +284,4 @@ jobs:
             adb shell df -h /data
             adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
             adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
-            adb logcat -c
-            adb shell am instrument -w -r -e class com.artt.minibrowser.MainActivityStartupTest com.artt.minibrowser.test/androidx.test.runner.AndroidJUnitRunner | tr -d '\r' | tee /tmp/startup-smoke.txt
-            ! grep -Fq 'shortMsg=Process crashed.' /tmp/startup-smoke.txt
-            ! grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]$' /tmp/startup-smoke.txt
-            grep -Fqx 'OK (2 tests)' /tmp/startup-smoke.txt || (echo '--- crash buffer ---'; adb logcat -b crash -d -v threadtime; echo '--- recent logcat ---'; adb logcat -d -v threadtime | tail -n 800; false)
+            bash scripts/run-startup-smoke.sh
