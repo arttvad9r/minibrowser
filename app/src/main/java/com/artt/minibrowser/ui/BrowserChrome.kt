@@ -316,6 +316,11 @@ internal fun TopBar(
                     alignment = Alignment.TopStart,
                     offset = IntOffset(0, fieldSize.height + offsetY),
                     onDismissRequest = { focusManager.clearFocus(force = true) },
+                    properties = androidx.compose.ui.window.PopupProperties(
+                        focusable = false,
+                        dismissOnBackPress = false,
+                        dismissOnClickOutside = false,
+                    ),
                 ) {
                     Column(
                         Modifier

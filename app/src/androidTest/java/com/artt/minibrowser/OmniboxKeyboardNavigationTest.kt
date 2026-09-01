@@ -4,17 +4,25 @@ import android.content.Context
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -104,6 +112,26 @@ class OmniboxKeyboardNavigationTest {
     }
 
     @Test
+    fun outsideTouchWhileSuggestionsVisibleKeepsOmniboxFocused() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val suggestion = BrowserSuggestionUiState("First", "https://first.example")
+
+        composeRule.setContent {
+            TestTopBar(context, listOf(suggestion)) { }
+        }
+
+        val omnibox = focusOmnibox(context)
+        composeRule.onNodeWithText(suggestion.label).assertIsDisplayed()
+
+        composeRule.onNodeWithTag(TEST_SURFACE_TAG).performTouchInput {
+            click(Offset(size.width / 2f, size.height - 1f))
+        }
+
+        omnibox.assertIsFocused()
+        composeRule.onNodeWithText(suggestion.label).assertIsDisplayed()
+    }
+
+    @Test
     fun systemBackExitsOmniboxBeforeBrowserBack() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val suggestion = BrowserSuggestionUiState("First", "https://first.example")
@@ -144,6 +172,10 @@ class OmniboxKeyboardNavigationTest {
                     )
                     .assertIsFocused()
             }
+
+    private companion object {
+        const val TEST_SURFACE_TAG = "omnibox-test-surface"
+    }
 }
 
 @Composable
@@ -153,34 +185,36 @@ private fun TestTopBar(
     onNavigate: (String) -> Unit,
 ) {
     MinibrowserTheme(darkTheme = false) {
-        TopBar(
-            state = BrowserChromeUiState(url = "about:blank"),
-            tabCount = 1,
-            bookmarked = false,
-            iconsDir = File(context.cacheDir, "test-icons"),
-            omniboxFocus = remember { FocusRequester() },
-            suggestions = suggestions,
-            onSuggestionQueryChanged = {},
-            onSubmitQuery = {},
-            adblockStatus = BrowserExtensionUiState.Disabled,
-            onToggleAdblock = {},
-            onRetryAdblock = {},
-            onNavigate = onNavigate,
-            onBack = {},
-            onForward = {},
-            onReload = {},
-            onSiteInfo = {},
-            onSwitcher = {},
-            onNewTab = {},
-            onNewPrivateTab = {},
-            onFind = {},
-            onShare = {},
-            onToggleBookmark = {},
-            onBookmarks = {},
-            onHistory = {},
-            onSettings = {},
-            onTranslate = {},
-            onToggleDesktop = {},
-        )
+        Box(Modifier.fillMaxSize().testTag("omnibox-test-surface")) {
+            TopBar(
+                state = BrowserChromeUiState(url = "about:blank"),
+                tabCount = 1,
+                bookmarked = false,
+                iconsDir = File(context.cacheDir, "test-icons"),
+                omniboxFocus = remember { FocusRequester() },
+                suggestions = suggestions,
+                onSuggestionQueryChanged = {},
+                onSubmitQuery = {},
+                adblockStatus = BrowserExtensionUiState.Disabled,
+                onToggleAdblock = {},
+                onRetryAdblock = {},
+                onNavigate = onNavigate,
+                onBack = {},
+                onForward = {},
+                onReload = {},
+                onSiteInfo = {},
+                onSwitcher = {},
+                onNewTab = {},
+                onNewPrivateTab = {},
+                onFind = {},
+                onShare = {},
+                onToggleBookmark = {},
+                onBookmarks = {},
+                onHistory = {},
+                onSettings = {},
+                onTranslate = {},
+                onToggleDesktop = {},
+            )
+        }
     }
 }
