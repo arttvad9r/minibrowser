@@ -1,7 +1,6 @@
 @file:OptIn(
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class,
-    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
 )
 
 package com.artt.minibrowser.ui
@@ -12,7 +11,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -163,7 +161,7 @@ internal fun TopBar(
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val leadingIsSearch = newTab
+                val leadingIsSearch = newTab || focused
                 IconButton(
                     onClick = {
                         if (leadingIsSearch) {
@@ -309,9 +307,7 @@ internal fun TopBar(
             if (focused && suggestions.isNotEmpty()) {
                 val density = LocalDensity.current
                 val offsetY = with(density) { 8.dp.roundToPx() }
-                val suggestionsWidth = with(density) {
-                    (fieldSize.width + 48.dp.roundToPx() + 48.dp.roundToPx() + 48.dp.roundToPx() + 8.dp.roundToPx()).toDp()
-                }
+                val suggestionsWidth = with(density) { fieldSize.width.toDp() }
                 Popup(
                     alignment = Alignment.TopStart,
                     offset = IntOffset(0, fieldSize.height + offsetY),
@@ -347,28 +343,30 @@ internal fun TopBar(
                 }
             }
         }
-        IconButton(
-            onClick = { focusManager.clearFocus(force = true); onNewTab() },
-            modifier = Modifier.semantics { contentDescription = newTabDescription },
-        ) {
-            Icon(Icons.Filled.Add, null)
-        }
-        Box(
-            Modifier
-                .size(48.dp)
-                .clip(Radius.button)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .softClickable { focusManager.clearFocus(force = true); onSwitcher() }
-                .semantics { contentDescription = tabsDescription },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("$tabCount", style = MaterialTheme.typography.titleMedium)
-        }
-        IconButton(
-            onClick = { focusManager.clearFocus(force = true); menuOpen = true },
-            modifier = Modifier.semantics { contentDescription = menuDescription },
-        ) {
-            Icon(Icons.Filled.MoreVert, null)
+        if (!focused) {
+            IconButton(
+                onClick = { focusManager.clearFocus(force = true); onNewTab() },
+                modifier = Modifier.semantics { contentDescription = newTabDescription },
+            ) {
+                Icon(Icons.Filled.Add, null)
+            }
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(Radius.button)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .softClickable { focusManager.clearFocus(force = true); onSwitcher() }
+                    .semantics { contentDescription = tabsDescription },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("$tabCount", style = MaterialTheme.typography.titleMedium)
+            }
+            IconButton(
+                onClick = { focusManager.clearFocus(force = true); menuOpen = true },
+                modifier = Modifier.semantics { contentDescription = menuDescription },
+            ) {
+                Icon(Icons.Filled.MoreVert, null)
+            }
         }
     }
 
@@ -378,7 +376,6 @@ internal fun TopBar(
             bookmarked = bookmarked,
             adblockStatus = adblockStatus,
             onDismiss = { menuOpen = false },
-            onNewTab = onNewTab,
             onNewPrivateTab = onNewPrivateTab,
             onBack = onBack,
             onForward = onForward,
@@ -455,7 +452,6 @@ private fun MenuSheet(
     bookmarked: Boolean,
     adblockStatus: BrowserExtensionUiState,
     onDismiss: () -> Unit,
-    onNewTab: () -> Unit,
     onNewPrivateTab: () -> Unit,
     onBack: () -> Unit,
     onForward: () -> Unit,
@@ -509,15 +505,14 @@ private fun MenuSheet(
             ) { dismissThen(onToggleBookmark) }
         }
         Spacer(Modifier.height(12.dp))
-        FlowRow(
+        Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            QuickAction(Icons.Filled.Add, stringResource(R.string.new_tab_title)) { dismissThen(onNewTab) }
             QuickAction(AppIcons.Incognito, stringResource(R.string.private_tab_title)) { dismissThen(onNewPrivateTab) }
-            QuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) { dismissThen(onBookmarks) }
             QuickAction(AppIcons.History, stringResource(R.string.history_title)) { dismissThen(onHistory) }
+            QuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) { dismissThen(onBookmarks) }
         }
         MenuDivider()
         SheetRow(

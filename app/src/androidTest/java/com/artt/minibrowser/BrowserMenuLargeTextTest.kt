@@ -21,6 +21,7 @@ import com.artt.minibrowser.ui.BrowserExtensionUiState
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.TopBar
 import java.io.File
+import kotlin.math.abs
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -32,14 +33,14 @@ class BrowserMenuLargeTextTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun menuReflowsQuickActionsAndKeepsBottomActionReachable() {
+    fun menuKeepsThreeQuickActionsOnOneRowAndBottomActionReachable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuDescription = context.getString(R.string.menu_content_description)
+        val newTabLabel = context.getString(R.string.new_tab_title)
         val quickActionLabels = listOf(
-            context.getString(R.string.new_tab_title),
             context.getString(R.string.private_tab_title),
-            context.getString(R.string.bookmarks_title),
             context.getString(R.string.history_title),
+            context.getString(R.string.bookmarks_title),
         )
         val settingsLabel = context.getString(R.string.settings_title)
         val windowWidthPx = context.resources.displayMetrics.widthPixels.toFloat()
@@ -89,10 +90,19 @@ class BrowserMenuLargeTextTest {
         composeRule.onNodeWithContentDescription(menuDescription).performClick()
         composeRule.waitForIdle()
 
-        quickActionLabels.forEach { label ->
-            val bounds = composeRule.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
-            assertTrue("$label starts outside the window", bounds.left >= 0f)
-            assertTrue("$label ends outside the window", bounds.right <= windowWidthPx)
+        composeRule.onNodeWithText(newTabLabel).assertDoesNotExist()
+        val quickActionBounds = quickActionLabels.map { label ->
+            composeRule.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.also { bounds ->
+                assertTrue("$label starts outside the window", bounds.left >= 0f)
+                assertTrue("$label ends outside the window", bounds.right <= windowWidthPx)
+            }
+        }
+        val firstTop = quickActionBounds.first().top
+        quickActionBounds.drop(1).forEach { bounds ->
+            assertTrue(
+                "Quick actions should stay on one horizontal row",
+                abs(bounds.top - firstTop) <= 2f,
+            )
         }
 
         composeRule.onNode(

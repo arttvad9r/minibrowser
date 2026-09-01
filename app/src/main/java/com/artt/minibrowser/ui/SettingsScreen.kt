@@ -88,6 +88,7 @@ internal fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     BrowserMotionScreen(onBack = onBack, fromBottom = true) { requestExit ->
         CenteredSinglePane(maxWidth = 720.dp) {
@@ -105,7 +106,10 @@ internal fun SettingsScreen(
                     Modifier
                         .fillMaxSize()
                         .imePadding()
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(
+                            state = scrollState,
+                            enabled = scrollState.canScrollForward || scrollState.canScrollBackward,
+                        )
                         .padding(horizontal = 20.dp),
                 ) {
                     GroupLabel(stringResource(R.string.settings_group_search))
@@ -192,7 +196,6 @@ internal fun SettingsScreen(
                             onClick = if (state.clearDataInProgress) null else ({ showClearDialog = true }),
                         )
                     }
-                    Spacer(Modifier.height(32.dp))
                 }
             }
         }

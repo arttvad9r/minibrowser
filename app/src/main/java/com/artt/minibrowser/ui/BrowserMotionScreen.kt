@@ -20,8 +20,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -29,10 +27,9 @@ import kotlinx.coroutines.launch
 /**
  * Full-screen app destination over the browser.
  *
- * The opaque destination surface never moves. Only its content gets a small bottom-origin spatial
- * offset, so closing a screen cannot expose an empty Gecko/about:blank frame underneath. Keeping
- * the travel short also avoids turning a 120-180 ms UI transition into a multi-thousand-pixel
- * fling on tall displays.
+ * The destination surface stays spatially fixed. Entry, exit and predictive back use only a
+ * restrained opacity change, so returning from settings/history/bookmarks does not look like a
+ * sheet sliding in the wrong direction and cannot expose an empty Gecko frame underneath.
  */
 @Composable
 fun BrowserMotionScreen(
@@ -93,9 +90,6 @@ fun BrowserMotionScreen(
         }
     }
 
-    val density = LocalDensity.current
-    val travelPx = with(density) { 28.dp.toPx() }
-
     Box(
         Modifier
             .fillMaxSize()
@@ -107,9 +101,8 @@ fun BrowserMotionScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .graphicsLayer {
                     if (fromBottom) {
-                        translationY = (1f - reveal.value) * travelPx
-                        // Blend only destination content against its own opaque surface, never Gecko.
-                        alpha = 0.94f + reveal.value * 0.06f
+                        // Neutral fade only: no directional slide on destination exit.
+                        alpha = 0.96f + reveal.value * 0.04f
                     }
                 },
         ) {

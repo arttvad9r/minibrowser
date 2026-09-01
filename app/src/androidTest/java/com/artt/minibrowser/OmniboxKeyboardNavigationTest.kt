@@ -131,6 +131,28 @@ class OmniboxKeyboardNavigationTest {
     }
 
     @Test
+    fun focusedOmniboxTakesChromeRowAndHidesAdjacentActions() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val newTabDescription = context.getString(R.string.new_tab_title)
+        val menuDescription = context.getString(R.string.menu_content_description)
+        val tabsDescription = context.resources.getQuantityString(R.plurals.tabs_count, 1, 1)
+
+        composeRule.setContent {
+            TestTopBar(context, emptyList()) { }
+        }
+
+        composeRule.onNodeWithContentDescription(newTabDescription).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(tabsDescription).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(menuDescription).assertIsDisplayed()
+
+        focusOmnibox(context)
+
+        composeRule.onNodeWithContentDescription(newTabDescription).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(tabsDescription).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(menuDescription).assertDoesNotExist()
+    }
+
+    @Test
     fun systemBackExitsOmniboxBeforeBrowserBack() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val suggestion = BrowserSuggestionUiState("First", "https://first.example")
