@@ -135,6 +135,44 @@ jobs:
             -camera-back none -camera-front none -no-snapshot -no-metrics
           script: ./gradlew :app:connectedDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
 
+  minimum-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install compile SDK
+        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build startup smoke APKs
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace || ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Startup smoke on minSdk 26
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 26
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          ram-size: 3072
+          disable-animations: true
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+            -camera-back none -camera-front none -no-snapshot -no-metrics
+          script: bash scripts/run-startup-smoke.sh
+
   page-size-16k:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -196,6 +234,7 @@ jobs:
           target: google_apis_ps16k
           arch: x86_64
           profile: pixel_5
+          ram-size: 4096
           disable-animations: true
           emulator-options: >-
             -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
@@ -203,8 +242,6 @@ jobs:
           script: |
             adb shell getconf PAGE_SIZE
             adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
-            adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
-            adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
             bash scripts/run-startup-smoke.sh
 
   android-17-compat:
@@ -273,6 +310,7 @@ jobs:
           arch: x86_64
           profile: pixel_5
           channel: beta
+          ram-size: 4096
           disk-size: 6G
           disable-animations: true
           emulator-options: >-
@@ -282,6 +320,4 @@ jobs:
             adb shell getconf PAGE_SIZE
             adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
             adb shell df -h /data
-            adb install -r "$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
-            adb install -r "$(find app/build/outputs/apk/androidTest/debug -type f -name '*.apk' -print -quit)"
             bash scripts/run-startup-smoke.sh
