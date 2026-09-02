@@ -78,10 +78,7 @@ internal data class BrowserPageActions(
     val onToggleDesktop: () -> Unit,
 )
 
-/**
- * Browser-page renderer. Engine-specific content is supplied through slots by the screen route;
- * this layer itself depends only on display state and UI callbacks.
- */
+/** Browser-page renderer. Engine content is supplied through slots by the screen route. */
 @Composable
 internal fun BrowserPageContent(
     state: BrowserPageUiState,
@@ -96,6 +93,19 @@ internal fun BrowserPageContent(
     val topSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top)
     val bottomSafeInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)
 
+    val chromeEnter = slideInVertically(
+        animationSpec = tween(MotionTokens.ListChange, easing = MotionEasing.Transform),
+        initialOffsetY = { -it / 2 },
+    ) + fadeIn(
+        animationSpec = tween(MotionTokens.ToolbarButton, easing = MotionEasing.FadeIn),
+    )
+    val chromeExit = slideOutVertically(
+        animationSpec = tween(MotionTokens.ListChange, easing = MotionEasing.Transform),
+        targetOffsetY = { -it / 2 },
+    ) + fadeOut(
+        animationSpec = tween(MotionTokens.ToolbarButton, easing = MotionEasing.FadeOut),
+    )
+
     Column(
         Modifier
             .fillMaxSize()
@@ -103,14 +113,8 @@ internal fun BrowserPageContent(
     ) {
         AnimatedVisibility(
             visible = !state.inFullscreen,
-            enter = slideInVertically(
-                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
-                initialOffsetY = { -it / 2 },
-            ) + fadeIn(tween(MotionTokens.Popup)),
-            exit = slideOutVertically(
-                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
-                targetOffsetY = { -it / 2 },
-            ) + fadeOut(tween(MotionTokens.Popup)),
+            enter = chromeEnter,
+            exit = chromeExit,
         ) {
             CenteredBrowserChrome(Modifier.windowInsetsPadding(topSafeInsets)) {
                 TopBar(
@@ -147,14 +151,8 @@ internal fun BrowserPageContent(
         }
         AnimatedVisibility(
             visible = state.showFind && !state.inFullscreen,
-            enter = slideInVertically(
-                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
-                initialOffsetY = { -it / 2 },
-            ) + fadeIn(tween(MotionTokens.Popup)),
-            exit = slideOutVertically(
-                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
-                targetOffsetY = { -it / 2 },
-            ) + fadeOut(tween(MotionTokens.Popup)),
+            enter = chromeEnter,
+            exit = chromeExit,
         ) {
             CenteredBrowserChrome {
                 findContent?.invoke()
@@ -181,16 +179,16 @@ internal fun BrowserPageContent(
             }
             AnimatedVisibility(
                 visible = state.showStart,
-                enter = fadeIn(tween(MotionTokens.Content)),
-                exit = fadeOut(tween(MotionTokens.Content)),
+                enter = fadeIn(tween(MotionTokens.Popup, easing = MotionEasing.FadeIn)),
+                exit = fadeOut(tween(MotionTokens.Popup, easing = MotionEasing.FadeOut)),
             ) {
                 startPageContent()
             }
             val loadError = state.loadError
             AnimatedVisibility(
                 visible = !state.showStart && loadError != null,
-                enter = fadeIn(tween(MotionTokens.Content)),
-                exit = fadeOut(tween(MotionTokens.Content)),
+                enter = fadeIn(tween(MotionTokens.Popup, easing = MotionEasing.FadeIn)),
+                exit = fadeOut(tween(MotionTokens.Popup, easing = MotionEasing.FadeOut)),
             ) {
                 if (loadError != null) {
                     val message = stringResource(
