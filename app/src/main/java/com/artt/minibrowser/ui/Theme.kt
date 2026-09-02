@@ -131,7 +131,7 @@ private val AppShapes = Shapes(
 @Composable
 private fun animatedThemeColor(target: Color): Color = animateColorAsState(
     targetValue = target,
-    animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+    animationSpec = tween(MotionTokens.Theme, easing = MotionEasing.Transform),
     label = "theme palette",
 ).value
 
