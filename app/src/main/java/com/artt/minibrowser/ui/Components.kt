@@ -46,7 +46,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,7 +66,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
 import com.artt.minibrowser.net.webUriHost
-import kotlinx.coroutines.launch
 
 fun hostOf(url: String): String = webUriHost(url).orEmpty()
 
@@ -275,6 +273,7 @@ fun QuickAction(icon: ImageVector, label: String, onClick: () -> Unit) {
             label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurface,
+            minLines = 2,
             maxLines = 2,
             textAlign = TextAlign.Center,
         )
@@ -359,9 +358,9 @@ fun ChoiceRow(
 /**
  * Bottom sheet with native Material motion.
  *
- * Actions originating inside the sheet receive [dismissThen]. The action runs immediately so
- * navigation never waits on the sheet animation; the sheet then hides in parallel and is removed
- * from composition once Material reports it hidden.
+ * Actions originating inside the sheet receive [dismissThen]. Route-changing actions remove the
+ * modal from composition in the same event as navigation, so its scrim cannot linger over the new
+ * destination. Gesture/outside/back dismissal still uses Material's native sheet state.
  */
 @Composable
 fun BrowserBottomSheet(
@@ -369,18 +368,13 @@ fun BrowserBottomSheet(
     content: @Composable (dismissThen: (after: () -> Unit) -> Unit) -> Unit,
 ) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
     var dismissing by remember { mutableStateOf(false) }
 
     val dismissThen: (after: () -> Unit) -> Unit = { after ->
         if (!dismissing) {
             dismissing = true
+            onDismissRequest()
             after()
-            scope.launch {
-                state.hide()
-                if (!state.isVisible) onDismissRequest()
-                dismissing = false
-            }
         }
     }
 
