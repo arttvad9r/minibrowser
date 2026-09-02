@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -164,7 +166,7 @@ fun ChromiumSharedXAxisUnderlay(
         },
         label = "chromium shared x underlay alpha",
     ) { shown -> if (shown) 1f else 0f }
-    var widthPx = 0
+    var widthPx by remember { mutableIntStateOf(0) }
     Box(
         modifier
             .fillMaxSize()
