@@ -44,7 +44,10 @@
           synthetic.content = `width=device-width, initial-scale=1, ${DIRECTIVE}`;
           head.prepend(synthetic);
         } else {
-          synthetic.content = withDirective(synthetic.content);
+          const next = withDirective(synthetic.getAttribute("content"));
+          if (synthetic.getAttribute("content") !== next) {
+            synthetic.setAttribute("content", next);
+          }
         }
         return;
       }
