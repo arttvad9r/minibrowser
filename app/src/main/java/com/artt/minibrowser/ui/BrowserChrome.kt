@@ -6,6 +6,19 @@
 package com.artt.minibrowser.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +36,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -54,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -129,6 +144,21 @@ internal fun TopBar(
     val newTabDescription = stringResource(R.string.new_tab_title)
     val tabsDescription = pluralStringResource(R.plurals.tabs_count, tabCount, tabCount)
     val menuDescription = stringResource(R.string.menu_content_description)
+    val fieldRadius by animateDpAsState(
+        targetValue = if (focused) 18.dp else 24.dp,
+        animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+        label = "omnibox radius",
+    )
+    val fieldColor by animateColorAsState(
+        targetValue = if (focused) {
+            MaterialTheme.colorScheme.surfaceContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        },
+        animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+        label = "omnibox surface",
+    )
+
     LaunchedEffect(focused, text, rawUrl, newTab) {
         val userHasEdited = newTab || text != rawUrl
         onSuggestionQueryChanged(
@@ -142,6 +172,7 @@ internal fun TopBar(
         onSubmitQuery(query)
         focusManager.clearFocus(force = true)
     }
+
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -156,8 +187,8 @@ internal fun TopBar(
             Row(
                 Modifier
                     .fillMaxSize()
-                    .clip(Radius.field)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clip(RoundedCornerShape(fieldRadius))
+                    .background(fieldColor)
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -180,49 +211,62 @@ internal fun TopBar(
                             }
                         },
                 ) {
-                    if (leadingIsSearch) {
-                        if (state.isPrivate) {
-                            Icon(
-                                AppIcons.Incognito,
-                                null,
-                                Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else {
-                            Icon(
-                                Icons.Filled.Search,
-                                null,
-                                Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    } else {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (state.isPrivate) {
+                    AnimatedContent(
+                        targetState = Triple(
+                            leadingIsSearch,
+                            state.isPrivate,
+                            state.securityState == BrowserSecurityUiState.Secure,
+                        ),
+                        transitionSpec = {
+                            fadeIn(tween(MotionTokens.IconState))
+                                .togetherWith(fadeOut(tween(MotionTokens.IconState)))
+                        },
+                        label = "omnibox leading icon",
+                    ) { visual ->
+                        if (visual.first) {
+                            if (visual.second) {
                                 Icon(
                                     AppIcons.Incognito,
                                     null,
-                                    Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (state.securityState == BrowserSecurityUiState.Secure) {
-                                Icon(
-                                    Icons.Filled.Lock,
-                                    null,
-                                    Modifier.size(15.dp),
+                                    Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             } else {
                                 Icon(
-                                    AppIcons.Globe,
+                                    Icons.Filled.Search,
                                     null,
-                                    Modifier.size(17.dp),
+                                    Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                            }
+                        } else {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (visual.second) {
+                                    Icon(
+                                        AppIcons.Incognito,
+                                        null,
+                                        Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (visual.third) {
+                                    Icon(
+                                        Icons.Filled.Lock,
+                                        null,
+                                        Modifier.size(15.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                } else {
+                                    Icon(
+                                        AppIcons.Globe,
+                                        null,
+                                        Modifier.size(17.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }
@@ -307,7 +351,11 @@ internal fun TopBar(
             if (focused && suggestions.isNotEmpty()) {
                 val density = LocalDensity.current
                 val offsetY = with(density) { 8.dp.roundToPx() }
+                val suggestionEnterOffset = with(density) { -6.dp.roundToPx() }
                 val suggestionsWidth = with(density) { fieldSize.width.toDp() }
+                val popupVisibility = remember {
+                    MutableTransitionState(false).apply { targetState = true }
+                }
                 Popup(
                     alignment = Alignment.TopStart,
                     offset = IntOffset(0, fieldSize.height + offsetY),
@@ -318,54 +366,90 @@ internal fun TopBar(
                         dismissOnClickOutside = false,
                     ),
                 ) {
-                    Column(
-                        Modifier
-                            .width(suggestionsWidth)
-                            .heightIn(max = 176.dp)
-                            .clip(Radius.card)
-                            .background(MaterialTheme.colorScheme.surface)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
+                    AnimatedVisibility(
+                        visibleState = popupVisibility,
+                        enter = fadeIn(tween(MotionTokens.Popup)) +
+                            slideInVertically(tween(MotionTokens.Popup)) { suggestionEnterOffset },
+                        exit = fadeOut(tween(MotionTokens.Popup)),
                     ) {
-                        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                            suggestions.forEachIndexed { index, s ->
-                                SuggestionRow(
-                                    s = s,
-                                    iconsDir = iconsDir,
-                                    selected = index == selectedSuggestionIndex,
-                                ) {
-                                    focusManager.clearFocus()
-                                    onNavigate(s.url)
+                        Column(
+                            Modifier
+                                .width(suggestionsWidth)
+                                .heightIn(max = 176.dp)
+                                .clip(Radius.card)
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card),
+                        ) {
+                            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                                suggestions.forEachIndexed { index, s ->
+                                    SuggestionRow(
+                                        s = s,
+                                        iconsDir = iconsDir,
+                                        selected = index == selectedSuggestionIndex,
+                                    ) {
+                                        focusManager.clearFocus()
+                                        onNavigate(s.url)
+                                    }
                                 }
+                                Spacer(Modifier.height(8.dp))
                             }
-                            Spacer(Modifier.height(8.dp))
                         }
                     }
                 }
             }
         }
-        if (!focused) {
-            IconButton(
-                onClick = { focusManager.clearFocus(force = true); onNewTab() },
-                modifier = Modifier.semantics { contentDescription = newTabDescription },
+
+        AnimatedVisibility(
+            visible = !focused,
+            enter = expandHorizontally(
+                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                expandFrom = Alignment.End,
+            ) + fadeIn(tween(MotionTokens.Popup)),
+            exit = shrinkHorizontally(
+                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                shrinkTowards = Alignment.End,
+            ) + fadeOut(tween(MotionTokens.Press)),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Icon(Icons.Filled.Add, null)
-            }
-            Box(
-                Modifier
-                    .size(48.dp)
-                    .clip(Radius.button)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .softClickable { focusManager.clearFocus(force = true); onSwitcher() }
-                    .semantics { contentDescription = tabsDescription },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("$tabCount", style = MaterialTheme.typography.titleMedium)
-            }
-            IconButton(
-                onClick = { focusManager.clearFocus(force = true); menuOpen = true },
-                modifier = Modifier.semantics { contentDescription = menuDescription },
-            ) {
-                Icon(Icons.Filled.MoreVert, null)
+                IconButton(
+                    onClick = { focusManager.clearFocus(force = true); onNewTab() },
+                    modifier = Modifier.semantics { contentDescription = newTabDescription },
+                ) {
+                    Icon(Icons.Filled.Add, null)
+                }
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(Radius.button)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .softClickable { focusManager.clearFocus(force = true); onSwitcher() }
+                        .semantics { contentDescription = tabsDescription },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AnimatedContent(
+                        targetState = tabCount,
+                        transitionSpec = {
+                            (fadeIn(tween(MotionTokens.IconState)) +
+                                slideInVertically(tween(MotionTokens.IconState)) { it / 3 })
+                                .togetherWith(
+                                    fadeOut(tween(MotionTokens.IconState)) +
+                                        slideOutVertically(tween(MotionTokens.IconState)) { -it / 3 },
+                                )
+                        },
+                        label = "toolbar tab count",
+                    ) { count ->
+                        Text("$count", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+                IconButton(
+                    onClick = { focusManager.clearFocus(force = true); menuOpen = true },
+                    modifier = Modifier.semantics { contentDescription = menuDescription },
+                ) {
+                    Icon(Icons.Filled.MoreVert, null)
+                }
             }
         }
     }
@@ -402,6 +486,11 @@ private fun SuggestionRow(
     onClick: () -> Unit,
 ) {
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val rowColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+        animationSpec = tween(MotionTokens.IconState),
+        label = "suggestion selection",
+    )
     LaunchedEffect(selected) {
         if (selected) bringIntoViewRequester.bringIntoView()
     }
@@ -411,11 +500,10 @@ private fun SuggestionRow(
             .bringIntoViewRequester(bringIntoViewRequester)
             .heightIn(min = 56.dp)
             .clip(Radius.small)
+            .background(rowColor)
             .then(
                 if (selected) {
-                    Modifier
-                        .background(MaterialTheme.colorScheme.secondaryContainer)
-                        .border(1.dp, MaterialTheme.colorScheme.primary, Radius.small)
+                    Modifier.border(1.dp, MaterialTheme.colorScheme.primary, Radius.small)
                 } else {
                     Modifier
                 },
