@@ -1,6 +1,12 @@
 package com.artt.minibrowser.ui
 
 import android.text.format.Formatter
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -126,7 +132,15 @@ internal fun DownloadsScreenContent(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             items(downloads, key = { it.id }) { item ->
-                                DownloadCard(item, dateFormat) { onOpen(item.id) }
+                                DownloadCard(
+                                    item,
+                                    dateFormat,
+                                    Modifier.animateItem(
+                                        fadeInSpec = tween(MotionTokens.Content),
+                                        placementSpec = tween(MotionTokens.Content),
+                                        fadeOutSpec = tween(MotionTokens.Content),
+                                    ),
+                                ) { onOpen(item.id) }
                             }
                         }
                     }
@@ -161,15 +175,21 @@ internal fun DownloadsScreenContent(
 private fun DownloadCard(
     item: DownloadItemUiState,
     dateFormat: DateFormat,
+    modifier: Modifier = Modifier,
     onOpen: () -> Unit,
 ) {
     val context = LocalContext.current
-    val iconTint = when (item.status) {
+    val targetIconTint = when (item.status) {
         DownloadStatusUiState.Downloading -> MaterialTheme.colorScheme.primary
         DownloadStatusUiState.Completed -> MaterialTheme.colorScheme.onSurface
         DownloadStatusUiState.Failed -> MaterialTheme.colorScheme.error
     }
-    var cardModifier = Modifier
+    val iconTint by animateColorAsState(
+        targetValue = targetIconTint,
+        animationSpec = tween(MotionTokens.IconState),
+        label = "download status color",
+    )
+    var cardModifier = modifier
         .fillMaxWidth()
         .clip(Radius.card)
         .background(MaterialTheme.colorScheme.surface)
@@ -190,58 +210,67 @@ private fun DownloadCard(
                 style = MaterialTheme.typography.bodyLarge,
             )
             Spacer(Modifier.height(3.dp))
-            val statusText: String
-            val statusDescription: String
-            when (item.status) {
-                DownloadStatusUiState.Downloading -> {
-                    statusText = stringResource(R.string.download_status_downloading)
-                    statusDescription = stringResource(
-                        R.string.download_status_downloading_accessibility,
-                        item.name,
-                    )
-                }
-                DownloadStatusUiState.Completed -> {
-                    val whenDone = item.finishedAt ?: item.startedAt
-                    statusText = stringResource(
-                        R.string.download_completed_subtitle,
-                        Formatter.formatShortFileSize(context, item.bytes.coerceAtLeast(0L)),
-                        dateFormat.format(Date(whenDone)),
-                    )
-                    statusDescription = stringResource(
-                        R.string.download_status_completed_accessibility,
-                        item.name,
-                        statusText,
-                    )
-                }
-                DownloadStatusUiState.Failed -> {
-                    val failure = when (item.failureReason) {
-                        DownloadFailureUiState.Interrupted -> stringResource(R.string.download_failure_interrupted)
-                        DownloadFailureUiState.SaveFailed -> stringResource(R.string.download_save_error)
-                        DownloadFailureUiState.Unknown -> stringResource(R.string.download_failed_default)
+            AnimatedContent(
+                targetState = item.status,
+                transitionSpec = {
+                    fadeIn(tween(MotionTokens.Content))
+                        .togetherWith(fadeOut(tween(MotionTokens.IconState)))
+                },
+                label = "download status",
+            ) { status ->
+                val statusText: String
+                val statusDescription: String
+                when (status) {
+                    DownloadStatusUiState.Downloading -> {
+                        statusText = stringResource(R.string.download_status_downloading)
+                        statusDescription = stringResource(
+                            R.string.download_status_downloading_accessibility,
+                            item.name,
+                        )
                     }
-                    statusText = stringResource(R.string.download_failed_subtitle, failure)
-                    statusDescription = stringResource(
-                        R.string.download_status_failed_accessibility,
-                        item.name,
-                        failure,
-                    )
+                    DownloadStatusUiState.Completed -> {
+                        val whenDone = item.finishedAt ?: item.startedAt
+                        statusText = stringResource(
+                            R.string.download_completed_subtitle,
+                            Formatter.formatShortFileSize(context, item.bytes.coerceAtLeast(0L)),
+                            dateFormat.format(Date(whenDone)),
+                        )
+                        statusDescription = stringResource(
+                            R.string.download_status_completed_accessibility,
+                            item.name,
+                            statusText,
+                        )
+                    }
+                    DownloadStatusUiState.Failed -> {
+                        val failure = when (item.failureReason) {
+                            DownloadFailureUiState.Interrupted -> stringResource(R.string.download_failure_interrupted)
+                            DownloadFailureUiState.SaveFailed -> stringResource(R.string.download_save_error)
+                            DownloadFailureUiState.Unknown -> stringResource(R.string.download_failed_default)
+                        }
+                        statusText = stringResource(R.string.download_failed_subtitle, failure)
+                        statusDescription = stringResource(
+                            R.string.download_status_failed_accessibility,
+                            item.name,
+                            failure,
+                        )
+                    }
                 }
+                Text(
+                    statusText,
+                    Modifier.clearAndSetSemantics {
+                        contentDescription = statusDescription
+                        liveRegion = LiveRegionMode.Polite
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (status == DownloadStatusUiState.Failed) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
             }
-            Text(
-                statusText,
-                Modifier.clearAndSetSemantics {
-                    contentDescription = statusDescription
-                    liveRegion = LiveRegionMode.Polite
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (item.status == DownloadStatusUiState.Failed) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
             val host = remember(item.sourceUrl) { hostOf(item.sourceUrl) }
             if (host.isNotBlank()) {
                 Spacer(Modifier.height(1.dp))

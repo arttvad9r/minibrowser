@@ -1,5 +1,10 @@
 package com.artt.minibrowser.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -115,96 +120,117 @@ internal fun HistoryScreenContent(
                     }
                 }
 
-                when (state) {
-                    HistoryScreenUiState.Loading -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                AnimatedContent(
+                    targetState = state,
+                    transitionSpec = {
+                        fadeIn(tween(MotionTokens.Content))
+                            .togetherWith(fadeOut(tween(MotionTokens.Content)))
+                    },
+                    label = "history content state",
+                ) { targetState ->
+                    when (targetState) {
+                        HistoryScreenUiState.Loading -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
                         }
-                    }
-                    HistoryScreenUiState.Empty -> {
-                        EmptyState(
-                            AppIcons.History,
-                            stringResource(R.string.history_empty_title),
-                            stringResource(R.string.history_empty_subtitle),
-                        )
-                    }
-                    is HistoryScreenUiState.Error -> {
-                        val title = when (state.operation) {
-                            HistoryScreenOperation.Load -> stringResource(R.string.history_load_error)
-                            HistoryScreenOperation.Clear -> stringResource(R.string.history_clear_error)
+                        HistoryScreenUiState.Empty -> {
+                            EmptyState(
+                                AppIcons.History,
+                                stringResource(R.string.history_empty_title),
+                                stringResource(R.string.history_empty_subtitle),
+                            )
                         }
-                        InitialLoadErrorState(AppIcons.History, title, onRetry)
-                    }
-                    is HistoryScreenUiState.Content -> {
-                        state.error?.let { operation ->
-                            val message = when (operation) {
+                        is HistoryScreenUiState.Error -> {
+                            val title = when (targetState.operation) {
                                 HistoryScreenOperation.Load -> stringResource(R.string.history_load_error)
                                 HistoryScreenOperation.Clear -> stringResource(R.string.history_clear_error)
                             }
-                            Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    message,
-                                    Modifier
-                                        .weight(1f)
-                                        .semantics { liveRegion = LiveRegionMode.Polite },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                                TextButton(onClick = onRetry) {
-                                    Text(stringResource(R.string.action_retry))
-                                }
-                            }
+                            InitialLoadErrorState(AppIcons.History, title, onRetry)
                         }
-                        val groups = remember(state.entries) { groupHistoryByDay(state.entries) }
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            groups.forEach { (group, groupEntries) ->
-                                item(key = "header_${group.name}") {
-                                    val label = when (group) {
-                                        HistoryDayGroup.Today -> stringResource(R.string.history_today)
-                                        HistoryDayGroup.Yesterday -> stringResource(R.string.history_yesterday)
-                                        HistoryDayGroup.Earlier -> stringResource(R.string.history_earlier)
+                        is HistoryScreenUiState.Content -> {
+                            Column(Modifier.fillMaxSize()) {
+                                targetState.error?.let { operation ->
+                                    val message = when (operation) {
+                                        HistoryScreenOperation.Load -> stringResource(R.string.history_load_error)
+                                        HistoryScreenOperation.Clear -> stringResource(R.string.history_clear_error)
                                     }
-                                    Text(
-                                        label,
-                                        Modifier
-                                            .padding(start = 24.dp, top = 12.dp, bottom = 2.dp)
-                                            .semantics { heading() },
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                items(groupEntries, key = { it.url }) { entry ->
                                     Row(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(min = 48.dp)
-                                            .softClickable { requestExit { onOpen(entry.url) } }
-                                            .padding(horizontal = 20.dp, vertical = 6.dp),
+                                        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Favicon(entry.url, iconsDir, 28.dp)
-                                        Spacer(Modifier.width(12.dp))
-                                        Column(Modifier.weight(1f)) {
+                                        Text(
+                                            message,
+                                            Modifier
+                                                .weight(1f)
+                                                .semantics { liveRegion = LiveRegionMode.Polite },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                        TextButton(onClick = onRetry) {
+                                            Text(stringResource(R.string.action_retry))
+                                        }
+                                    }
+                                }
+                                val groups = remember(targetState.entries) { groupHistoryByDay(targetState.entries) }
+                                LazyColumn(Modifier.fillMaxSize()) {
+                                    groups.forEach { (group, groupEntries) ->
+                                        item(key = "header_${group.name}") {
+                                            val label = when (group) {
+                                                HistoryDayGroup.Today -> stringResource(R.string.history_today)
+                                                HistoryDayGroup.Yesterday -> stringResource(R.string.history_yesterday)
+                                                HistoryDayGroup.Earlier -> stringResource(R.string.history_earlier)
+                                            }
                                             Text(
-                                                entry.title.ifBlank { entry.url },
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                            )
-                                            Text(
-                                                stringResource(
-                                                    R.string.history_entry_subtitle,
-                                                    hostOf(entry.url),
-                                                    timeFormat.format(Date(entry.visitedAt)),
-                                                ),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                style = MaterialTheme.typography.bodySmall,
+                                                label,
+                                                Modifier
+                                                    .animateItem(
+                                                        fadeInSpec = tween(MotionTokens.Content),
+                                                        placementSpec = tween(MotionTokens.Content),
+                                                        fadeOutSpec = tween(MotionTokens.Content),
+                                                    )
+                                                    .padding(start = 24.dp, top = 12.dp, bottom = 2.dp)
+                                                    .semantics { heading() },
+                                                style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
+                                        }
+                                        items(groupEntries, key = { it.url }) { entry ->
+                                            Row(
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .animateItem(
+                                                        fadeInSpec = tween(MotionTokens.Content),
+                                                        placementSpec = tween(MotionTokens.Content),
+                                                        fadeOutSpec = tween(MotionTokens.Content),
+                                                    )
+                                                    .heightIn(min = 48.dp)
+                                                    .softClickable { requestExit { onOpen(entry.url) } }
+                                                    .padding(horizontal = 20.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Favicon(entry.url, iconsDir, 28.dp)
+                                                Spacer(Modifier.width(12.dp))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(
+                                                        entry.title.ifBlank { entry.url },
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                    )
+                                                    Text(
+                                                        stringResource(
+                                                            R.string.history_entry_subtitle,
+                                                            hostOf(entry.url),
+                                                            timeFormat.format(Date(entry.visitedAt)),
+                                                        ),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -330,6 +356,11 @@ internal fun BookmarksScreenContent(
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
+                                        .animateItem(
+                                            fadeInSpec = tween(MotionTokens.Content),
+                                            placementSpec = tween(MotionTokens.Content),
+                                            fadeOutSpec = tween(MotionTokens.Content),
+                                        )
                                         .softClickable { requestExit { onOpen(bookmark.url) } }
                                         .padding(horizontal = 20.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
