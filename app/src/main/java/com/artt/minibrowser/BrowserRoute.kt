@@ -1,9 +1,5 @@
 package com.artt.minibrowser
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -61,8 +57,6 @@ import com.artt.minibrowser.ui.BrowserTabSwitcher
 import com.artt.minibrowser.ui.FindInPageRoute
 import com.artt.minibrowser.ui.GeckoContent
 import com.artt.minibrowser.ui.MinibrowserTheme
-import com.artt.minibrowser.ui.MotionEasing
-import com.artt.minibrowser.ui.MotionTokens
 import com.artt.minibrowser.ui.SettingsScreen
 import com.artt.minibrowser.ui.SettingsScreenUiState
 import com.artt.minibrowser.ui.SettingsSearchEngineUiState
@@ -356,27 +350,14 @@ internal fun BrowserRoute(
                     )
                 }
             }
-            AnimatedVisibility(
-                visible = screen == BrowserScreen.Downloads,
-                enter = EnterTransition.None,
-                exit = slideOutHorizontally(
-                    animationSpec = tween(MotionTokens.Popup, easing = MotionEasing.Standard),
-                    targetOffsetX = { fullWidth -> fullWidth / 12 },
-                ),
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .hideFromAccessibilityWhen(screen != BrowserScreen.Downloads)
-                        .accessibilityPane(downloadsPaneTitle),
-                ) {
+            if (screen == BrowserScreen.Downloads) {
+                Box(Modifier.fillMaxSize().accessibilityPane(downloadsPaneTitle)) {
                     MotionDownloadsScreen(
                         onBack = {
                             browserViewModel.screen(
                                 if (downloadsReturnToSettings) BrowserScreen.Settings else BrowserScreen.Browser,
                             )
                         },
-                        backEnabled = screen == BrowserScreen.Downloads,
                     )
                 }
             }
