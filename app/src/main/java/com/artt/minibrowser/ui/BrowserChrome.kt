@@ -13,8 +13,6 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateDpAsState
@@ -148,7 +146,7 @@ internal fun TopBar(
     val menuDescription = stringResource(R.string.menu_content_description)
     val fieldRadius by animateDpAsState(
         targetValue = if (focused) 18.dp else 24.dp,
-        animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+        animationSpec = tween(MotionTokens.ToolbarFocus, easing = MotionEasing.Transform),
         label = "omnibox radius",
     )
     val fieldColor by animateColorAsState(
@@ -157,7 +155,7 @@ internal fun TopBar(
             state.isPrivate -> MaterialTheme.colorScheme.surfaceContainerHigh
             else -> MaterialTheme.colorScheme.surfaceVariant
         },
-        animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+        animationSpec = tween(MotionTokens.ToolbarFocus, easing = MotionEasing.Transform),
         label = "omnibox surface",
     )
 
@@ -220,8 +218,11 @@ internal fun TopBar(
                             state.securityState == BrowserSecurityUiState.Secure,
                         ),
                         transitionSpec = {
-                            fadeIn(tween(MotionTokens.IconState))
-                                .togetherWith(fadeOut(tween(MotionTokens.IconState)))
+                            fadeIn(
+                                tween(MotionTokens.IconState, easing = MotionEasing.FadeIn),
+                            ).togetherWith(
+                                fadeOut(tween(MotionTokens.IconState, easing = MotionEasing.FadeOut)),
+                            )
                         },
                         label = "omnibox leading icon",
                     ) { visual ->
@@ -353,7 +354,6 @@ internal fun TopBar(
             if (focused && suggestions.isNotEmpty()) {
                 val density = LocalDensity.current
                 val offsetY = with(density) { 8.dp.roundToPx() }
-                val suggestionEnterOffset = with(density) { -6.dp.roundToPx() }
                 val suggestionsWidth = with(density) { fieldSize.width.toDp() }
                 val popupVisibility = remember {
                     MutableTransitionState(false).apply { targetState = true }
@@ -370,9 +370,8 @@ internal fun TopBar(
                 ) {
                     AnimatedVisibility(
                         visibleState = popupVisibility,
-                        enter = fadeIn(tween(MotionTokens.Popup)) +
-                            slideInVertically(tween(MotionTokens.Popup)) { suggestionEnterOffset },
-                        exit = fadeOut(tween(MotionTokens.Popup)),
+                        enter = fadeIn(tween(MotionTokens.Popup, easing = MotionEasing.FadeIn)),
+                        exit = fadeOut(tween(MotionTokens.Popup, easing = MotionEasing.FadeOut)),
                     ) {
                         Column(
                             Modifier
@@ -404,13 +403,17 @@ internal fun TopBar(
         AnimatedVisibility(
             visible = !focused,
             enter = expandHorizontally(
-                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                animationSpec = tween(MotionTokens.ToolbarFocus, easing = MotionEasing.Transform),
                 expandFrom = Alignment.End,
-            ) + fadeIn(tween(MotionTokens.Popup)),
+            ) + fadeIn(
+                tween(MotionTokens.ToolbarButton, easing = MotionEasing.FadeIn),
+            ),
             exit = shrinkHorizontally(
-                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                animationSpec = tween(MotionTokens.ToolbarFocus, easing = MotionEasing.Transform),
                 shrinkTowards = Alignment.End,
-            ) + fadeOut(tween(MotionTokens.Press)),
+            ) + fadeOut(
+                tween(MotionTokens.ToolbarButton, easing = MotionEasing.FadeOut),
+            ),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -434,12 +437,11 @@ internal fun TopBar(
                     AnimatedContent(
                         targetState = tabCount,
                         transitionSpec = {
-                            (fadeIn(tween(MotionTokens.IconState)) +
-                                slideInVertically(tween(MotionTokens.IconState)) { it / 3 })
-                                .togetherWith(
-                                    fadeOut(tween(MotionTokens.IconState)) +
-                                        slideOutVertically(tween(MotionTokens.IconState)) { -it / 3 },
-                                )
+                            fadeIn(
+                                tween(MotionTokens.IconState, easing = MotionEasing.FadeIn),
+                            ).togetherWith(
+                                fadeOut(tween(MotionTokens.IconState, easing = MotionEasing.FadeOut)),
+                            )
                         },
                         label = "toolbar tab count",
                     ) { count ->
@@ -491,7 +493,7 @@ private fun SuggestionRow(
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val rowColor by animateColorAsState(
         targetValue = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-        animationSpec = tween(MotionTokens.IconState),
+        animationSpec = tween(MotionTokens.IconState, easing = MotionEasing.Transform),
         label = "suggestion selection",
     )
     LaunchedEffect(selected) {
@@ -721,8 +723,11 @@ private fun MenuNavigationAction(
         AnimatedContent(
             targetState = icon,
             transitionSpec = {
-                fadeIn(tween(MotionTokens.IconState))
-                    .togetherWith(fadeOut(tween(MotionTokens.IconState)))
+                fadeIn(
+                    tween(MotionTokens.IconState, easing = MotionEasing.FadeIn),
+                ).togetherWith(
+                    fadeOut(tween(MotionTokens.IconState, easing = MotionEasing.FadeOut)),
+                )
             },
             label = "menu navigation icon",
         ) { targetIcon ->
