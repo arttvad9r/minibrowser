@@ -1,5 +1,9 @@
 package com.artt.minibrowser
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -54,6 +58,7 @@ import com.artt.minibrowser.ui.BrowserSecurityUiState
 import com.artt.minibrowser.ui.BrowserSuggestionUiState
 import com.artt.minibrowser.ui.BrowserTabItemUiState
 import com.artt.minibrowser.ui.BrowserTabSwitcher
+import com.artt.minibrowser.ui.ChromiumSharedXAxisUnderlay
 import com.artt.minibrowser.ui.FindInPageRoute
 import com.artt.minibrowser.ui.GeckoContent
 import com.artt.minibrowser.ui.MinibrowserTheme
@@ -63,6 +68,8 @@ import com.artt.minibrowser.ui.SettingsSearchEngineUiState
 import com.artt.minibrowser.ui.SiteInfoSheet
 import com.artt.minibrowser.ui.StartPage
 import com.artt.minibrowser.ui.TabPreviewStore
+import com.artt.minibrowser.ui.chromiumSharedXAxisEnter
+import com.artt.minibrowser.ui.chromiumSharedXAxisExit
 import java.io.File
 
 /**
@@ -268,10 +275,11 @@ internal fun BrowserRoute(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .hideFromAccessibilityWhen(browserContentHiddenByRoute),
+            // Chromium's shared-X pair animates both surfaces. Keep GeckoView alive as the underlay
+            // and apply open_exit while an app destination opens, then close_enter when returning.
+            ChromiumSharedXAxisUnderlay(
+                visible = screen == BrowserScreen.Browser,
+                modifier = Modifier.hideFromAccessibilityWhen(browserContentHiddenByRoute),
             ) {
                 BrowserPageContent(
                     state = pageState,
@@ -320,73 +328,104 @@ internal fun BrowserRoute(
                 )
             }
 
-            val settingsUnderDownloads =
-                screen == BrowserScreen.Downloads && downloadsReturnToSettings
-            if (screen == BrowserScreen.Settings || settingsUnderDownloads) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .hideFromAccessibilityWhen(settingsUnderDownloads)
-                        .accessibilityPane(settingsPaneTitle),
-                ) {
-                    SettingsScreen(
-                        state = settingsScreenState,
-                        onBack = { browserViewModel.screen(BrowserScreen.Browser) },
-                        onEngine = { settingsViewModel.setSearchEngine(it.toSearchEngine()) },
-                        onTheme = settingsViewModel::setTheme,
-                        onAdblock = toggleAdblock,
-                        onRetryAdblock = retryAdblock,
-                        onVot = toggleVot,
-                        onRetryVot = retryVot,
-                        onDownloads = {
-                            downloadsReturnToSettings = true
-                            browserViewModel.screen(BrowserScreen.Downloads)
-                        },
-                        onClearData = { withBookmarks ->
-                            browserDataViewModel.clear(withBookmarks, browserDataClearer)
-                        },
-                        onTranslateLang = settingsViewModel::setTranslateTarget,
-                        backEnabled = screen == BrowserScreen.Settings,
-                    )
-                }
-            }
-            if (screen == BrowserScreen.Downloads) {
-                Box(Modifier.fillMaxSize().accessibilityPane(downloadsPaneTitle)) {
-                    MotionDownloadsScreen(
-                        onBack = {
-                            browserViewModel.screen(
-                                if (downloadsReturnToSettings) BrowserScreen.Settings else BrowserScreen.Browser,
+            AnimatedContent(
+                targetState = screen,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    val forward = isForwardBrowserRouteTransition(initialState, targetState)
+                    when {
+                        initialState == BrowserScreen.Browser && targetState != BrowserScreen.Browser ->
+                            chromiumSharedXAxisEnter(forward = true)
+                                .togetherWith(ExitTransition.None)
+
+                        initialState != BrowserScreen.Browser && targetState == BrowserScreen.Browser ->
+                            EnterTransition.None
+                                .togetherWith(chromiumSharedXAxisExit(forward = false))
+
+                        forward ->
+                            chromiumSharedXAxisEnter(forward = true)
+                                .togetherWith(chromiumSharedXAxisExit(forward = true))
+
+                        else ->
+                            chromiumSharedXAxisEnter(forward = false)
+                                .togetherWith(chromiumSharedXAxisExit(forward = false))
+                    }
+                },
+                contentKey = { it },
+                label = "Chromium internal route",
+            ) { targetScreen ->
+                when (targetScreen) {
+                    BrowserScreen.Browser -> Box(Modifier.fillMaxSize())
+
+                    BrowserScreen.Settings -> {
+                        Box(Modifier.fillMaxSize().accessibilityPane(settingsPaneTitle)) {
+                            SettingsScreen(
+                                state = settingsScreenState,
+                                onBack = { browserViewModel.screen(BrowserScreen.Browser) },
+                                onEngine = { settingsViewModel.setSearchEngine(it.toSearchEngine()) },
+                                onTheme = settingsViewModel::setTheme,
+                                onAdblock = toggleAdblock,
+                                onRetryAdblock = retryAdblock,
+                                onVot = toggleVot,
+                                onRetryVot = retryVot,
+                                onDownloads = {
+                                    downloadsReturnToSettings = true
+                                    browserViewModel.screen(BrowserScreen.Downloads)
+                                },
+                                onClearData = { withBookmarks ->
+                                    browserDataViewModel.clear(withBookmarks, browserDataClearer)
+                                },
+                                onTranslateLang = settingsViewModel::setTranslateTarget,
                             )
-                        },
-                    )
+                        }
+                    }
+
+                    BrowserScreen.Downloads -> {
+                        Box(Modifier.fillMaxSize().accessibilityPane(downloadsPaneTitle)) {
+                            MotionDownloadsScreen(
+                                onBack = {
+                                    browserViewModel.screen(
+                                        if (downloadsReturnToSettings) {
+                                            BrowserScreen.Settings
+                                        } else {
+                                            BrowserScreen.Browser
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+
+                    BrowserScreen.History -> {
+                        Box(Modifier.fillMaxSize().accessibilityPane(historyPaneTitle)) {
+                            MotionHistoryScreen(
+                                historyRepository,
+                                iconsDir,
+                                onBack = { browserViewModel.screen(BrowserScreen.Browser) },
+                                onOpen = { uri ->
+                                    browserViewModel.screen(BrowserScreen.Browser)
+                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                },
+                            )
+                        }
+                    }
+
+                    BrowserScreen.Bookmarks -> {
+                        Box(Modifier.fillMaxSize().accessibilityPane(bookmarksPaneTitle)) {
+                            MotionBookmarksScreen(
+                                bookmarksRepository,
+                                iconsDir,
+                                onBack = { browserViewModel.screen(BrowserScreen.Browser) },
+                                onOpen = { uri ->
+                                    browserViewModel.screen(BrowserScreen.Browser)
+                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                },
+                            )
+                        }
+                    }
                 }
             }
-            if (screen == BrowserScreen.History) {
-                Box(Modifier.fillMaxSize().accessibilityPane(historyPaneTitle)) {
-                    MotionHistoryScreen(
-                        historyRepository,
-                        iconsDir,
-                        onBack = { browserViewModel.screen(BrowserScreen.Browser) },
-                        onOpen = { uri ->
-                            browserViewModel.screen(BrowserScreen.Browser)
-                            (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
-                        },
-                    )
-                }
-            }
-            if (screen == BrowserScreen.Bookmarks) {
-                Box(Modifier.fillMaxSize().accessibilityPane(bookmarksPaneTitle)) {
-                    MotionBookmarksScreen(
-                        bookmarksRepository,
-                        iconsDir,
-                        onBack = { browserViewModel.screen(BrowserScreen.Browser) },
-                        onOpen = { uri ->
-                            browserViewModel.screen(BrowserScreen.Browser)
-                            (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
-                        },
-                    )
-                }
-            }
+
             if (showSwitcher) {
                 BrowserTabSwitcher(
                     tabs = tabItems,
@@ -412,6 +451,15 @@ internal fun BrowserRoute(
             }
         }
     }
+}
+
+private fun isForwardBrowserRouteTransition(
+    initial: BrowserScreen,
+    target: BrowserScreen,
+): Boolean = when {
+    initial == BrowserScreen.Browser && target != BrowserScreen.Browser -> true
+    initial == BrowserScreen.Settings && target == BrowserScreen.Downloads -> true
+    else -> false
 }
 
 internal fun Modifier.hideFromAccessibilityWhen(hidden: Boolean): Modifier =
