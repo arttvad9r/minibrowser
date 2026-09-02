@@ -63,6 +63,9 @@ class BrowserApp : Application() {
                     // formatting/IPC/logcat overhead in the release build used on the phone.
                     .debugLogging(BuildConfig.DEBUG)
                     .contentBlocking(contentBlocking)
+                    // The browser already resizes around the IME. Prevent Gecko from additionally
+                    // zooming/panning editable fields, which otherwise makes fixed web controls jump.
+                    .inputAutoZoomEnabled(false)
                     .setLnaBlocking(true)
                     .build()
             )
