@@ -1,11 +1,19 @@
 package com.artt.minibrowser.ui
 
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,8 +60,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -66,6 +76,8 @@ import androidx.compose.ui.unit.dp
 import androidx.window.core.layout.WindowSizeClass
 import com.artt.minibrowser.R
 import java.io.File
+import kotlin.math.abs
+import kotlin.math.sign
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -78,11 +90,11 @@ internal data class BrowserTabItemUiState(
 )
 
 /**
- * Stable adaptive tab overview.
+ * Adaptive tab overview with browser-specific spatial motion.
  *
- * The overview keeps one opaque surface mounted and moves only its content by a small amount. This
- * prevents a close/open transition from exposing Gecko or an empty new-tab frame while avoiding the
- * previous full-screen maxHeight translation that crossed thousands of pixels in a few frames.
+ * The active card is the visual anchor: it shrinks into the grid on entry and expands on exit while
+ * surrounding cards fade into context. Cards track horizontal swipe gestures 1:1 and settle only
+ * after release. Gecko stays covered until a selected session has been applied for real frames.
  */
 @Composable
 internal fun BrowserTabSwitcher(
@@ -117,7 +129,10 @@ internal fun BrowserTabSwitcher(
     suspend fun animateReveal(target: Float) {
         activeAnimations++
         try {
-            reveal.animateTo(target, animationSpec = tween(MotionTokens.Screen))
+            reveal.animateTo(
+                target,
+                animationSpec = tween(MotionTokens.TabTransform, easing = MotionEasing.Emphasized),
+            )
         } finally {
             activeAnimations--
         }
@@ -132,9 +147,8 @@ internal fun BrowserTabSwitcher(
         action()
     }
 
-    // A GeckoSession swap can do synchronous UI-thread work. Keep the overview fully opaque while
-    // it happens, let Compose/AndroidView apply the new session for two actual display frames, and
-    // only then animate the overview content. withFrameNanos follows 60/90/120/144 Hz automatically.
+    // GeckoSession swaps can do synchronous UI-thread work. Keep the overview mounted until the
+    // selected session has actually reached Compose/AndroidView for two display frames.
     LaunchedEffect(switchTarget, currentId) {
         val target = switchTarget ?: return@LaunchedEffect
         if (currentId != target) return@LaunchedEffect
@@ -174,9 +188,6 @@ internal fun BrowserTabSwitcher(
         }
     }
 
-    val density = LocalDensity.current
-    val travelPx = with(density) { 28.dp.toPx() }
-
     Box(
         Modifier
             .fillMaxSize()
@@ -188,8 +199,8 @@ internal fun BrowserTabSwitcher(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .graphicsLayer {
-                    translationY = (1f - reveal.value) * travelPx
-                    alpha = 0.94f + reveal.value * 0.06f
+                    val progress = reveal.value.coerceIn(0f, 1f)
+                    alpha = 0.72f + progress * 0.28f
                 },
         ) {
             Row(
@@ -203,12 +214,26 @@ internal fun BrowserTabSwitcher(
                 ) {
                     Icon(AppIcons.ChevronDown, null)
                 }
-                Text(
-                    pluralStringResource(R.plurals.tabs_count, tabs.size, tabs.size),
-                    Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                AnimatedContent(
+                    targetState = tabs.size,
+                    modifier = Modifier.weight(1f),
+                    transitionSpec = {
+                        (fadeIn(tween(MotionTokens.IconState)) +
+                            slideInVertically(tween(MotionTokens.IconState)) { it / 3 })
+                            .togetherWith(
+                                fadeOut(tween(MotionTokens.IconState)) +
+                                    slideOutVertically(tween(MotionTokens.IconState)) { -it / 3 },
+                            )
+                    },
+                    label = "tab count",
+                ) { count ->
+                    Text(
+                        pluralStringResource(R.plurals.tabs_count, count, count),
+                        Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
                 IconButton(
                     onClick = { requestExit(onNew) },
                     enabled = inputEnabled,
@@ -229,6 +254,9 @@ internal fun BrowserTabSwitcher(
                         BrowserTabCard(
                             tab = tab,
                             isCurrent = tab.id == overviewCurrentId,
+                            isTransitionFocus = tab.id == (switchTarget ?: overviewCurrentId),
+                            reveal = reveal.value,
+                            gesturesEnabled = inputEnabled,
                             iconsDir = iconsDir,
                             previewStore = previewStore,
                             modifier = Modifier.width(224.dp),
@@ -253,8 +281,16 @@ internal fun BrowserTabSwitcher(
                             BrowserTabCard(
                                 tab = tab,
                                 isCurrent = tab.id == overviewCurrentId,
+                                isTransitionFocus = tab.id == (switchTarget ?: overviewCurrentId),
+                                reveal = reveal.value,
+                                gesturesEnabled = inputEnabled,
                                 iconsDir = iconsDir,
                                 previewStore = previewStore,
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = tween(MotionTokens.Content),
+                                    placementSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                                    fadeOutSpec = tween(MotionTokens.Content),
+                                ),
                                 onSelect = { activateAndExit(tab.id) },
                                 onClose = { if (inputEnabled) onClose(tab.id) },
                             )
@@ -278,6 +314,9 @@ internal fun tabGridColumnCount(windowSizeClass: WindowSizeClass): Int = when {
 private fun BrowserTabCard(
     tab: BrowserTabItemUiState,
     isCurrent: Boolean,
+    isTransitionFocus: Boolean,
+    reveal: Float,
+    gesturesEnabled: Boolean,
     iconsDir: File,
     previewStore: TabPreviewStore,
     modifier: Modifier = Modifier,
@@ -305,15 +344,68 @@ private fun BrowserTabCard(
         isCurrent -> MaterialTheme.colorScheme.surfaceContainer
         else -> MaterialTheme.colorScheme.surfaceContainerLow
     }
+    val scope = rememberCoroutineScope()
+    var dragOffsetPx by remember(tab.id) { mutableFloatStateOf(0f) }
+    var cardWidthPx by remember(tab.id) { mutableFloatStateOf(1f) }
+    var settling by remember(tab.id) { mutableStateOf(false) }
+
+    fun settle(target: Float, closeAfter: Boolean) {
+        if (settling) return
+        settling = true
+        scope.launch {
+            animate(
+                initialValue = dragOffsetPx,
+                targetValue = target,
+                animationSpec = tween(MotionTokens.GestureSettle, easing = MotionEasing.Standard),
+            ) { value, _ -> dragOffsetPx = value }
+            settling = false
+            if (closeAfter) onClose()
+        }
+    }
+
+    val revealProgress = reveal.coerceIn(0f, 1f)
+    val transitionScale = if (isTransitionFocus) 1f + (1f - revealProgress) * 0.12f else 1f
+    val contextualAlpha = if (isTransitionFocus) 1f else 0.18f + revealProgress * 0.82f
+    val dragProgress = (abs(dragOffsetPx) / cardWidthPx.coerceAtLeast(1f)).coerceIn(0f, 1f)
 
     Column(
         modifier
             .fillMaxWidth()
+            .onSizeChanged { cardWidthPx = it.width.toFloat().coerceAtLeast(1f) }
+            .graphicsLayer {
+                translationX = dragOffsetPx
+                alpha = contextualAlpha * (1f - dragProgress * 0.68f)
+                val dragScale = 1f - dragProgress * 0.018f
+                scaleX = transitionScale * dragScale
+                scaleY = transitionScale * dragScale
+            }
+            .pointerInput(tab.id, gesturesEnabled, cardWidthPx) {
+                if (!gesturesEnabled) return@pointerInput
+                detectHorizontalDragGestures(
+                    onDragCancel = { settle(0f, closeAfter = false) },
+                    onDragEnd = {
+                        val threshold = cardWidthPx * 0.32f
+                        if (abs(dragOffsetPx) >= threshold) {
+                            val direction = if (dragOffsetPx == 0f) 1f else dragOffsetPx.sign
+                            settle(direction * cardWidthPx * 1.08f, closeAfter = true)
+                        } else {
+                            settle(0f, closeAfter = false)
+                        }
+                    },
+                ) { change, dragAmount ->
+                    if (!settling) {
+                        change.consume()
+                        dragOffsetPx = (dragOffsetPx + dragAmount)
+                            .coerceIn(-cardWidthPx, cardWidthPx)
+                    }
+                }
+            }
             .clip(Radius.card)
             .background(cardColor)
             .border(if (isCurrent) 1.5.dp else 1.dp, borderColor, Radius.card)
             .selectable(
                 selected = isCurrent,
+                enabled = gesturesEnabled && !settling,
                 role = Role.Tab,
                 onClick = onSelect,
             ),
@@ -331,6 +423,7 @@ private fun BrowserTabCard(
                 )
                 IconButton(
                     onClick = onClose,
+                    enabled = gesturesEnabled && !settling,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .size(48.dp)
@@ -361,6 +454,7 @@ private fun BrowserTabCard(
                 )
                 IconButton(
                     onClick = onClose,
+                    enabled = gesturesEnabled && !settling,
                     modifier = Modifier.size(48.dp).semantics { contentDescription = closeTabDescription },
                 ) {
                     Icon(
