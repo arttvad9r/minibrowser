@@ -1,6 +1,6 @@
 package com.artt.minibrowser.ui
 
-import androidx.activity.compose.PredictiveBackHandler
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Easing
@@ -15,6 +15,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -64,6 +66,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -73,15 +76,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.window.core.layout.WindowSizeClass
 import com.artt.minibrowser.R
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.sign
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+
+private const val ChromiumTabAddDurationMs = 120
 
 internal data class BrowserTabItemUiState(
     val id: Long,
@@ -98,6 +103,10 @@ internal data class BrowserTabItemUiState(
  * so MiniBrowser follows Chromium's own fallback path instead of imitating the transform: the Hub
  * container fades as one surface for 325 ms. Session selection still happens immediately underneath
  * the fading overview, so the animation never blocks binding the selected GeckoSession.
+ *
+ * Creating a foreground tab is different: Chromium has enough geometry to animate a solid new-tab
+ * surface without a thumbnail. MiniBrowser mirrors that path from the Hub pane itself: 20% -> 110%
+ * rect growth for 300 ms with STANDARD easing, while the Hub toolbar fades out in parallel.
  */
 @Composable
 internal fun BrowserTabSwitcher(
@@ -111,16 +120,23 @@ internal fun BrowserTabSwitcher(
     onDismiss: () -> Unit,
 ) {
     val reveal = remember { Animatable(0f) }
+    val newTabProgress = remember { Animatable(0f) }
+    val newTabToolbarAlpha = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
     var switchTarget by remember { mutableStateOf<Long?>(null) }
-    var predictiveBackActive by remember { mutableStateOf(false) }
     var exiting by remember { mutableStateOf(false) }
+    var newTabAnimating by remember { mutableStateOf(false) }
     var overviewWidthPx by remember { mutableFloatStateOf(1f) }
     val overviewCurrentId = remember { currentId }
     val closeSwitcherDescription = stringResource(R.string.close_tab_switcher_content_description)
     val newTabTitle = stringResource(R.string.new_tab_title)
     val overviewPaneTitle = stringResource(R.string.tabs_content_description)
     val windowSizeClass = currentWindowAdaptiveInfoV2().windowSizeClass
+    val newTabOrigin = if (LocalLayoutDirection.current == LayoutDirection.Rtl) {
+        Alignment.TopEnd
+    } else {
+        Alignment.TopStart
+    }
 
     DisposableEffect(previewStore) {
         previewStore.setOverviewVisible(true)
@@ -149,7 +165,7 @@ internal fun BrowserTabSwitcher(
     }
 
     fun requestExit(action: () -> Unit) {
-        if (switchTarget != null || predictiveBackActive || exiting) return
+        if (switchTarget != null || exiting || newTabAnimating) return
         exiting = true
         scope.launch {
             animateReveal(0f, MotionEasing.FadeOut)
@@ -158,28 +174,52 @@ internal fun BrowserTabSwitcher(
     }
 
     fun activateAndExit(id: Long) {
-        if (switchTarget != null || predictiveBackActive || exiting) return
+        if (switchTarget != null || exiting || newTabAnimating) return
         switchTarget = id
         onSelect(id)
     }
 
-    val backEnabled = switchTarget == null && !exiting
-    val inputEnabled = backEnabled && !predictiveBackActive
-    PredictiveBackHandler(enabled = backEnabled) { progress ->
-        predictiveBackActive = true
-        try {
-            progress.collect { event ->
-                reveal.snapTo(predictiveBackReveal(event.progress))
+    fun createNewTabAndExit() {
+        if (switchTarget != null || exiting || newTabAnimating) return
+        exiting = true
+        newTabAnimating = true
+
+        // Chromium prepares EXPAND_NEW_TAB after the new foreground tab exists, then starts hiding
+        // the Hub. Create/select the tab immediately so the destination is already ready underneath.
+        onNew()
+
+        scope.launch {
+            coroutineScope {
+                launch {
+                    newTabProgress.snapTo(0f)
+                    newTabProgress.animateTo(
+                        1f,
+                        animationSpec = tween(
+                            MotionTokens.TabNew,
+                            easing = MotionEasing.Standard,
+                        ),
+                    )
+                }
+                launch {
+                    newTabToolbarAlpha.snapTo(1f)
+                    newTabToolbarAlpha.animateTo(
+                        0f,
+                        animationSpec = tween(
+                            MotionTokens.TabNew,
+                            easing = MotionEasing.FadeOut,
+                        ),
+                    )
+                }
             }
-            reveal.snapTo(0f)
-            predictiveBackActive = false
             onDismiss()
-        } catch (cancelled: CancellationException) {
-            predictiveBackActive = false
-            scope.launch { animateReveal(1f, MotionEasing.FadeIn) }
-            throw cancelled
         }
     }
+
+    val backEnabled = switchTarget == null && !exiting
+    val inputEnabled = backEnabled && !newTabAnimating
+    // Chromium Hub intercepts Back, but does not implement progressive predictive-back callbacks.
+    // Start the same Hub hide animation only after the system Back gesture is committed.
+    BackHandler(enabled = backEnabled) { requestExit(onDismiss) }
 
     Box(
         Modifier
@@ -198,7 +238,8 @@ internal fun BrowserTabSwitcher(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 56.dp)
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 8.dp)
+                    .graphicsLayer { alpha = newTabToolbarAlpha.value },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
@@ -228,7 +269,7 @@ internal fun BrowserTabSwitcher(
                     )
                 }
                 IconButton(
-                    onClick = { requestExit(onNew) },
+                    onClick = ::createNewTabAndExit,
                     enabled = inputEnabled,
                     modifier = Modifier.semantics { contentDescription = newTabTitle },
                 ) {
@@ -236,42 +277,20 @@ internal fun BrowserTabSwitcher(
                 }
             }
 
-            when (tabs.size) {
-                0 -> EmptyState(AppIcons.Globe, stringResource(R.string.no_open_tabs))
-                1 -> {
-                    val tab = tabs.first()
-                    val highlightedId = switchTarget ?: overviewCurrentId
-                    Box(
-                        Modifier.fillMaxSize().padding(top = 8.dp),
-                        contentAlignment = Alignment.TopCenter,
-                    ) {
-                        BrowserTabCard(
-                            tab = tab,
-                            isCurrent = tab.id == highlightedId,
-                            gesturesEnabled = inputEnabled,
-                            swipeExitDistancePx = overviewWidthPx,
-                            iconsDir = iconsDir,
-                            previewStore = previewStore,
-                            modifier = Modifier.width(224.dp),
-                            onSelect = { activateAndExit(tab.id) },
-                            onClose = { if (inputEnabled) onClose(tab.id) },
-                        )
-                    }
-                }
-                else -> {
-                    val columns = tabGridColumnCount(windowSizeClass)
-                    val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
-                    val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
-                    val highlightedId = switchTarget ?: overviewCurrentId
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(columns),
-                        state = gridState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        items(tabs, key = { it.id }) { tab ->
+            BoxWithConstraints(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            ) {
+                when (tabs.size) {
+                    0 -> EmptyState(AppIcons.Globe, stringResource(R.string.no_open_tabs))
+                    1 -> {
+                        val tab = tabs.first()
+                        val highlightedId = switchTarget ?: overviewCurrentId
+                        Box(
+                            Modifier.fillMaxSize().padding(top = 8.dp),
+                            contentAlignment = Alignment.TopCenter,
+                        ) {
                             BrowserTabCard(
                                 tab = tab,
                                 isCurrent = tab.id == highlightedId,
@@ -279,25 +298,75 @@ internal fun BrowserTabSwitcher(
                                 swipeExitDistancePx = overviewWidthPx,
                                 iconsDir = iconsDir,
                                 previewStore = previewStore,
-                                modifier = Modifier.animateItem(
-                                    fadeInSpec = tween(
-                                        MotionTokens.TabBackgroundFade,
-                                        easing = MotionEasing.FadeIn,
-                                    ),
-                                    placementSpec = tween(
-                                        MotionTokens.TabMove,
-                                        easing = MotionEasing.Standard,
-                                    ),
-                                    fadeOutSpec = tween(
-                                        MotionTokens.TabRemove,
-                                        easing = MotionEasing.StandardAccelerate,
-                                    ),
-                                ),
+                                modifier = Modifier.width(224.dp),
                                 onSelect = { activateAndExit(tab.id) },
                                 onClose = { if (inputEnabled) onClose(tab.id) },
                             )
                         }
                     }
+                    else -> {
+                        val columns = tabGridColumnCount(windowSizeClass)
+                        val initialIndex =
+                            tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
+                        val gridState =
+                            rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
+                        val highlightedId = switchTarget ?: overviewCurrentId
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(columns),
+                            state = gridState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = 12.dp,
+                                end = 12.dp,
+                                top = 8.dp,
+                                bottom = 24.dp,
+                            ),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            items(tabs, key = { it.id }) { tab ->
+                                BrowserTabCard(
+                                    tab = tab,
+                                    isCurrent = tab.id == highlightedId,
+                                    gesturesEnabled = inputEnabled,
+                                    swipeExitDistancePx = overviewWidthPx,
+                                    iconsDir = iconsDir,
+                                    previewStore = previewStore,
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = tween(
+                                            ChromiumTabAddDurationMs,
+                                            easing = MotionEasing.Linear,
+                                        ),
+                                        placementSpec = tween(
+                                            MotionTokens.TabMove,
+                                            easing = MotionEasing.Standard,
+                                        ),
+                                        fadeOutSpec = tween(
+                                            MotionTokens.TabRemove,
+                                            easing = MotionEasing.StandardAccelerate,
+                                        ),
+                                    ),
+                                    onSelect = { activateAndExit(tab.id) },
+                                    onClose = { if (inputEnabled) onClose(tab.id) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (newTabAnimating) {
+                    val progress = newTabProgress.value
+                    val scale = 0.2f + (1.1f - 0.2f) * progress
+                    val finalRadiusScale = 0.2f / 1.1f
+                    val radiusScale = 1f + (finalRadiusScale - 1f) * progress
+                    Box(
+                        Modifier
+                            .align(newTabOrigin)
+                            .width(maxWidth * scale)
+                            .height(maxHeight * scale)
+                            .clip(RoundedCornerShape(10.dp * radiusScale))
+                            .background(MaterialTheme.colorScheme.background),
+                    )
                 }
             }
         }
