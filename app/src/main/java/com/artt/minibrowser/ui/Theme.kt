@@ -3,7 +3,10 @@ package com.artt.minibrowser.ui
 // Дизайн-токены Minibrowser: нейтральная серо-белая палитра без тёплых оттенков,
 // единые радиусы и типографика. Единственный источник цветов и форм.
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -126,8 +129,47 @@ private val AppShapes = Shapes(
 )
 
 @Composable
+private fun animatedThemeColor(target: Color): Color = animateColorAsState(
+    targetValue = target,
+    animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+    label = "theme palette",
+).value
+
+/**
+ * Interpolate the Compose palette instead of cross-fading the whole UI. A whole-tree cross-fade
+ * would duplicate/recreate AndroidView-backed Gecko content and can introduce a much worse web
+ * surface flash during a theme change.
+ */
+@Composable
+private fun animatedColorScheme(target: ColorScheme): ColorScheme = target.copy(
+    primary = animatedThemeColor(target.primary),
+    onPrimary = animatedThemeColor(target.onPrimary),
+    primaryContainer = animatedThemeColor(target.primaryContainer),
+    onPrimaryContainer = animatedThemeColor(target.onPrimaryContainer),
+    secondary = animatedThemeColor(target.secondary),
+    onSecondary = animatedThemeColor(target.onSecondary),
+    secondaryContainer = animatedThemeColor(target.secondaryContainer),
+    onSecondaryContainer = animatedThemeColor(target.onSecondaryContainer),
+    background = animatedThemeColor(target.background),
+    onBackground = animatedThemeColor(target.onBackground),
+    surface = animatedThemeColor(target.surface),
+    onSurface = animatedThemeColor(target.onSurface),
+    surfaceVariant = animatedThemeColor(target.surfaceVariant),
+    onSurfaceVariant = animatedThemeColor(target.onSurfaceVariant),
+    outline = animatedThemeColor(target.outline),
+    outlineVariant = animatedThemeColor(target.outlineVariant),
+    surfaceContainerLowest = animatedThemeColor(target.surfaceContainerLowest),
+    surfaceContainerLow = animatedThemeColor(target.surfaceContainerLow),
+    surfaceContainer = animatedThemeColor(target.surfaceContainer),
+    surfaceContainerHigh = animatedThemeColor(target.surfaceContainerHigh),
+    surfaceContainerHighest = animatedThemeColor(target.surfaceContainerHighest),
+    scrim = animatedThemeColor(target.scrim),
+)
+
+@Composable
 fun MinibrowserTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
-    val scheme = if (darkTheme) NeutralDarkScheme else NeutralLightScheme
+    val targetScheme = if (darkTheme) NeutralDarkScheme else NeutralLightScheme
+    val scheme = animatedColorScheme(targetScheme)
     CompositionLocalProvider(LocalContentColor provides scheme.onBackground) {
         MaterialTheme(
             colorScheme = scheme,
