@@ -122,6 +122,7 @@ internal fun TopBar(
     onToggleBookmark: () -> Unit,
     onBookmarks: () -> Unit,
     onHistory: () -> Unit,
+    onDownloads: () -> Unit,
     onSettings: () -> Unit,
     onTranslate: () -> Unit,
     onToggleDesktop: () -> Unit,
@@ -468,6 +469,7 @@ internal fun TopBar(
             onToggleBookmark = onToggleBookmark,
             onBookmarks = onBookmarks,
             onHistory = onHistory,
+            onDownloads = onDownloads,
             onFind = onFind,
             onShare = onShare,
             onTranslate = onTranslate,
@@ -548,6 +550,7 @@ private fun MenuSheet(
     onToggleBookmark: () -> Unit,
     onBookmarks: () -> Unit,
     onHistory: () -> Unit,
+    onDownloads: () -> Unit,
     onFind: () -> Unit,
     onShare: () -> Unit,
     onTranslate: () -> Unit,
@@ -596,12 +599,29 @@ private fun MenuSheet(
         Spacer(Modifier.height(12.dp))
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.Top,
         ) {
-            QuickAction(AppIcons.Incognito, stringResource(R.string.private_tab_title)) { dismissThen(onNewPrivateTab) }
-            QuickAction(AppIcons.History, stringResource(R.string.history_title)) { dismissThen(onHistory) }
-            QuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) { dismissThen(onBookmarks) }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                QuickAction(AppIcons.Incognito, stringResource(R.string.private_tab_title)) {
+                    dismissThen(onNewPrivateTab)
+                }
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                QuickAction(AppIcons.History, stringResource(R.string.history_title)) {
+                    dismissThen(onHistory)
+                }
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                QuickAction(AppIcons.Download, stringResource(R.string.downloads_title)) {
+                    dismissThen(onDownloads)
+                }
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                QuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) {
+                    dismissThen(onBookmarks)
+                }
+            }
         }
         MenuDivider()
         SheetRow(
