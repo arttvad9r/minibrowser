@@ -33,13 +33,14 @@ class BrowserMenuLargeTextTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun menuKeepsThreeQuickActionsOnOneRowAndBottomActionReachable() {
+    fun menuKeepsFourQuickActionsOnOneRowAndBottomActionReachable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuDescription = context.getString(R.string.menu_content_description)
         val newTabLabel = context.getString(R.string.new_tab_title)
         val quickActionLabels = listOf(
             context.getString(R.string.private_tab_title),
             context.getString(R.string.history_title),
+            context.getString(R.string.downloads_title),
             context.getString(R.string.bookmarks_title),
         )
         val settingsLabel = context.getString(R.string.settings_title)
@@ -79,6 +80,7 @@ class BrowserMenuLargeTextTest {
                         onToggleBookmark = {},
                         onBookmarks = {},
                         onHistory = {},
+                        onDownloads = {},
                         onSettings = {},
                         onTranslate = {},
                         onToggleDesktop = {},
