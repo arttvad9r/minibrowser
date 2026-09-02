@@ -359,9 +359,9 @@ fun ChoiceRow(
 /**
  * Bottom sheet with native Material motion.
  *
- * Actions originating inside the sheet receive [dismissThen]: it animates SheetState to Hidden,
- * removes the sheet from composition through [onDismissRequest], and only then runs the action.
- * This prevents navigation/state changes from cutting the closing animation off in one frame.
+ * Actions originating inside the sheet receive [dismissThen]. The action runs immediately so
+ * navigation never waits on the sheet animation; the sheet then hides in parallel and is removed
+ * from composition once Material reports it hidden.
  */
 @Composable
 fun BrowserBottomSheet(
@@ -375,12 +375,10 @@ fun BrowserBottomSheet(
     val dismissThen: (after: () -> Unit) -> Unit = { after ->
         if (!dismissing) {
             dismissing = true
+            after()
             scope.launch {
                 state.hide()
-                if (!state.isVisible) {
-                    onDismissRequest()
-                    after()
-                }
+                if (!state.isVisible) onDismissRequest()
                 dismissing = false
             }
         }
