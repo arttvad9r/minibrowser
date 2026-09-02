@@ -3,44 +3,60 @@ package com.artt.minibrowser.ui
 import android.os.Build
 import android.view.View
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 
-/** Browser-specific motion vocabulary. Timings are semantic rather than screen-global. */
+/**
+ * Chromium Android motion vocabulary.
+ *
+ * These values mirror the timing families used by Chrome's Android toolbar/start-surface code:
+ * 225 ms transforms, 100 ms fast toolbar fades, 150 ms popup/icon fades, 300 ms tab transforms,
+ * and 250 ms theme-color transitions. Keep app motion on these families instead of inventing
+ * per-screen timings.
+ */
 object MotionTokens {
-    const val Press = 90
-    const val IconState = 140
-    const val Popup = 170
-    const val Destination = 190
-    const val Content = 210
+    const val Press = 100
+    const val ToolbarButton = 100
+    const val IconState = 150
+    const val Popup = 150
+    const val TabBackgroundFade = 150
+    const val ListChange = 200
+    const val Destination = 225
+    const val Content = 225
+    const val ToolbarFocus = 225
+    const val Theme = 250
     const val TabTransform = 300
-    const val GestureSettle = 190
+    const val GestureSettle = 200
 }
 
+/** Chromium's legacy BakedBezier curves, exposed as Compose easing values. */
 object MotionEasing {
-    val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-    val Emphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+    /** FastOutSlowInInterpolator / former TRANSFORM_CURVE. */
+    val Transform = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
+
+    /** LinearOutSlowInInterpolator / former FADE_IN_CURVE. */
+    val FadeIn = CubicBezierEasing(0f, 0f, 0.2f, 1f)
+
+    /** FastOutLinearInInterpolator / former FADE_OUT_CURVE. */
+    val FadeOut = CubicBezierEasing(0.4f, 0f, 1f, 1f)
+
+    // Compatibility aliases for existing call sites. New code should prefer the semantic names.
+    val Standard = Transform
+    val Emphasized = Transform
 }
 
 /**
- * Ask Android 15+ for the high frame-rate category only while app-chrome motion is actually
- * producing frames. This is reserved for the tab overview, whose large preview transforms benefit
- * from an explicit high-rate vote. Short internal destination transitions intentionally rely on the
- * display's existing adaptive/touch policy so entering a screen does not itself trigger a refresh
- * category switch.
+ * Ask Android 15+ for the high frame-rate category only while the tab overview is transforming.
+ * Short toolbar/menu/destination motion follows the display's normal adaptive/touch policy, just
+ * like Chromium avoids changing refresh policy for every small UI transition.
  */
 @Composable
 fun HighFrameRateDuringMotion(active: Boolean) {
@@ -56,30 +72,27 @@ fun HighFrameRateDuringMotion(active: Boolean) {
     }
 }
 
-/** App-chrome click with immediate press feedback plus the platform/Material indication. */
+/**
+ * Chrome-style app-chrome click: rely on the bounded platform/Material ripple only. The previous
+ * extra whole-control alpha animation made every press visibly dim twice and added animation work
+ * on top of the ripple.
+ */
 @Composable
 fun Modifier.softClickable(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val pressAlpha by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.82f else 1f,
-        animationSpec = tween(MotionTokens.Press, easing = MotionEasing.Standard),
-        label = "browser press feedback",
+    return clickable(
+        interactionSource = interactionSource,
+        indication = LocalIndication.current,
+        enabled = enabled,
+        role = Role.Button,
+        onClick = onClick,
     )
-    return graphicsLayer { alpha = pressAlpha }
-        .clickable(
-            interactionSource = interactionSource,
-            indication = LocalIndication.current,
-            enabled = enabled,
-            role = Role.Button,
-            onClick = onClick,
-        )
 }
 
-/** Same single-indication behavior while preserving long-click and button semantics. */
+/** Same single-ripple behavior while preserving long-click and button semantics. */
 @Composable
 fun Modifier.softCombinedClickable(
     enabled: Boolean = true,
@@ -88,20 +101,13 @@ fun Modifier.softCombinedClickable(
     onClick: () -> Unit,
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val pressAlpha by animateFloatAsState(
-        targetValue = if (pressed && enabled) 0.82f else 1f,
-        animationSpec = tween(MotionTokens.Press, easing = MotionEasing.Standard),
-        label = "browser combined press feedback",
+    return combinedClickable(
+        interactionSource = interactionSource,
+        indication = LocalIndication.current,
+        enabled = enabled,
+        role = Role.Button,
+        onLongClickLabel = onLongClickLabel,
+        onLongClick = onLongClick,
+        onClick = onClick,
     )
-    return graphicsLayer { alpha = pressAlpha }
-        .combinedClickable(
-            interactionSource = interactionSource,
-            indication = LocalIndication.current,
-            enabled = enabled,
-            role = Role.Button,
-            onLongClickLabel = onLongClickLabel,
-            onLongClick = onLongClick,
-            onClick = onClick,
-        )
 }
