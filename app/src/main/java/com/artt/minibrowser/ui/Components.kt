@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +67,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
 import com.artt.minibrowser.net.webUriHost
+import kotlinx.coroutines.launch
 
 fun hostOf(url: String): String = webUriHost(url).orEmpty()
 
@@ -356,11 +358,9 @@ fun ChoiceRow(
 }
 
 /**
- * Bottom sheet with native Material motion.
- *
- * Actions originating inside the sheet receive [dismissThen]. Route-changing actions remove the
- * modal from composition in the same event as navigation, so its scrim cannot linger over the new
- * destination. Gesture/outside/back dismissal still uses Material's native sheet state.
+ * Bottom sheet using Chromium's current BottomSheet settle timing while retaining Material's sheet
+ * implementation, gestures and semantics. Route-changing actions run immediately; the sheet then
+ * performs Chromium's 250 ms shrink animation over the destination instead of delaying the action.
  */
 @Composable
 fun BrowserBottomSheet(
@@ -368,30 +368,58 @@ fun BrowserBottomSheet(
     content: @Composable (dismissThen: (after: () -> Unit) -> Unit) -> Unit,
 ) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
     var dismissing by remember { mutableStateOf(false) }
+
+    val parentColorScheme = MaterialTheme.colorScheme
+    val parentTypography = MaterialTheme.typography
+    val parentShapes = MaterialTheme.shapes
+    val parentMotionScheme = MaterialTheme.motionScheme
+    val sheetMotionScheme = remember(parentMotionScheme) {
+        chromiumBottomSheetMotionScheme(parentMotionScheme)
+    }
 
     val dismissThen: (after: () -> Unit) -> Unit = { after ->
         if (!dismissing) {
             dismissing = true
-            onDismissRequest()
             after()
+            scope.launch {
+                state.hide()
+                if (!state.isVisible) onDismissRequest()
+                dismissing = false
+            }
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        sheetState = state,
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = Radius.sheet,
+    MaterialTheme(
+        colorScheme = parentColorScheme,
+        typography = parentTypography,
+        shapes = parentShapes,
+        motionScheme = sheetMotionScheme,
     ) {
-        Column(
-            Modifier
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 16.dp),
+        ModalBottomSheet(
+            onDismissRequest = onDismissRequest,
+            sheetState = state,
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = Radius.sheet,
         ) {
-            content(dismissThen)
+            // Do not leak the sheet-only motion overrides into switches/text/buttons inside it.
+            MaterialTheme(
+                colorScheme = parentColorScheme,
+                typography = parentTypography,
+                shapes = parentShapes,
+                motionScheme = parentMotionScheme,
+            ) {
+                Column(
+                    Modifier
+                        .imePadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 16.dp),
+                ) {
+                    content(dismissThen)
+                }
+            }
         }
     }
 }
