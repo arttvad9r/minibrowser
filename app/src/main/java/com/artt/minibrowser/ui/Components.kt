@@ -43,6 +43,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -358,9 +359,10 @@ fun ChoiceRow(
 }
 
 /**
- * Bottom sheet using Chromium's current BottomSheet settle timing while retaining Material's sheet
- * implementation, gestures and semantics. Route-changing actions run immediately; the sheet then
- * performs Chromium's 250 ms shrink animation over the destination instead of delaying the action.
+ * Bottom sheet with Chromium's current settle timing. The Material3 version pinned by this project
+ * keeps SheetState's animation specs internal, so [applyChromiumBottomSheetMotion] updates those
+ * library-owned fields after Material's own SideEffect. This preserves Material's gestures and
+ * accessibility while using Chromium's 350 ms expand / 250 ms shrink EMPHASIZED motion.
  */
 @Composable
 fun BrowserBottomSheet(
@@ -370,14 +372,6 @@ fun BrowserBottomSheet(
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     var dismissing by remember { mutableStateOf(false) }
-
-    val parentColorScheme = MaterialTheme.colorScheme
-    val parentTypography = MaterialTheme.typography
-    val parentShapes = MaterialTheme.shapes
-    val parentMotionScheme = MaterialTheme.motionScheme
-    val sheetMotionScheme = remember(parentMotionScheme) {
-        chromiumBottomSheetMotionScheme(parentMotionScheme)
-    }
 
     val dismissThen: (after: () -> Unit) -> Unit = { after ->
         if (!dismissing) {
@@ -391,37 +385,26 @@ fun BrowserBottomSheet(
         }
     }
 
-    MaterialTheme(
-        colorScheme = parentColorScheme,
-        typography = parentTypography,
-        shapes = parentShapes,
-        motionScheme = sheetMotionScheme,
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = state,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = Radius.sheet,
     ) {
-        ModalBottomSheet(
-            onDismissRequest = onDismissRequest,
-            sheetState = state,
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = Radius.sheet,
+        Column(
+            Modifier
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
         ) {
-            // Do not leak the sheet-only motion overrides into switches/text/buttons inside it.
-            MaterialTheme(
-                colorScheme = parentColorScheme,
-                typography = parentTypography,
-                shapes = parentShapes,
-                motionScheme = parentMotionScheme,
-            ) {
-                Column(
-                    Modifier
-                        .imePadding()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 16.dp),
-                ) {
-                    content(dismissThen)
-                }
-            }
+            content(dismissThen)
         }
     }
+
+    // Registered after ModalBottomSheet's own SideEffect, so these exact Chromium specs win before
+    // the sheet's show LaunchedEffect or any subsequent programmatic hide call executes.
+    SideEffect { applyChromiumBottomSheetMotion(state) }
 }
 
 /** Действия над закладкой без зависимости reusable UI от data-layer модели. */
