@@ -101,7 +101,8 @@ internal fun SettingsScreen(
                 Column(
                     Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 20.dp, bottom = 12.dp),
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 12.dp),
                 ) {
                     GroupLabel(stringResource(R.string.settings_group_search))
                     SettingsGroup {
