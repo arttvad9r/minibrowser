@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -150,10 +151,10 @@ internal fun TopBar(
         label = "omnibox radius",
     )
     val fieldColor by animateColorAsState(
-        targetValue = if (focused) {
-            MaterialTheme.colorScheme.surfaceContainer
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
+        targetValue = when {
+            focused -> MaterialTheme.colorScheme.surfaceContainer
+            state.isPrivate -> MaterialTheme.colorScheme.surfaceContainerHigh
+            else -> MaterialTheme.colorScheme.surfaceVariant
         },
         animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
         label = "omnibox surface",
@@ -578,8 +579,8 @@ private fun MenuSheet(
                 Modifier.weight(1f),
             ) { dismissThen(onForward) }
             MenuNavigationAction(
-                Icons.Filled.Refresh,
-                stringResource(R.string.action_reload),
+                if (state.isLoading) Icons.Filled.Stop else Icons.Filled.Refresh,
+                stringResource(if (state.isLoading) R.string.action_stop else R.string.action_reload),
                 httpPage,
                 Modifier.weight(1f),
             ) { dismissThen(onReload) }
@@ -697,7 +698,21 @@ private fun MenuNavigationAction(
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, null, Modifier.size(23.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+        AnimatedContent(
+            targetState = icon,
+            transitionSpec = {
+                fadeIn(tween(MotionTokens.IconState))
+                    .togetherWith(fadeOut(tween(MotionTokens.IconState)))
+            },
+            label = "menu navigation icon",
+        ) { targetIcon ->
+            Icon(
+                targetIcon,
+                null,
+                Modifier.size(23.dp),
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+            )
+        }
     }
 }
 

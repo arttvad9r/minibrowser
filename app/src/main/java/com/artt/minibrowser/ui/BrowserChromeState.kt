@@ -18,6 +18,7 @@ internal data class BrowserChromeUiState(
     val url: String = "",
     val isWebPage: Boolean = false,
     val isPrivate: Boolean = false,
+    val isLoading: Boolean = false,
     val securityState: BrowserSecurityUiState = BrowserSecurityUiState.Unknown,
     val canGoBack: Boolean = false,
     val canGoForward: Boolean = false,

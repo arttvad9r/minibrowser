@@ -105,6 +105,7 @@ internal fun BrowserRoute(
     val currentSession = currentTab?.session
     val focusManager = LocalFocusManager.current
     val inFullscreen = currentTab?.fullscreen == true
+    val isLoading = (currentTab?.progress ?: -1f) >= 0f
 
     BrowserRootEffects(
         screen = screen,
@@ -152,6 +153,7 @@ internal fun BrowserRoute(
         url = currentTab?.url.orEmpty(),
         isWebPage = currentTab?.url?.let(::isValidWebUri) == true,
         isPrivate = currentTab?.isPrivate == true,
+        isLoading = isLoading,
         securityState = chromeSecurityState,
         canGoBack = currentTab?.canGoBack == true,
         canGoForward = currentTab?.canGoForward == true,
@@ -214,7 +216,9 @@ internal fun BrowserRoute(
         },
         onBack = { currentSession?.goBack() },
         onForward = { currentSession?.goForward() },
-        onReload = { currentSession?.reload() },
+        onReload = {
+            if (isLoading) currentSession?.stop() else currentSession?.reload()
+        },
         onSiteInfo = { browserViewModel.showSiteInfo(true) },
         onSwitcher = {
             tabPreviewStore.captureCurrent()
