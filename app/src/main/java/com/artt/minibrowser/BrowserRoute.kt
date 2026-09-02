@@ -8,6 +8,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
@@ -98,6 +101,7 @@ internal fun BrowserRoute(
     val showSwitcher = browserUi.showSwitcher
     val showFind = browserUi.showFind
     val showSiteInfo = browserUi.showSiteInfo
+    var downloadsReturnToSettings by rememberSaveable { mutableStateOf(false) }
 
     val tabs by tabManager.tabs.collectAsStateWithLifecycle()
     val currentId by tabManager.currentId.collectAsStateWithLifecycle()
@@ -233,6 +237,10 @@ internal fun BrowserRoute(
         },
         onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
         onHistory = { browserViewModel.screen(BrowserScreen.History) },
+        onDownloads = {
+            downloadsReturnToSettings = false
+            browserViewModel.screen(BrowserScreen.Downloads)
+        },
         onShare = { browserIntents.shareUrl(currentTab?.url) },
         onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
         onToggleAdblock = toggleAdblock,
@@ -321,7 +329,10 @@ internal fun BrowserRoute(
                         onRetryAdblock = retryAdblock,
                         onVot = toggleVot,
                         onRetryVot = retryVot,
-                        onDownloads = { browserViewModel.screen(BrowserScreen.Downloads) },
+                        onDownloads = {
+                            downloadsReturnToSettings = true
+                            browserViewModel.screen(BrowserScreen.Downloads)
+                        },
                         onClearData = { withBookmarks ->
                             browserDataViewModel.clear(withBookmarks, browserDataClearer)
                         },
@@ -332,7 +343,11 @@ internal fun BrowserRoute(
             if (screen == BrowserScreen.Downloads) {
                 Box(Modifier.fillMaxSize().accessibilityPane(downloadsPaneTitle)) {
                     MotionDownloadsScreen(
-                        onBack = { browserViewModel.screen(BrowserScreen.Settings) },
+                        onBack = {
+                            browserViewModel.screen(
+                                if (downloadsReturnToSettings) BrowserScreen.Settings else BrowserScreen.Browser,
+                            )
+                        },
                     )
                 }
             }
