@@ -27,7 +27,10 @@ import java.io.File
 
 /** Downloads stays in the same Compose navigation layer as Settings/History/Bookmarks. */
 @Composable
-internal fun MotionDownloadsScreen(onBack: () -> Unit) {
+internal fun MotionDownloadsScreen(
+    onBack: () -> Unit,
+    backEnabled: Boolean = true,
+) {
     val context = LocalContext.current
     val applicationContext = context.applicationContext
     val repository = remember(applicationContext) { DownloadsRepository(applicationContext) }
@@ -45,6 +48,7 @@ internal fun MotionDownloadsScreen(onBack: () -> Unit) {
         onOpen = { id ->
             state.downloads.firstOrNull { it.id == id }?.let { openDownload(context, it) }
         },
+        backEnabled = backEnabled,
     )
 }
 

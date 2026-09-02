@@ -81,12 +81,13 @@ internal fun SettingsScreen(
     onDownloads: () -> Unit,
     onClearData: (withBookmarks: Boolean) -> Unit,
     onTranslateLang: (String) -> Unit,
+    backEnabled: Boolean = true,
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
 
-    BrowserMotionScreen(onBack = onBack, fromBottom = true) { requestExit ->
+    BrowserMotionScreen(onBack = onBack, fromBottom = true, backEnabled = backEnabled) { requestExit ->
         CenteredSinglePane(maxWidth = 720.dp) {
             Column(Modifier.fillMaxSize()) {
                 Row(

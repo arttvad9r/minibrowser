@@ -1,48 +1,97 @@
 (() => {
   const DIRECTIVE = "interactive-widget=resizes-content";
   const DIRECTIVE_PATTERN = /^interactive-widget\s*=/i;
+  const SYNTHETIC_ATTRIBUTE = "data-minibrowser-viewport";
 
-  function enforceViewportPolicy() {
-    // Gecko currently behaves most reliably when the page's original viewport meta
-    // is modified in place. Do not append a second viewport meta tag.
-    const viewport = document.head?.querySelector('meta[name="viewport" i]');
-    if (!viewport) return;
+  let observedHead = null;
+  let headObserver = null;
+  let applying = false;
 
-    const parts = (viewport.getAttribute("content") || "")
+  function withDirective(content) {
+    const parts = (content || "")
       .split(",")
       .map((part) => part.trim())
       .filter(Boolean)
       .filter((part) => !DIRECTIVE_PATTERN.test(part));
 
     parts.push(DIRECTIVE);
-    const next = parts.join(", ");
-    if (viewport.getAttribute("content") !== next) {
-      viewport.setAttribute("content", next);
+    return parts.join(", ");
+  }
+
+  function enforceViewportPolicy() {
+    if (applying) return;
+    const head = document.head;
+    if (!head) return;
+
+    applying = true;
+    try {
+      let viewports = Array.from(head.querySelectorAll('meta[name="viewport" i]'));
+      const authored = viewports.filter(
+        (viewport) => !viewport.hasAttribute(SYNTHETIC_ATTRIBUTE),
+      );
+
+      // Authenticated ChatGPT can rebuild its document head during SPA/auth transitions. Gecko may
+      // decide keyboard viewport behavior before ChatGPT appends its own viewport tag, so keep a
+      // temporary canonical viewport present from the first available <head>.
+      if (authored.length === 0) {
+        let synthetic = viewports.find((viewport) =>
+          viewport.hasAttribute(SYNTHETIC_ATTRIBUTE),
+        );
+        if (!synthetic) {
+          synthetic = document.createElement("meta");
+          synthetic.name = "viewport";
+          synthetic.setAttribute(SYNTHETIC_ATTRIBUTE, "true");
+          synthetic.content = `width=device-width, initial-scale=1, ${DIRECTIVE}`;
+          head.prepend(synthetic);
+        } else {
+          synthetic.content = withDirective(synthetic.content);
+        }
+        return;
+      }
+
+      // Once the site's real viewport exists, remove our bootstrap tag and modify every authored
+      // viewport in place. Handling all tags avoids Gecko falling back to a later replacement tag.
+      viewports
+        .filter((viewport) => viewport.hasAttribute(SYNTHETIC_ATTRIBUTE))
+        .forEach((viewport) => viewport.remove());
+
+      authored.forEach((viewport) => {
+        const next = withDirective(viewport.getAttribute("content"));
+        if (viewport.getAttribute("content") !== next) {
+          viewport.setAttribute("content", next);
+        }
+      });
+    } finally {
+      applying = false;
     }
   }
 
-  function observeHead() {
+  function bindCurrentHead() {
     const head = document.head;
-    if (!head) return false;
+    if (!head) return;
+
+    if (head !== observedHead) {
+      headObserver?.disconnect();
+      observedHead = head;
+      headObserver = new MutationObserver(enforceViewportPolicy);
+      headObserver.observe(head, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["content", "name"],
+      });
+    }
 
     enforceViewportPolicy();
-    const observer = new MutationObserver(enforceViewportPolicy);
-    observer.observe(head, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["content", "name"],
-    });
-    return true;
   }
 
-  if (!observeHead()) {
-    // document_start can run before <head> exists. Watch only until it appears,
-    // then move observation into <head> so normal ChatGPT body updates/streaming
-    // do not trigger this compatibility hook.
-    const bootstrapObserver = new MutationObserver(() => {
-      if (observeHead()) bootstrapObserver.disconnect();
-    });
-    bootstrapObserver.observe(document, { subtree: true, childList: true });
-  }
+  // Keep watching the document for the lifetime of the SPA. A one-time observer bound to the first
+  // <head> silently stops helping if the authenticated app replaces that node after sign-in.
+  const documentObserver = new MutationObserver(bindCurrentHead);
+  documentObserver.observe(document.documentElement || document, {
+    subtree: true,
+    childList: true,
+  });
+
+  bindCurrentHead();
 })();

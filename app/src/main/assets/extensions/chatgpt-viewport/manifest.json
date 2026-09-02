@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Minibrowser ChatGPT viewport compatibility",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Keeps ChatGPT's layout viewport resized with the Android software keyboard.",
   "browser_specific_settings": {
     "gecko": {
@@ -11,7 +11,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://chatgpt.com/*"
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
       ],
       "js": [
         "viewport.js"

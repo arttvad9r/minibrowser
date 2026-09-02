@@ -13,7 +13,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -29,33 +28,27 @@ import kotlinx.coroutines.launch
 /**
  * Full-screen app destination over the browser.
  *
- * Entry and predictive back use restrained spatial motion. Ordinary taps are never held behind an
- * exit animation: the requested navigation runs immediately, while predictive back remains fully
+ * The destination surface and its content move as one layer. Keeping the background inside the
+ * moving layer avoids the visible "background swaps first, content catches up" frame that made
+ * History entry feel disconnected. Ordinary taps remain immediate; predictive back is still
  * gesture-driven.
  */
 @Composable
 fun BrowserMotionScreen(
     onBack: () -> Unit,
     fromBottom: Boolean = true,
+    backEnabled: Boolean = true,
     content: @Composable (requestExit: (() -> Unit) -> Unit) -> Unit,
 ) {
     val reveal = remember(fromBottom) { Animatable(if (fromBottom) 0f else 1f) }
     val scope = rememberCoroutineScope()
     var predictiveBackActive by remember { mutableStateOf(false) }
-    var activeAnimations by remember { mutableIntStateOf(0) }
-
-    HighFrameRateDuringMotion(activeAnimations > 0 || predictiveBackActive)
 
     suspend fun animateReveal(target: Float) {
-        activeAnimations++
-        try {
-            reveal.animateTo(
-                target,
-                animationSpec = tween(MotionTokens.Destination, easing = MotionEasing.Standard),
-            )
-        } finally {
-            activeAnimations--
-        }
+        reveal.animateTo(
+            target,
+            animationSpec = tween(MotionTokens.Destination, easing = MotionEasing.Standard),
+        )
     }
 
     LaunchedEffect(Unit) {
@@ -66,46 +59,41 @@ fun BrowserMotionScreen(
         if (!predictiveBackActive) action()
     }
 
-    PredictiveBackHandler { progress ->
-        predictiveBackActive = true
-        try {
-            if (fromBottom) {
-                progress.collect { event ->
-                    reveal.snapTo(predictiveBackReveal(event.progress))
+    if (backEnabled) {
+        PredictiveBackHandler { progress ->
+            predictiveBackActive = true
+            try {
+                if (fromBottom) {
+                    progress.collect { event ->
+                        reveal.snapTo(predictiveBackReveal(event.progress))
+                    }
+                    reveal.snapTo(0f)
+                } else {
+                    progress.collect { }
                 }
-                reveal.snapTo(0f)
-            } else {
-                progress.collect { }
+                predictiveBackActive = false
+                onBack()
+            } catch (cancelled: CancellationException) {
+                predictiveBackActive = false
+                if (fromBottom) scope.launch { animateReveal(1f) }
+                throw cancelled
             }
-            predictiveBackActive = false
-            onBack()
-        } catch (cancelled: CancellationException) {
-            predictiveBackActive = false
-            if (fromBottom) scope.launch { animateReveal(1f) }
-            throw cancelled
         }
     }
 
-    val travelPx = with(LocalDensity.current) { 24.dp.toPx() }
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
+    val travelPx = with(LocalDensity.current) { 16.dp.toPx() }
+    Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
                 .graphicsLayer {
                     if (fromBottom) {
                         val progress = reveal.value.coerceIn(0f, 1f)
                         translationX = (1f - progress) * travelPx
-                        alpha = 0.88f + progress * 0.12f
-                        val scale = 0.985f + progress * 0.015f
-                        scaleX = scale
-                        scaleY = scale
                     }
-                },
+                }
+                .background(MaterialTheme.colorScheme.background)
+                .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             content(::requestExit)
         }

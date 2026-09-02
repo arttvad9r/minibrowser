@@ -79,12 +79,13 @@ internal fun DownloadsScreenContent(
     onBack: () -> Unit,
     onClear: () -> Unit,
     onOpen: (String) -> Unit,
+    backEnabled: Boolean = true,
 ) {
     val downloads = state.downloads
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
     var showClearConfirm by remember { mutableStateOf(false) }
 
-    BrowserMotionScreen(onBack = onBack) { requestExit ->
+    BrowserMotionScreen(onBack = onBack, backEnabled = backEnabled) { requestExit ->
         CenteredSinglePane {
             Column(
                 Modifier

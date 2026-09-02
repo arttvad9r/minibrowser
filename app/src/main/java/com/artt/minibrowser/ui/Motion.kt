@@ -24,8 +24,8 @@ object MotionTokens {
     const val Press = 90
     const val IconState = 140
     const val Popup = 170
+    const val Destination = 190
     const val Content = 210
-    const val Destination = 250
     const val TabTransform = 300
     const val GestureSettle = 190
 }
@@ -37,9 +37,10 @@ object MotionEasing {
 
 /**
  * Ask Android 15+ for the high frame-rate category only while app-chrome motion is actually
- * producing frames. The hint is applied to the Compose host View only, so it does not override the
- * independently rendered GeckoView child. Restoring the previous vote lets Android return to its
- * normal/adaptive refresh policy as soon as the transition is finished.
+ * producing frames. This is reserved for the tab overview, whose large preview transforms benefit
+ * from an explicit high-rate vote. Short internal destination transitions intentionally rely on the
+ * display's existing adaptive/touch policy so entering a screen does not itself trigger a refresh
+ * category switch.
  */
 @Composable
 fun HighFrameRateDuringMotion(active: Boolean) {
