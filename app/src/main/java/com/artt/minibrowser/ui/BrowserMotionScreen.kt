@@ -20,6 +20,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -27,9 +29,9 @@ import kotlinx.coroutines.launch
 /**
  * Full-screen app destination over the browser.
  *
- * The destination surface stays spatially fixed. Entry, exit and predictive back use only a
- * restrained opacity change, so returning from settings/history/bookmarks does not look like a
- * sheet sliding in the wrong direction and cannot expose an empty Gecko frame underneath.
+ * Internal destinations use a restrained depth/side transition instead of a nearly invisible fade.
+ * Predictive back drives the same transform directly, so the surface follows the user's gesture and
+ * cancellation returns it to rest without a discontinuity.
  */
 @Composable
 fun BrowserMotionScreen(
@@ -48,7 +50,10 @@ fun BrowserMotionScreen(
     suspend fun animateReveal(target: Float) {
         activeAnimations++
         try {
-            reveal.animateTo(target, animationSpec = tween(MotionTokens.Screen))
+            reveal.animateTo(
+                target,
+                animationSpec = tween(MotionTokens.Destination, easing = MotionEasing.Standard),
+            )
         } finally {
             activeAnimations--
         }
@@ -90,6 +95,7 @@ fun BrowserMotionScreen(
         }
     }
 
+    val travelPx = with(LocalDensity.current) { 24.dp.toPx() }
     Box(
         Modifier
             .fillMaxSize()
@@ -101,8 +107,12 @@ fun BrowserMotionScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .graphicsLayer {
                     if (fromBottom) {
-                        // Neutral fade only: no directional slide on destination exit.
-                        alpha = 0.96f + reveal.value * 0.04f
+                        val progress = reveal.value.coerceIn(0f, 1f)
+                        translationX = (1f - progress) * travelPx
+                        alpha = 0.88f + progress * 0.12f
+                        val scale = 0.985f + progress * 0.015f
+                        scaleX = scale
+                        scaleY = scale
                     }
                 },
         ) {

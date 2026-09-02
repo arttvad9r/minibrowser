@@ -5,6 +5,12 @@
 
 package com.artt.minibrowser.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -94,7 +100,17 @@ internal fun BrowserPageContent(
             .fillMaxSize()
             .windowInsetsPadding(horizontalSafeInsets),
     ) {
-        if (!state.inFullscreen) {
+        AnimatedVisibility(
+            visible = !state.inFullscreen,
+            enter = slideInVertically(
+                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                initialOffsetY = { -it / 2 },
+            ) + fadeIn(tween(MotionTokens.Popup)),
+            exit = slideOutVertically(
+                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                targetOffsetY = { -it / 2 },
+            ) + fadeOut(tween(MotionTokens.Popup)),
+        ) {
             CenteredBrowserChrome(Modifier.windowInsetsPadding(topSafeInsets)) {
                 TopBar(
                     state.chrome,
@@ -127,7 +143,17 @@ internal fun BrowserPageContent(
                 )
             }
         }
-        if (state.showFind && !state.inFullscreen) {
+        AnimatedVisibility(
+            visible = state.showFind && !state.inFullscreen,
+            enter = slideInVertically(
+                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                initialOffsetY = { -it / 2 },
+            ) + fadeIn(tween(MotionTokens.Popup)),
+            exit = slideOutVertically(
+                animationSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
+                targetOffsetY = { -it / 2 },
+            ) + fadeOut(tween(MotionTokens.Popup)),
+        ) {
             CenteredBrowserChrome {
                 findContent?.invoke()
             }
@@ -151,19 +177,29 @@ internal fun BrowserPageContent(
                     browserContent()
                 }
             }
-            if (state.showStart) {
+            AnimatedVisibility(
+                visible = state.showStart,
+                enter = fadeIn(tween(MotionTokens.Content)),
+                exit = fadeOut(tween(MotionTokens.Content)),
+            ) {
                 startPageContent()
             }
             val loadError = state.loadError
-            if (!state.showStart && loadError != null) {
-                val message = stringResource(
-                    when (loadError) {
-                        BrowserPageLoadErrorUiState.Security -> R.string.page_error_security
-                        BrowserPageLoadErrorUiState.Network -> R.string.page_error_network
-                        BrowserPageLoadErrorUiState.Generic -> R.string.page_error_generic
-                    },
-                )
-                ErrorOverlay(message, actions.onReload)
+            AnimatedVisibility(
+                visible = !state.showStart && loadError != null,
+                enter = fadeIn(tween(MotionTokens.Content)),
+                exit = fadeOut(tween(MotionTokens.Content)),
+            ) {
+                if (loadError != null) {
+                    val message = stringResource(
+                        when (loadError) {
+                            BrowserPageLoadErrorUiState.Security -> R.string.page_error_security
+                            BrowserPageLoadErrorUiState.Network -> R.string.page_error_network
+                            BrowserPageLoadErrorUiState.Generic -> R.string.page_error_generic
+                        },
+                    )
+                    ErrorOverlay(message, actions.onReload)
+                }
             }
         }
     }

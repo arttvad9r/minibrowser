@@ -2,22 +2,37 @@ package com.artt.minibrowser.ui
 
 import android.os.Build
 import android.view.View
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 
-/** Shared timing vocabulary; app-level motion is intentionally minimal. */
+/** Browser-specific motion vocabulary. Timings are semantic rather than screen-global. */
 object MotionTokens {
-    // Full-screen chrome needs enough real frames to read as motion rather than a jump.
-    // The duration is refresh-rate independent: 180 ms is ~11 frames at 60 Hz and ~22 at 120 Hz.
-    const val Screen = 180
+    const val Press = 90
+    const val IconState = 140
+    const val Popup = 170
+    const val Content = 210
+    const val Destination = 250
+    const val TabTransform = 300
+    const val GestureSettle = 190
+}
+
+object MotionEasing {
+    val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+    val Emphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 }
 
 /**
@@ -40,20 +55,27 @@ fun HighFrameRateDuringMotion(active: Boolean) {
     }
 }
 
-/** App-chrome click using the platform/Material indication and button semantics. */
+/** App-chrome click with immediate press feedback plus the platform/Material indication. */
 @Composable
 fun Modifier.softClickable(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
-    return clickable(
-        interactionSource = interactionSource,
-        indication = LocalIndication.current,
-        enabled = enabled,
-        role = Role.Button,
-        onClick = onClick,
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.82f else 1f,
+        animationSpec = tween(MotionTokens.Press, easing = MotionEasing.Standard),
+        label = "browser press feedback",
     )
+    return graphicsLayer { alpha = pressAlpha }
+        .clickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            enabled = enabled,
+            role = Role.Button,
+            onClick = onClick,
+        )
 }
 
 /** Same single-indication behavior while preserving long-click and button semantics. */
@@ -65,13 +87,20 @@ fun Modifier.softCombinedClickable(
     onClick: () -> Unit,
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
-    return combinedClickable(
-        interactionSource = interactionSource,
-        indication = LocalIndication.current,
-        enabled = enabled,
-        role = Role.Button,
-        onLongClickLabel = onLongClickLabel,
-        onLongClick = onLongClick,
-        onClick = onClick,
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.82f else 1f,
+        animationSpec = tween(MotionTokens.Press, easing = MotionEasing.Standard),
+        label = "browser combined press feedback",
     )
+    return graphicsLayer { alpha = pressAlpha }
+        .combinedClickable(
+            interactionSource = interactionSource,
+            indication = LocalIndication.current,
+            enabled = enabled,
+            role = Role.Button,
+            onLongClickLabel = onLongClickLabel,
+            onLongClick = onLongClick,
+            onClick = onClick,
+        )
 }

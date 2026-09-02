@@ -1,5 +1,9 @@
 package com.artt.minibrowser.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -8,11 +12,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Reflect Gecko's real progress without adding an artificial catch-up animation. */
+/** Reflect Gecko's real progress; only the indicator's appearance/disappearance is animated. */
 @Composable
 internal fun BrowserPageProgress(progress: Float) {
     Box(Modifier.fillMaxWidth().height(2.dp)) {
-        if (progress >= 0f) {
+        AnimatedVisibility(
+            visible = progress >= 0f,
+            enter = fadeIn(tween(MotionTokens.Popup)),
+            exit = fadeOut(tween(MotionTokens.Popup)),
+        ) {
             LinearProgressIndicator(
                 progress = { progress.coerceIn(0f, 1f) },
                 modifier = Modifier.fillMaxWidth().height(2.dp),
