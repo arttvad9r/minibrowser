@@ -12,10 +12,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -26,12 +26,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
- * Full-screen app destination over the browser.
- *
- * The destination surface and its content move as one layer. Keeping the background inside the
- * moving layer avoids the visible "background swaps first, content catches up" frame that made
- * History entry feel disconnected. Ordinary taps remain immediate; predictive back is still
- * gesture-driven.
+ * Full-screen browser destination using the same restrained transform family as Chromium Android.
+ * The complete surface moves together by a small horizontal offset; there is no scale or alpha
+ * cross-fade. Ordinary Back stays immediate so animation never blocks navigation.
  */
 @Composable
 fun BrowserMotionScreen(
@@ -47,7 +44,10 @@ fun BrowserMotionScreen(
     suspend fun animateReveal(target: Float) {
         reveal.animateTo(
             target,
-            animationSpec = tween(MotionTokens.Destination, easing = MotionEasing.Standard),
+            animationSpec = tween(
+                durationMillis = MotionTokens.Destination,
+                easing = MotionEasing.Transform,
+            ),
         )
     }
 
@@ -81,7 +81,9 @@ fun BrowserMotionScreen(
         }
     }
 
-    val travelPx = with(LocalDensity.current) { 16.dp.toPx() }
+    // Chrome's toolbar focus motion uses 10 dp for auxiliary controls. A 12 dp full-surface travel
+    // preserves the same visual weight without turning destination changes into obvious slides.
+    val travelPx = with(LocalDensity.current) { 12.dp.toPx() }
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier
