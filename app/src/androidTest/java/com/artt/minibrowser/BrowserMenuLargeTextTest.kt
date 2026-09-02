@@ -33,7 +33,7 @@ class BrowserMenuLargeTextTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun menuKeepsFourQuickActionsOnOneRowAndBottomActionReachable() {
+    fun menuKeepsFourQuickActionsSymmetricAndBottomActionReachable() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val menuDescription = context.getString(R.string.menu_content_description)
         val newTabLabel = context.getString(R.string.new_tab_title)
@@ -45,6 +45,7 @@ class BrowserMenuLargeTextTest {
         )
         val settingsLabel = context.getString(R.string.settings_title)
         val windowWidthPx = context.resources.displayMetrics.widthPixels.toFloat()
+        val symmetryTolerancePx = 4f * context.resources.displayMetrics.density
 
         composeRule.setContent {
             val density = LocalDensity.current
@@ -106,6 +107,21 @@ class BrowserMenuLargeTextTest {
                 abs(bounds.top - firstTop) <= 2f,
             )
         }
+
+        val centers = quickActionBounds.map { bounds -> (bounds.left + bounds.right) / 2f }
+        val gaps = centers.zipWithNext { left, right -> right - left }
+        assertTrue("Quick actions must preserve their requested order", gaps.all { it > 0f })
+        val referenceGap = gaps.first()
+        gaps.drop(1).forEach { gap ->
+            assertTrue(
+                "Quick action centers should be evenly spaced: $gaps",
+                abs(gap - referenceGap) <= symmetryTolerancePx,
+            )
+        }
+        assertTrue(
+            "Quick action row should be horizontally symmetric: $centers",
+            abs(centers.first() - (windowWidthPx - centers.last())) <= symmetryTolerancePx,
+        )
 
         composeRule.onNode(
             hasScrollAction() and hasAnyDescendant(hasText(settingsLabel)),
