@@ -137,9 +137,18 @@ internal fun DownloadsScreenContent(
                                     item,
                                     dateFormat,
                                     Modifier.animateItem(
-                                        fadeInSpec = tween(MotionTokens.Content),
-                                        placementSpec = tween(MotionTokens.Content),
-                                        fadeOutSpec = tween(MotionTokens.Content),
+                                        fadeInSpec = tween(
+                                            MotionTokens.IconState,
+                                            easing = MotionEasing.FadeIn,
+                                        ),
+                                        placementSpec = tween(
+                                            MotionTokens.ListChange,
+                                            easing = MotionEasing.Transform,
+                                        ),
+                                        fadeOutSpec = tween(
+                                            MotionTokens.IconState,
+                                            easing = MotionEasing.FadeOut,
+                                        ),
                                     ),
                                 ) { onOpen(item.id) }
                             }
@@ -187,7 +196,7 @@ private fun DownloadCard(
     }
     val iconTint by animateColorAsState(
         targetValue = targetIconTint,
-        animationSpec = tween(MotionTokens.IconState),
+        animationSpec = tween(MotionTokens.IconState, easing = MotionEasing.Transform),
         label = "download status color",
     )
     var cardModifier = modifier
@@ -214,8 +223,11 @@ private fun DownloadCard(
             AnimatedContent(
                 targetState = item.status,
                 transitionSpec = {
-                    fadeIn(tween(MotionTokens.Content))
-                        .togetherWith(fadeOut(tween(MotionTokens.IconState)))
+                    fadeIn(
+                        tween(MotionTokens.IconState, easing = MotionEasing.FadeIn),
+                    ).togetherWith(
+                        fadeOut(tween(MotionTokens.IconState, easing = MotionEasing.FadeOut)),
+                    )
                 },
                 label = "download status",
             ) { status ->
