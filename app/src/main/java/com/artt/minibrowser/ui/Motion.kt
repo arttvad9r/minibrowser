@@ -22,7 +22,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -63,6 +62,7 @@ object MotionTokens {
     const val TabListFade = 400
     const val TabRemove = 200
     const val TabMove = 250
+    const val TabNew = 300
     const val TabSwipeDismissThresholdDp = 144
     const val PaneFade = 120
     const val PaneSlide = 250
@@ -92,7 +92,7 @@ object MotionEasing {
     )
     val Emphasized = Easing { fraction -> emphasizedInterpolator.getInterpolation(fraction) }
 
-    /** m3_sys_motion_easing_standard. */
+    /** m3_sys_motion_easing_standard / Interpolators.STANDARD_INTERPOLATOR. */
     val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
     /** m3_sys_motion_easing_standard_accelerate. */
@@ -111,26 +111,36 @@ object MotionEasing {
     }
 }
 
+fun <T> chromiumBottomSheetExpandSpec(): FiniteAnimationSpec<T> = tween(
+    durationMillis = MotionTokens.BottomSheetExpand,
+    easing = MotionEasing.Emphasized,
+)
+
+fun <T> chromiumBottomSheetShrinkSpec(): FiniteAnimationSpec<T> = tween(
+    durationMillis = MotionTokens.BottomSheetShrink,
+    easing = MotionEasing.Emphasized,
+)
+
 /**
- * Material3 ModalBottomSheet reads its show/hide specs from MaterialTheme.motionScheme. Chromium's
- * BottomSheet uses 350 ms when expanding, 250 ms when shrinking, and Interpolators.EMPHASIZED for
- * both. Delegate every unrelated Material motion family back to the surrounding theme.
+ * The Material3 version used by MiniBrowser keeps SheetState's motion specs internal. Set the
+ * library-owned specs reflectively rather than duplicating ModalBottomSheet's gesture/semantics
+ * implementation. These are ordinary app-library fields, not Android hidden platform APIs.
+ *
+ * This keeps programmatic show/hide at Chromium's exact 350/250 ms EMPHASIZED timing. The drag
+ * settle spec is set to Chromium's 250 ms shrink timing, which covers the interactive dismiss path.
  */
-fun chromiumBottomSheetMotionScheme(base: MotionScheme): MotionScheme = object : MotionScheme {
-    override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = tween(
-        durationMillis = MotionTokens.BottomSheetExpand,
-        easing = MotionEasing.Emphasized,
-    )
-
-    override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = tween(
-        durationMillis = MotionTokens.BottomSheetShrink,
-        easing = MotionEasing.Emphasized,
-    )
-
-    override fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> = base.fastSpatialSpec()
-    override fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> = base.slowSpatialSpec()
-    override fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> = base.defaultEffectsSpec()
-    override fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> = base.slowEffectsSpec()
+fun applyChromiumBottomSheetMotion(sheetState: Any) {
+    val fields = sheetState.javaClass.declaredFields
+    fun setSpec(name: String, value: Any) {
+        val field = fields.firstOrNull { it.name == name || it.name.contains(name) } ?: return
+        runCatching {
+            field.isAccessible = true
+            field.set(sheetState, value)
+        }
+    }
+    setSpec("showMotionSpec", chromiumBottomSheetExpandSpec<Float>())
+    setSpec("hideMotionSpec", chromiumBottomSheetShrinkSpec<Float>())
+    setSpec("anchoredDraggableMotionSpec", chromiumBottomSheetShrinkSpec<Float>())
 }
 
 /** Chromium shared_x_axis_open_enter / shared_x_axis_close_enter. */
