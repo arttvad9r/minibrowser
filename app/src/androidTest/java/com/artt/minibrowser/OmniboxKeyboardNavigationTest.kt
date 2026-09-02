@@ -239,6 +239,7 @@ private fun TestTopBar(
                 onToggleBookmark = {},
                 onBookmarks = {},
                 onHistory = {},
+                onDownloads = {},
                 onSettings = {},
                 onTranslate = {},
                 onToggleDesktop = {},
