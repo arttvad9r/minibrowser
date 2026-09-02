@@ -39,8 +39,8 @@ class BrowserMenuLargeTextTest {
         val newTabLabel = context.getString(R.string.new_tab_title)
         val quickActionLabels = listOf(
             context.getString(R.string.private_tab_title),
-            context.getString(R.string.history_title),
             context.getString(R.string.downloads_title),
+            context.getString(R.string.history_title),
             context.getString(R.string.bookmarks_title),
         )
         val settingsLabel = context.getString(R.string.settings_title)
@@ -101,10 +101,15 @@ class BrowserMenuLargeTextTest {
             }
         }
         val firstTop = quickActionBounds.first().top
+        val firstBottom = quickActionBounds.first().bottom
         quickActionBounds.drop(1).forEach { bounds ->
             assertTrue(
                 "Quick actions should stay on one horizontal row",
                 abs(bounds.top - firstTop) <= 2f,
+            )
+            assertTrue(
+                "Quick action labels should reserve the same vertical space",
+                abs(bounds.bottom - firstBottom) <= 2f,
             )
         }
 
