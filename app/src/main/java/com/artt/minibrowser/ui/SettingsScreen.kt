@@ -12,14 +12,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -88,7 +85,6 @@ internal fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
-    val scrollState = rememberScrollState()
 
     BrowserMotionScreen(onBack = onBack, fromBottom = true) { requestExit ->
         CenteredSinglePane(maxWidth = 720.dp) {
@@ -105,12 +101,7 @@ internal fun SettingsScreen(
                 Column(
                     Modifier
                         .fillMaxSize()
-                        .imePadding()
-                        .verticalScroll(
-                            state = scrollState,
-                            enabled = scrollState.canScrollForward || scrollState.canScrollBackward,
-                        )
-                        .padding(horizontal = 20.dp),
+                        .padding(horizontal = 20.dp, bottom = 12.dp),
                 ) {
                     GroupLabel(stringResource(R.string.settings_group_search))
                     SettingsGroup {
@@ -292,7 +283,7 @@ private fun GroupLabel(text: String) {
     Text(
         text.uppercase(),
         Modifier
-            .padding(start = 4.dp, top = 20.dp, bottom = 6.dp)
+            .padding(start = 4.dp, top = 16.dp, bottom = 6.dp)
             .semantics { heading() },
         style = MaterialTheme.typography.labelMedium,
         fontSize = 12.sp,
