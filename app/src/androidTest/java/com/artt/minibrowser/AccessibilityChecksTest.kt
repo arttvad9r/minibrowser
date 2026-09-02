@@ -63,6 +63,7 @@ class AccessibilityChecksTest {
                     onToggleBookmark = {},
                     onBookmarks = {},
                     onHistory = {},
+                    onDownloads = {},
                     onSettings = {},
                     onTranslate = {},
                     onToggleDesktop = {},
