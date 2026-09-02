@@ -608,13 +608,13 @@ private fun MenuSheet(
                 }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.History, stringResource(R.string.history_title)) {
-                    dismissThen(onHistory)
+                QuickAction(AppIcons.Download, stringResource(R.string.downloads_title)) {
+                    dismissThen(onDownloads)
                 }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.Download, stringResource(R.string.downloads_title)) {
-                    dismissThen(onDownloads)
+                QuickAction(AppIcons.History, stringResource(R.string.history_title)) {
+                    dismissThen(onHistory)
                 }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
