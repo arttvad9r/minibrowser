@@ -142,7 +142,7 @@ internal fun BrowserRoute(
     // Keep the start page composed while app destinations cover the browser. Otherwise returning
     // from History/Downloads/Bookmarks briefly exposes an empty Gecko surface before StartPage
     // finishes its enter transition.
-    val showStart = currentTab?.url.isNullOrBlank() || currentTab.url == "about:blank"
+    val showStart = currentTab?.url.isNullOrBlank() || currentTab?.url == "about:blank"
     val toggleAdblock: (Boolean) -> Unit = settingsViewModel::setAdblock
     val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
     val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
