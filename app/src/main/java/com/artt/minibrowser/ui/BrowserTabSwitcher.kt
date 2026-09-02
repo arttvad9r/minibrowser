@@ -92,9 +92,9 @@ internal data class BrowserTabItemUiState(
 /**
  * Adaptive tab overview with browser-specific spatial motion.
  *
- * The active card is the visual anchor: it shrinks into the grid on entry and expands on exit while
- * surrounding cards fade into context. Cards track horizontal swipe gestures 1:1 and settle only
- * after release. Gecko stays covered until a selected session has been applied for real frames.
+ * Cards track horizontal swipe gestures 1:1. Selecting a tab is intentionally non-blocking: after
+ * the selected id reaches Compose we keep the overview for one real display frame so AndroidView can
+ * bind the new GeckoSession, then dismiss immediately instead of waiting for an exit animation.
  */
 @Composable
 internal fun BrowserTabSwitcher(
@@ -109,7 +109,6 @@ internal fun BrowserTabSwitcher(
 ) {
     val reveal = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     var switchTarget by remember { mutableStateOf<Long?>(null) }
     var predictiveBackActive by remember { mutableStateOf(false) }
     var activeAnimations by remember { mutableIntStateOf(0) }
@@ -140,37 +139,28 @@ internal fun BrowserTabSwitcher(
 
     LaunchedEffect(Unit) { animateReveal(1f) }
 
-    LaunchedEffect(pendingAction) {
-        val action = pendingAction ?: return@LaunchedEffect
-        animateReveal(0f)
-        pendingAction = null
-        action()
-    }
-
-    // GeckoSession swaps can do synchronous UI-thread work. Keep the overview mounted until the
-    // selected session has actually reached Compose/AndroidView for two display frames.
+    // One real frame is enough for Compose/AndroidView to apply the selected GeckoSession. The old
+    // implementation then waited through a full TabTransform exit, which made selection feel late.
     LaunchedEffect(switchTarget, currentId) {
         val target = switchTarget ?: return@LaunchedEffect
         if (currentId != target) return@LaunchedEffect
         withFrameNanos { }
-        withFrameNanos { }
-        animateReveal(0f)
         switchTarget = null
         onDismiss()
     }
 
     fun requestExit(action: () -> Unit) {
-        if (pendingAction != null || switchTarget != null || predictiveBackActive) return
-        pendingAction = action
+        if (switchTarget != null || predictiveBackActive) return
+        action()
     }
 
     fun activateAndExit(id: Long) {
-        if (pendingAction != null || switchTarget != null || predictiveBackActive) return
+        if (switchTarget != null || predictiveBackActive) return
         switchTarget = id
         onSelect(id)
     }
 
-    val backEnabled = pendingAction == null && switchTarget == null
+    val backEnabled = switchTarget == null
     val inputEnabled = backEnabled && !predictiveBackActive
     PredictiveBackHandler(enabled = backEnabled) { progress ->
         predictiveBackActive = true
@@ -247,14 +237,15 @@ internal fun BrowserTabSwitcher(
                 0 -> EmptyState(AppIcons.Globe, stringResource(R.string.no_open_tabs))
                 1 -> {
                     val tab = tabs.first()
+                    val highlightedId = switchTarget ?: overviewCurrentId
                     Box(
                         Modifier.fillMaxSize().padding(top = 8.dp),
                         contentAlignment = Alignment.TopCenter,
                     ) {
                         BrowserTabCard(
                             tab = tab,
-                            isCurrent = tab.id == overviewCurrentId,
-                            isTransitionFocus = tab.id == (switchTarget ?: overviewCurrentId),
+                            isCurrent = tab.id == highlightedId,
+                            isTransitionFocus = tab.id == highlightedId,
                             reveal = reveal.value,
                             gesturesEnabled = inputEnabled,
                             iconsDir = iconsDir,
@@ -269,6 +260,7 @@ internal fun BrowserTabSwitcher(
                     val columns = tabGridColumnCount(windowSizeClass)
                     val initialIndex = tabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
                     val gridState = rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
+                    val highlightedId = switchTarget ?: overviewCurrentId
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(columns),
                         state = gridState,
@@ -280,8 +272,8 @@ internal fun BrowserTabSwitcher(
                         items(tabs, key = { it.id }) { tab ->
                             BrowserTabCard(
                                 tab = tab,
-                                isCurrent = tab.id == overviewCurrentId,
-                                isTransitionFocus = tab.id == (switchTarget ?: overviewCurrentId),
+                                isCurrent = tab.id == highlightedId,
+                                isTransitionFocus = tab.id == highlightedId,
                                 reveal = reveal.value,
                                 gesturesEnabled = inputEnabled,
                                 iconsDir = iconsDir,
