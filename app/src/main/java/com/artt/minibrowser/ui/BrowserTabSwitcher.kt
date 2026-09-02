@@ -3,6 +3,7 @@ package com.artt.minibrowser.ui
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -47,7 +48,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -58,9 +58,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -88,12 +91,13 @@ internal data class BrowserTabItemUiState(
 )
 
 /**
- * Adaptive tab overview with Chromium-style timing.
+ * Adaptive tab overview using Chromium Hub's official fallback animation.
  *
- * Chromium gives the tab transform 300 ms while the surrounding overview fades in faster. We keep
- * the existing MiniBrowser grid geometry but follow that hierarchy: the selected card carries the
- * spatial transform, the rest of the grid/background resolves in the first 150 ms, and selection
- * remains non-blocking so Gecko session binding never waits behind an exit animation.
+ * Chromium's preferred shrink/expand transition requires a compositor thumbnail and exact source /
+ * destination rectangles. GeckoView does not expose the equivalent Chrome compositor dependency,
+ * so MiniBrowser follows Chromium's own fallback path instead of imitating the transform: the Hub
+ * container fades as one surface for 325 ms. Session selection still happens immediately underneath
+ * the fading overview, so the animation never blocks binding the selected GeckoSession.
  */
 @Composable
 internal fun BrowserTabSwitcher(
@@ -110,57 +114,56 @@ internal fun BrowserTabSwitcher(
     val scope = rememberCoroutineScope()
     var switchTarget by remember { mutableStateOf<Long?>(null) }
     var predictiveBackActive by remember { mutableStateOf(false) }
-    var activeAnimations by remember { mutableIntStateOf(0) }
+    var exiting by remember { mutableStateOf(false) }
+    var overviewWidthPx by remember { mutableFloatStateOf(1f) }
     val overviewCurrentId = remember { currentId }
     val closeSwitcherDescription = stringResource(R.string.close_tab_switcher_content_description)
     val newTabTitle = stringResource(R.string.new_tab_title)
     val overviewPaneTitle = stringResource(R.string.tabs_content_description)
     val windowSizeClass = currentWindowAdaptiveInfoV2().windowSizeClass
 
-    HighFrameRateDuringMotion(activeAnimations > 0 || predictiveBackActive)
-
     DisposableEffect(previewStore) {
         previewStore.setOverviewVisible(true)
         onDispose { previewStore.setOverviewVisible(false) }
     }
 
-    suspend fun animateReveal(target: Float) {
-        activeAnimations++
-        try {
-            reveal.animateTo(
-                target,
-                animationSpec = tween(MotionTokens.TabTransform, easing = MotionEasing.Transform),
-            )
-        } finally {
-            activeAnimations--
-        }
+    suspend fun animateReveal(target: Float, easing: Easing) {
+        reveal.animateTo(
+            target,
+            animationSpec = tween(MotionTokens.TabFallbackFade, easing = easing),
+        )
     }
 
-    LaunchedEffect(Unit) { animateReveal(1f) }
+    LaunchedEffect(Unit) { animateReveal(1f, MotionEasing.FadeIn) }
 
-    // One real frame is enough for Compose/AndroidView to apply the selected GeckoSession. Keeping
-    // Chrome's 300 ms visual zoom as a blocking exit would bring back the selection delay the real
-    // device recordings exposed, so activation stays immediate.
+    // Bind the selected GeckoSession first. Then fade Chromium's Hub container out over the already
+    // selected page, matching the fallback animator without reintroducing the old selection delay.
     LaunchedEffect(switchTarget, currentId) {
         val target = switchTarget ?: return@LaunchedEffect
-        if (currentId != target) return@LaunchedEffect
+        if (currentId != target || exiting) return@LaunchedEffect
+        exiting = true
         withFrameNanos { }
+        animateReveal(0f, MotionEasing.FadeOut)
         switchTarget = null
         onDismiss()
     }
 
     fun requestExit(action: () -> Unit) {
-        if (switchTarget != null || predictiveBackActive) return
-        action()
+        if (switchTarget != null || predictiveBackActive || exiting) return
+        exiting = true
+        scope.launch {
+            animateReveal(0f, MotionEasing.FadeOut)
+            action()
+        }
     }
 
     fun activateAndExit(id: Long) {
-        if (switchTarget != null || predictiveBackActive) return
+        if (switchTarget != null || predictiveBackActive || exiting) return
         switchTarget = id
         onSelect(id)
     }
 
-    val backEnabled = switchTarget == null
+    val backEnabled = switchTarget == null && !exiting
     val inputEnabled = backEnabled && !predictiveBackActive
     PredictiveBackHandler(enabled = backEnabled) { progress ->
         predictiveBackActive = true
@@ -173,19 +176,16 @@ internal fun BrowserTabSwitcher(
             onDismiss()
         } catch (cancelled: CancellationException) {
             predictiveBackActive = false
-            scope.launch { animateReveal(1f) }
+            scope.launch { animateReveal(1f, MotionEasing.FadeIn) }
             throw cancelled
         }
     }
 
-    val overviewFadeProgress = (
-        reveal.value.coerceIn(0f, 1f) *
-            MotionTokens.TabTransform.toFloat() / MotionTokens.TabBackgroundFade.toFloat()
-        ).coerceIn(0f, 1f)
-
     Box(
         Modifier
             .fillMaxSize()
+            .onSizeChanged { overviewWidthPx = it.width.toFloat().coerceAtLeast(1f) }
+            .graphicsLayer { alpha = reveal.value }
             .background(MaterialTheme.colorScheme.background)
             .semantics { paneTitle = overviewPaneTitle },
     ) {
@@ -198,8 +198,7 @@ internal fun BrowserTabSwitcher(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 56.dp)
-                    .padding(horizontal = 8.dp)
-                    .graphicsLayer { alpha = overviewFadeProgress },
+                    .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
@@ -249,9 +248,8 @@ internal fun BrowserTabSwitcher(
                         BrowserTabCard(
                             tab = tab,
                             isCurrent = tab.id == highlightedId,
-                            isTransitionFocus = tab.id == highlightedId,
-                            reveal = reveal.value,
                             gesturesEnabled = inputEnabled,
+                            swipeExitDistancePx = overviewWidthPx,
                             iconsDir = iconsDir,
                             previewStore = previewStore,
                             modifier = Modifier.width(224.dp),
@@ -277,9 +275,8 @@ internal fun BrowserTabSwitcher(
                             BrowserTabCard(
                                 tab = tab,
                                 isCurrent = tab.id == highlightedId,
-                                isTransitionFocus = tab.id == highlightedId,
-                                reveal = reveal.value,
                                 gesturesEnabled = inputEnabled,
+                                swipeExitDistancePx = overviewWidthPx,
                                 iconsDir = iconsDir,
                                 previewStore = previewStore,
                                 modifier = Modifier.animateItem(
@@ -288,12 +285,12 @@ internal fun BrowserTabSwitcher(
                                         easing = MotionEasing.FadeIn,
                                     ),
                                     placementSpec = tween(
-                                        MotionTokens.ListChange,
-                                        easing = MotionEasing.Transform,
+                                        MotionTokens.TabMove,
+                                        easing = MotionEasing.Standard,
                                     ),
                                     fadeOutSpec = tween(
-                                        MotionTokens.TabBackgroundFade,
-                                        easing = MotionEasing.FadeOut,
+                                        MotionTokens.TabRemove,
+                                        easing = MotionEasing.StandardAccelerate,
                                     ),
                                 ),
                                 onSelect = { activateAndExit(tab.id) },
@@ -319,9 +316,8 @@ internal fun tabGridColumnCount(windowSizeClass: WindowSizeClass): Int = when {
 private fun BrowserTabCard(
     tab: BrowserTabItemUiState,
     isCurrent: Boolean,
-    isTransitionFocus: Boolean,
-    reveal: Float,
     gesturesEnabled: Boolean,
+    swipeExitDistancePx: Float,
     iconsDir: File,
     previewStore: TabPreviewStore,
     modifier: Modifier = Modifier,
@@ -350,9 +346,15 @@ private fun BrowserTabCard(
         else -> MaterialTheme.colorScheme.surfaceContainerLow
     }
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val swipeDismissThresholdPx = with(density) {
+        MotionTokens.TabSwipeDismissThresholdDp.dp.toPx()
+    }
+    val closeScale = remember(tab.id) { Animatable(1f) }
     var dragOffsetPx by remember(tab.id) { mutableFloatStateOf(0f) }
-    var cardWidthPx by remember(tab.id) { mutableFloatStateOf(1f) }
     var settling by remember(tab.id) { mutableStateOf(false) }
+    var overSwipeThreshold by remember(tab.id) { mutableStateOf(false) }
 
     fun settle(target: Float, closeAfter: Boolean) {
         if (settling) return
@@ -362,50 +364,63 @@ private fun BrowserTabCard(
                 initialValue = dragOffsetPx,
                 targetValue = target,
                 animationSpec = tween(
-                    MotionTokens.GestureSettle,
-                    easing = MotionEasing.Transform,
+                    MotionTokens.TabRemove,
+                    easing = MotionEasing.AccelerateDecelerate,
                 ),
             ) { value, _ -> dragOffsetPx = value }
             settling = false
+            overSwipeThreshold = false
             if (closeAfter) onClose()
         }
     }
 
-    val revealProgress = reveal.coerceIn(0f, 1f)
-    val transitionScale = if (isTransitionFocus) {
-        1f + (1f - revealProgress) * 0.04f
-    } else {
-        1f
+    fun closeWithChromiumAnimation() {
+        if (settling) return
+        settling = true
+        scope.launch {
+            closeScale.animateTo(
+                0.6f,
+                animationSpec = tween(
+                    durationMillis = MotionTokens.TabRemove / 2,
+                    easing = MotionEasing.Linear,
+                ),
+            )
+            closeScale.animateTo(
+                0f,
+                animationSpec = tween(
+                    durationMillis = MotionTokens.TabRemove / 2,
+                    easing = MotionEasing.FadeIn,
+                ),
+            )
+            onClose()
+        }
     }
-    val contextualAlpha = if (isTransitionFocus) {
-        1f
-    } else {
-        (
-            revealProgress * MotionTokens.TabTransform.toFloat() /
-                MotionTokens.TabBackgroundFade.toFloat()
-            ).coerceIn(0f, 1f)
-    }
-    val dragProgress = (abs(dragOffsetPx) / cardWidthPx.coerceAtLeast(1f)).coerceIn(0f, 1f)
+
+    val dragAlpha = maxOf(
+        0.2f,
+        1f - 0.8f * abs(dragOffsetPx) / swipeDismissThresholdPx.coerceAtLeast(1f),
+    )
 
     Column(
         modifier
             .fillMaxWidth()
-            .onSizeChanged { cardWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             .graphicsLayer {
                 translationX = dragOffsetPx
-                alpha = contextualAlpha * (1f - dragProgress * 0.35f)
-                scaleX = transitionScale
-                scaleY = transitionScale
+                alpha = dragAlpha
+                scaleX = closeScale.value
+                scaleY = closeScale.value
             }
-            .pointerInput(tab.id, gesturesEnabled, cardWidthPx) {
+            .pointerInput(tab.id, gesturesEnabled, swipeDismissThresholdPx, swipeExitDistancePx) {
                 if (!gesturesEnabled) return@pointerInput
                 detectHorizontalDragGestures(
                     onDragCancel = { settle(0f, closeAfter = false) },
                     onDragEnd = {
-                        val threshold = cardWidthPx * 0.32f
-                        if (abs(dragOffsetPx) >= threshold) {
+                        if (abs(dragOffsetPx) >= swipeDismissThresholdPx) {
                             val direction = if (dragOffsetPx == 0f) 1f else dragOffsetPx.sign
-                            settle(direction * cardWidthPx * 1.08f, closeAfter = true)
+                            settle(
+                                direction * swipeExitDistancePx.coerceAtLeast(1f),
+                                closeAfter = true,
+                            )
                         } else {
                             settle(0f, closeAfter = false)
                         }
@@ -414,7 +429,12 @@ private fun BrowserTabCard(
                     if (!settling) {
                         change.consume()
                         dragOffsetPx = (dragOffsetPx + dragAmount)
-                            .coerceIn(-cardWidthPx, cardWidthPx)
+                            .coerceIn(-swipeExitDistancePx, swipeExitDistancePx)
+                        val nowOverThreshold = abs(dragOffsetPx) >= swipeDismissThresholdPx
+                        if (nowOverThreshold && !overSwipeThreshold) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        overSwipeThreshold = nowOverThreshold
                     }
                 }
             }
@@ -440,7 +460,7 @@ private fun BrowserTabCard(
                     fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
                 )
                 IconButton(
-                    onClick = onClose,
+                    onClick = ::closeWithChromiumAnimation,
                     enabled = gesturesEnabled && !settling,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
@@ -471,7 +491,7 @@ private fun BrowserTabCard(
                     fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
                 )
                 IconButton(
-                    onClick = onClose,
+                    onClick = ::closeWithChromiumAnimation,
                     enabled = gesturesEnabled && !settling,
                     modifier = Modifier.size(48.dp).semantics { contentDescription = closeTabDescription },
                 ) {
