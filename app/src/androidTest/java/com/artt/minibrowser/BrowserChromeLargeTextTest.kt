@@ -75,6 +75,7 @@ class BrowserChromeLargeTextTest {
                         onToggleBookmark = {},
                         onBookmarks = {},
                         onHistory = {},
+                        onDownloads = {},
                         onSettings = {},
                         onTranslate = {},
                         onToggleDesktop = {},
