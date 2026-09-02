@@ -29,8 +29,8 @@ object MotionTokens {
     const val Popup = 150
     const val TabBackgroundFade = 150
     const val ListChange = 200
+    const val Content = 200
     const val Destination = 225
-    const val Content = 225
     const val ToolbarFocus = 225
     const val Theme = 250
     const val TabTransform = 300
