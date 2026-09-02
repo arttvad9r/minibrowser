@@ -8,6 +8,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
@@ -21,6 +22,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +34,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import kotlin.math.PI
+import kotlin.math.cos
 
 /** Values copied from current Chromium Android motion resources/constants. */
 object MotionTokens {
@@ -49,10 +53,17 @@ object MotionTokens {
     const val SharedXAxisEnterFade = 283
     const val SharedXAxisTransition = 366
 
-    // HubAnimationConstants.java.
+    // components/browser_ui/bottomsheet BottomSheet.java.
+    const val BottomSheetExpand = 350
+    const val BottomSheetShrink = 250
+
+    // HubAnimationConstants.java + TabListItemAnimator.java.
     const val TabTransform = 325
     const val TabFallbackFade = 325
     const val TabListFade = 400
+    const val TabRemove = 200
+    const val TabMove = 250
+    const val TabSwipeDismissThresholdDp = 144
     const val PaneFade = 120
     const val PaneSlide = 250
     const val GestureSettle = 160
@@ -90,10 +101,36 @@ object MotionEasing {
     /** m3_sys_motion_easing_standard_decelerate. */
     val StandardDecelerate = CubicBezierEasing(0f, 0f, 0f, 1f)
 
-    // Chromium legacy curves still used by toolbar/list animation code.
+    // Chromium/Android legacy curves used by Hub and ItemTouchHelper.
     val Transform = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
     val FadeIn = CubicBezierEasing(0f, 0f, 0.2f, 1f)
     val FadeOut = CubicBezierEasing(0.4f, 0f, 1f, 1f)
+    val Linear = Easing { it }
+    val AccelerateDecelerate = Easing { fraction ->
+        ((cos((fraction + 1f) * PI) / 2.0) + 0.5).toFloat()
+    }
+}
+
+/**
+ * Material3 ModalBottomSheet reads its show/hide specs from MaterialTheme.motionScheme. Chromium's
+ * BottomSheet uses 350 ms when expanding, 250 ms when shrinking, and Interpolators.EMPHASIZED for
+ * both. Delegate every unrelated Material motion family back to the surrounding theme.
+ */
+fun chromiumBottomSheetMotionScheme(base: MotionScheme): MotionScheme = object : MotionScheme {
+    override fun <T> defaultSpatialSpec(): FiniteAnimationSpec<T> = tween(
+        durationMillis = MotionTokens.BottomSheetExpand,
+        easing = MotionEasing.Emphasized,
+    )
+
+    override fun <T> fastEffectsSpec(): FiniteAnimationSpec<T> = tween(
+        durationMillis = MotionTokens.BottomSheetShrink,
+        easing = MotionEasing.Emphasized,
+    )
+
+    override fun <T> fastSpatialSpec(): FiniteAnimationSpec<T> = base.fastSpatialSpec()
+    override fun <T> slowSpatialSpec(): FiniteAnimationSpec<T> = base.slowSpatialSpec()
+    override fun <T> defaultEffectsSpec(): FiniteAnimationSpec<T> = base.defaultEffectsSpec()
+    override fun <T> slowEffectsSpec(): FiniteAnimationSpec<T> = base.slowEffectsSpec()
 }
 
 /** Chromium shared_x_axis_open_enter / shared_x_axis_close_enter. */
