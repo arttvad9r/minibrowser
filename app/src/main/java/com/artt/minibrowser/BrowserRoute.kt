@@ -437,10 +437,7 @@ internal fun BrowserRoute(
                         tabPreviewStore.remove(it)
                         tabManager.closeTab(it)
                     },
-                    onNew = {
-                        browserViewModel.showSwitcher(false)
-                        tabManager.newTab(null)
-                    },
+                    onNew = { tabManager.newTab(null) },
                     onDismiss = { browserViewModel.showSwitcher(false) },
                 )
             }
@@ -491,7 +488,7 @@ private fun SearchEngine.toSettingsUiState(): SettingsSearchEngineUiState = when
 
 private fun SettingsSearchEngineUiState.toSearchEngine(): SearchEngine = when (this) {
     SettingsSearchEngineUiState.Google -> SearchEngine.GOOGLE
-    SettingsSearchEngineUiState.DuckDuckGo -> SearchEngine.DUCKDUCKGO
+    SettingsSearchEngineUiState.DuckDuckGo -> SearchEngine.DUCKDUckGo
     SettingsSearchEngineUiState.Yandex -> SearchEngine.YANDEX
     SettingsSearchEngineUiState.Bing -> SearchEngine.BING
 }
