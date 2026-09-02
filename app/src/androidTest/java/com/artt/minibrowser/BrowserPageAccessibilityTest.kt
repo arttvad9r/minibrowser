@@ -271,6 +271,7 @@ class BrowserPageAccessibilityTest {
             onToggleBookmark = {},
             onBookmarks = {},
             onHistory = {},
+            onDownloads = {},
             onShare = {},
             onSettings = {},
             onToggleAdblock = { _ -> },
