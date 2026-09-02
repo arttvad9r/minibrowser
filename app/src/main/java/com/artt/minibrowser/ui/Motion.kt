@@ -1,8 +1,18 @@
 package com.artt.minibrowser.ui
 
+import android.graphics.Path
 import android.os.Build
 import android.view.View
+import android.view.animation.PathInterpolator
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -14,50 +24,101 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 
-/**
- * Chromium Android motion vocabulary.
- *
- * These values mirror the timing families used by Chrome's Android toolbar/start-surface code:
- * 225 ms transforms, 100 ms fast toolbar fades, 150 ms popup/icon fades, 300 ms tab transforms,
- * and 250 ms theme-color transitions. Keep app motion on these families instead of inventing
- * per-screen timings.
- */
+/** Values copied from current Chromium Android motion resources/constants. */
 object MotionTokens {
-    const val Press = 100
+    // ToolbarPhone.java.
     const val ToolbarButton = 100
-    const val IconState = 150
-    const val Popup = 150
-    const val TabBackgroundFade = 150
-    const val ListChange = 200
-    const val Content = 200
-    const val Destination = 225
     const val ToolbarFocus = 225
     const val Theme = 250
-    const val TabTransform = 300
-    const val GestureSettle = 200
+
+    // ui/android menu_enter.xml + menu_exit.xml.
+    const val MenuEnter = 250
+    const val MenuExit = 150
+
+    // components/browser_ui/styles shared_x_axis_* resources.
+    const val SharedXAxisExitFade = 83
+    const val SharedXAxisEnterFade = 283
+    const val SharedXAxisTransition = 366
+
+    // HubAnimationConstants.java.
+    const val TabTransform = 325
+    const val TabFallbackFade = 325
+    const val TabListFade = 400
+    const val PaneFade = 120
+    const val PaneSlide = 250
+    const val GestureSettle = 160
+
+    // Existing non-route state changes keep Chromium's short UI timing family.
+    const val IconState = 150
+    const val Popup = 150
+    const val ListChange = 200
+    const val Content = 200
+
+    // Compatibility names used by existing call sites.
+    const val Press = ToolbarButton
+    const val TabBackgroundFade = TabFallbackFade
+    const val Destination = SharedXAxisTransition
 }
 
-/** Chromium's legacy BakedBezier curves, exposed as Compose easing values. */
+/** Exact easing curves referenced by Chromium's Android resources. */
 object MotionEasing {
-    /** FastOutSlowInInterpolator / former TRANSFORM_CURVE. */
+    /** ui/android/java/res/anim/emphasized.xml / Interpolators.EMPHASIZED. */
+    private val emphasizedInterpolator = PathInterpolator(
+        Path().apply {
+            moveTo(0f, 0f)
+            cubicTo(0.05f, 0f, 0.133333f, 0.06f, 0.166666f, 0.4f)
+            cubicTo(0.208333f, 0.82f, 0.25f, 1f, 1f, 1f)
+        },
+    )
+    val Emphasized = Easing { fraction -> emphasizedInterpolator.getInterpolation(fraction) }
+
+    /** m3_sys_motion_easing_standard. */
+    val Standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
+    /** m3_sys_motion_easing_standard_accelerate. */
+    val StandardAccelerate = CubicBezierEasing(0.3f, 0f, 1f, 1f)
+
+    /** m3_sys_motion_easing_standard_decelerate. */
+    val StandardDecelerate = CubicBezierEasing(0f, 0f, 0f, 1f)
+
+    // Chromium legacy curves still used by toolbar/list animation code.
     val Transform = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
-
-    /** LinearOutSlowInInterpolator / former FADE_IN_CURVE. */
     val FadeIn = CubicBezierEasing(0f, 0f, 0.2f, 1f)
-
-    /** FastOutLinearInInterpolator / former FADE_OUT_CURVE. */
     val FadeOut = CubicBezierEasing(0.4f, 0f, 1f, 1f)
-
-    // Compatibility aliases for existing call sites. New code should prefer the semantic names.
-    val Standard = Transform
-    val Emphasized = Transform
 }
 
-/**
- * Ask Android 15+ for the high frame-rate category only while the tab overview is transforming.
- * Short toolbar/menu/destination motion follows the display's normal adaptive/touch policy, just
- * like Chromium avoids changing refresh policy for every small UI transition.
- */
+/** Chromium shared_x_axis_open_enter / shared_x_axis_close_enter. */
+fun chromiumSharedXAxisEnter(forward: Boolean): EnterTransition =
+    slideInHorizontally(
+        animationSpec = tween(
+            durationMillis = MotionTokens.SharedXAxisTransition,
+            easing = MotionEasing.Emphasized,
+        ),
+        initialOffsetX = { width -> if (forward) width / 4 else -width / 4 },
+    ) + fadeIn(
+        animationSpec = tween(
+            durationMillis = MotionTokens.SharedXAxisEnterFade,
+            delayMillis = MotionTokens.SharedXAxisExitFade,
+            easing = MotionEasing.StandardDecelerate,
+        ),
+    )
+
+/** Chromium shared_x_axis_open_exit / shared_x_axis_close_exit. */
+fun chromiumSharedXAxisExit(forward: Boolean): ExitTransition =
+    slideOutHorizontally(
+        animationSpec = tween(
+            durationMillis = MotionTokens.SharedXAxisTransition,
+            easing = MotionEasing.Emphasized,
+        ),
+        targetOffsetX = { width -> if (forward) -width / 4 else width / 4 },
+    ) + fadeOut(
+        animationSpec = tween(
+            durationMillis = MotionTokens.SharedXAxisExitFade,
+            easing = MotionEasing.StandardAccelerate,
+        ),
+    )
+
+/** Chromium uses the high-rate vote only for the large tab overview transform. */
 @Composable
 fun HighFrameRateDuringMotion(active: Boolean) {
     val view = LocalView.current
@@ -72,11 +133,7 @@ fun HighFrameRateDuringMotion(active: Boolean) {
     }
 }
 
-/**
- * Chrome-style app-chrome click: rely on the bounded platform/Material ripple only. The previous
- * extra whole-control alpha animation made every press visibly dim twice and added animation work
- * on top of the ripple.
- */
+/** Use the platform/Material ripple without an additional invented alpha animation. */
 @Composable
 fun Modifier.softClickable(
     enabled: Boolean = true,
@@ -92,7 +149,6 @@ fun Modifier.softClickable(
     )
 }
 
-/** Same single-ripple behavior while preserving long-click and button semantics. */
 @Composable
 fun Modifier.softCombinedClickable(
     enabled: Boolean = true,
