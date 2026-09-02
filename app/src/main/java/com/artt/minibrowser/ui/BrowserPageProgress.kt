@@ -18,8 +18,8 @@ internal fun BrowserPageProgress(progress: Float) {
     Box(Modifier.fillMaxWidth().height(2.dp)) {
         AnimatedVisibility(
             visible = progress >= 0f,
-            enter = fadeIn(tween(MotionTokens.Popup)),
-            exit = fadeOut(tween(MotionTokens.Popup)),
+            enter = fadeIn(tween(MotionTokens.Popup, easing = MotionEasing.FadeIn)),
+            exit = fadeOut(tween(MotionTokens.Popup, easing = MotionEasing.FadeOut)),
         ) {
             LinearProgressIndicator(
                 progress = { progress.coerceIn(0f, 1f) },
