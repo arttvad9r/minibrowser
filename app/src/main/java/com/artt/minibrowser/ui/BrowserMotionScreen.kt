@@ -29,9 +29,9 @@ import kotlinx.coroutines.launch
 /**
  * Full-screen app destination over the browser.
  *
- * Internal destinations use a restrained depth/side transition instead of a nearly invisible fade.
- * Predictive back drives the same transform directly, so the surface follows the user's gesture and
- * cancellation returns it to rest without a discontinuity.
+ * Entry and predictive back use restrained spatial motion. Ordinary taps are never held behind an
+ * exit animation: the requested navigation runs immediately, while predictive back remains fully
+ * gesture-driven.
  */
 @Composable
 fun BrowserMotionScreen(
@@ -41,7 +41,6 @@ fun BrowserMotionScreen(
 ) {
     val reveal = remember(fromBottom) { Animatable(if (fromBottom) 0f else 1f) }
     val scope = rememberCoroutineScope()
-    var pendingExit by remember { mutableStateOf<(() -> Unit)?>(null) }
     var predictiveBackActive by remember { mutableStateOf(false) }
     var activeAnimations by remember { mutableIntStateOf(0) }
 
@@ -63,19 +62,11 @@ fun BrowserMotionScreen(
         if (fromBottom) animateReveal(1f)
     }
 
-    LaunchedEffect(pendingExit) {
-        val action = pendingExit ?: return@LaunchedEffect
-        if (fromBottom) animateReveal(0f)
-        pendingExit = null
-        action()
-    }
-
     fun requestExit(action: () -> Unit) {
-        if (pendingExit != null || predictiveBackActive) return
-        pendingExit = action
+        if (!predictiveBackActive) action()
     }
 
-    PredictiveBackHandler(enabled = pendingExit == null) { progress ->
+    PredictiveBackHandler { progress ->
         predictiveBackActive = true
         try {
             if (fromBottom) {
