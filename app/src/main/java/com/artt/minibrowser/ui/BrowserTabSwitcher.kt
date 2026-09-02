@@ -7,8 +7,6 @@ import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -90,11 +88,12 @@ internal data class BrowserTabItemUiState(
 )
 
 /**
- * Adaptive tab overview with browser-specific spatial motion.
+ * Adaptive tab overview with Chromium-style timing.
  *
- * Cards track horizontal swipe gestures 1:1. Selecting a tab is intentionally non-blocking: after
- * the selected id reaches Compose we keep the overview for one real display frame so AndroidView can
- * bind the new GeckoSession, then dismiss immediately instead of waiting for an exit animation.
+ * Chromium gives the tab transform 300 ms while the surrounding overview fades in faster. We keep
+ * the existing MiniBrowser grid geometry but follow that hierarchy: the selected card carries the
+ * spatial transform, the rest of the grid/background resolves in the first 150 ms, and selection
+ * remains non-blocking so Gecko session binding never waits behind an exit animation.
  */
 @Composable
 internal fun BrowserTabSwitcher(
@@ -130,7 +129,7 @@ internal fun BrowserTabSwitcher(
         try {
             reveal.animateTo(
                 target,
-                animationSpec = tween(MotionTokens.TabTransform, easing = MotionEasing.Emphasized),
+                animationSpec = tween(MotionTokens.TabTransform, easing = MotionEasing.Transform),
             )
         } finally {
             activeAnimations--
@@ -139,8 +138,9 @@ internal fun BrowserTabSwitcher(
 
     LaunchedEffect(Unit) { animateReveal(1f) }
 
-    // One real frame is enough for Compose/AndroidView to apply the selected GeckoSession. The old
-    // implementation then waited through a full TabTransform exit, which made selection feel late.
+    // One real frame is enough for Compose/AndroidView to apply the selected GeckoSession. Keeping
+    // Chrome's 300 ms visual zoom as a blocking exit would bring back the selection delay the real
+    // device recordings exposed, so activation stays immediate.
     LaunchedEffect(switchTarget, currentId) {
         val target = switchTarget ?: return@LaunchedEffect
         if (currentId != target) return@LaunchedEffect
@@ -178,6 +178,11 @@ internal fun BrowserTabSwitcher(
         }
     }
 
+    val overviewFadeProgress = (
+        reveal.value.coerceIn(0f, 1f) *
+            MotionTokens.TabTransform.toFloat() / MotionTokens.TabBackgroundFade.toFloat()
+        ).coerceIn(0f, 1f)
+
     Box(
         Modifier
             .fillMaxSize()
@@ -187,14 +192,14 @@ internal fun BrowserTabSwitcher(
         Column(
             Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .graphicsLayer {
-                    val progress = reveal.value.coerceIn(0f, 1f)
-                    alpha = 0.72f + progress * 0.28f
-                },
+                .windowInsetsPadding(WindowInsets.safeDrawing),
         ) {
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .padding(horizontal = 8.dp)
+                    .graphicsLayer { alpha = overviewFadeProgress },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(
@@ -208,12 +213,11 @@ internal fun BrowserTabSwitcher(
                     targetState = tabs.size,
                     modifier = Modifier.weight(1f),
                     transitionSpec = {
-                        (fadeIn(tween(MotionTokens.IconState)) +
-                            slideInVertically(tween(MotionTokens.IconState)) { it / 3 })
-                            .togetherWith(
-                                fadeOut(tween(MotionTokens.IconState)) +
-                                    slideOutVertically(tween(MotionTokens.IconState)) { -it / 3 },
-                            )
+                        fadeIn(
+                            tween(MotionTokens.IconState, easing = MotionEasing.FadeIn),
+                        ).togetherWith(
+                            fadeOut(tween(MotionTokens.IconState, easing = MotionEasing.FadeOut)),
+                        )
                     },
                     label = "tab count",
                 ) { count ->
@@ -279,9 +283,18 @@ internal fun BrowserTabSwitcher(
                                 iconsDir = iconsDir,
                                 previewStore = previewStore,
                                 modifier = Modifier.animateItem(
-                                    fadeInSpec = tween(MotionTokens.Content),
-                                    placementSpec = tween(MotionTokens.Content, easing = MotionEasing.Standard),
-                                    fadeOutSpec = tween(MotionTokens.Content),
+                                    fadeInSpec = tween(
+                                        MotionTokens.TabBackgroundFade,
+                                        easing = MotionEasing.FadeIn,
+                                    ),
+                                    placementSpec = tween(
+                                        MotionTokens.ListChange,
+                                        easing = MotionEasing.Transform,
+                                    ),
+                                    fadeOutSpec = tween(
+                                        MotionTokens.TabBackgroundFade,
+                                        easing = MotionEasing.FadeOut,
+                                    ),
                                 ),
                                 onSelect = { activateAndExit(tab.id) },
                                 onClose = { if (inputEnabled) onClose(tab.id) },
@@ -348,7 +361,10 @@ private fun BrowserTabCard(
             animate(
                 initialValue = dragOffsetPx,
                 targetValue = target,
-                animationSpec = tween(MotionTokens.GestureSettle, easing = MotionEasing.Standard),
+                animationSpec = tween(
+                    MotionTokens.GestureSettle,
+                    easing = MotionEasing.Transform,
+                ),
             ) { value, _ -> dragOffsetPx = value }
             settling = false
             if (closeAfter) onClose()
@@ -356,8 +372,19 @@ private fun BrowserTabCard(
     }
 
     val revealProgress = reveal.coerceIn(0f, 1f)
-    val transitionScale = if (isTransitionFocus) 1f + (1f - revealProgress) * 0.12f else 1f
-    val contextualAlpha = if (isTransitionFocus) 1f else 0.18f + revealProgress * 0.82f
+    val transitionScale = if (isTransitionFocus) {
+        1f + (1f - revealProgress) * 0.04f
+    } else {
+        1f
+    }
+    val contextualAlpha = if (isTransitionFocus) {
+        1f
+    } else {
+        (
+            revealProgress * MotionTokens.TabTransform.toFloat() /
+                MotionTokens.TabBackgroundFade.toFloat()
+            ).coerceIn(0f, 1f)
+    }
     val dragProgress = (abs(dragOffsetPx) / cardWidthPx.coerceAtLeast(1f)).coerceIn(0f, 1f)
 
     Column(
@@ -366,10 +393,9 @@ private fun BrowserTabCard(
             .onSizeChanged { cardWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             .graphicsLayer {
                 translationX = dragOffsetPx
-                alpha = contextualAlpha * (1f - dragProgress * 0.68f)
-                val dragScale = 1f - dragProgress * 0.018f
-                scaleX = transitionScale * dragScale
-                scaleY = transitionScale * dragScale
+                alpha = contextualAlpha * (1f - dragProgress * 0.35f)
+                scaleX = transitionScale
+                scaleY = transitionScale
             }
             .pointerInput(tab.id, gesturesEnabled, cardWidthPx) {
                 if (!gesturesEnabled) return@pointerInput
