@@ -184,6 +184,9 @@ fun chromiumSharedXAxisExit(forward: Boolean): ExitTransition =
  * shared_x_axis_open_exit / shared_x_axis_close_enter pair. The hidden state is the open-exit
  * endpoint: -25% X and alpha 0. Returning reverses through close-enter with Chromium's 83 ms fade
  * delay and 283 ms fade duration.
+ *
+ * The visual surface moves during the transition, but its input shield stays fixed to the window.
+ * This prevents exposed transition margins from dispatching gestures into the hidden browser.
  */
 @Composable
 fun ChromiumSharedXAxisUnderlay(
@@ -219,16 +222,25 @@ fun ChromiumSharedXAxisUnderlay(
         label = "chromium shared x underlay alpha",
     ) { shown -> if (shown) 1f else 0f }
     var widthPx by remember { mutableIntStateOf(0) }
+    val inputBlocked = !visible || transition.currentState != transition.targetState
     Box(
         modifier
             .fillMaxSize()
-            .onSizeChanged { widthPx = it.width }
-            .graphicsLayer {
-                translationX = translationFraction * widthPx
-                this.alpha = alpha
-            },
+            .onSizeChanged { widthPx = it.width },
     ) {
-        content()
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = translationFraction * widthPx
+                    this.alpha = alpha
+                },
+        ) {
+            content()
+        }
+        if (inputBlocked) {
+            InputShield()
+        }
     }
 }
 
