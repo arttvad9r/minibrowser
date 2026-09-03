@@ -95,9 +95,6 @@ internal class PersistSignalQueue(
     },
 ) {
     private companion object {
-        // SessionState changes can arrive continuously while a page is being scrolled or edited.
-        // Persist after a short quiet period, with a bounded fallback for long interactions. App
-        // backgrounding still sends PersistSignal.Immediate, so lifecycle durability is unchanged.
         const val TRAILING_DEBOUNCE_NS = 1_500_000_000L
         const val HARD_DEADLINE_NS = 5_000_000_000L
     }
@@ -185,7 +182,6 @@ internal fun selectSessionStateForUrl(
     return SessionStateSelection(null, null)
 }
 
-/** Returns the URI represented by the current history entry inside Gecko's own state snapshot. */
 internal fun currentSessionStateUrl(state: GeckoSession.SessionState): String? = runCatching {
     val index = state.currentIndex
     if (index < 0 || index >= state.size) null else state[index].uri
@@ -247,7 +243,6 @@ internal fun snapshotPersistedState(selectedId: Long?, tabs: List<PersistTabCand
 )
 
 class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
-    // Compose state: смена сессии при краш-восстановлении должна перерисовать AndroidView.
     var session: GeckoSession by mutableStateOf(session)
     var url by mutableStateOf("")
     var title by mutableStateOf("")
@@ -264,11 +259,24 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     @Volatile internal var latestSessionStateUrl: String? = null
     internal var persistedSessionState: String? = null
     internal var persistedSessionStateUrl: String? = null
-    // Title callbacks do not carry a URL. Bind them only after Gecko confirms a top-level visit,
-    // and clear the binding as soon as navigation moves to another document/location.
     internal var historyTitleUrl: String? = null
     internal var lastAccess = System.currentTimeMillis()
 }
+
+internal data class ClosedTabSnapshot(
+    val id: Long,
+    val index: Int,
+    val wasCurrent: Boolean,
+    val isPrivate: Boolean,
+    val url: String,
+    val title: String,
+    val desktop: Boolean,
+    val lastAccess: Long,
+    val latestSessionState: GeckoSession.SessionState?,
+    val latestSessionStateUrl: String?,
+    val persistedSessionState: String?,
+    val persistedSessionStateUrl: String?,
+)
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class TabManager(
@@ -336,7 +344,6 @@ class TabManager(
         return tab
     }
 
-    /** Creates the session GeckoView will own for target="_blank"/window.open(). */
     fun newWindowSession(private: Boolean): GeckoSession {
         check(!closed) { "TabManager is closed" }
         val tab = createTab(private)
@@ -435,20 +442,68 @@ class TabManager(
         enforceHotTabBudget()
     }
 
-    fun closeTab(id: Long) {
-        if (closed) return
+    fun closeTab(id: Long): ClosedTabSnapshot? {
+        if (closed) return null
         val idx = _tabs.value.indexOfFirst { it.id == id }
-        if (idx < 0) return
+        if (idx < 0) return null
         val dying = _tabs.value[idx]
+        val snapshot = ClosedTabSnapshot(
+            id = dying.id,
+            index = idx,
+            wasCurrent = currentId.value == id,
+            isPrivate = dying.isPrivate,
+            url = dying.url,
+            title = dying.title,
+            desktop = dying.desktop,
+            lastAccess = dying.lastAccess,
+            latestSessionState = dying.latestSessionState,
+            latestSessionStateUrl = dying.latestSessionStateUrl,
+            persistedSessionState = dying.persistedSessionState,
+            persistedSessionStateUrl = dying.persistedSessionStateUrl,
+        )
         runtime.webExtensionController.setTabActive(dying.session, false)
         dying.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
         closeIfOpen(dying.session)
         _tabs.value = _tabs.value - dying
-        if (currentId.value == id) {
+        if (snapshot.wasCurrent) {
             val next = _tabs.value.getOrNull(idx.coerceAtMost(_tabs.value.size - 1))
-            if (next != null) select(next.id) else newTab(null)
+            if (next != null) {
+                select(next.id)
+            } else {
+                currentId.value = null
+            }
         }
         persist()
+        return snapshot
+    }
+
+    fun restoreClosedTab(snapshot: ClosedTabSnapshot): Tab? {
+        if (closed || _tabs.value.any { it.id == snapshot.id }) return null
+        val tab = Tab(GeckoSession(sessionSettings(snapshot.isPrivate)), snapshot.id, snapshot.isPrivate).apply {
+            url = snapshot.url
+            title = snapshot.title
+            desktop = snapshot.desktop
+            lastAccess = snapshot.lastAccess
+            latestSessionState = snapshot.latestSessionState
+            latestSessionStateUrl = snapshot.latestSessionStateUrl
+            persistedSessionState = snapshot.persistedSessionState
+            persistedSessionStateUrl = snapshot.persistedSessionStateUrl
+            restoreUrlOnOpen = true
+        }
+        seq = maxOf(seq, tab.id)
+        attachDelegates(tab)
+        val restoredTabs = _tabs.value.toMutableList()
+        restoredTabs.add(snapshot.index.coerceIn(0, restoredTabs.size), tab)
+        _tabs.value = restoredTabs
+
+        if (snapshot.wasCurrent || currentId.value == null) {
+            deactivateOthers(tab.id)
+            currentId.value = tab.id
+            openTab(tab)
+        }
+        persist()
+        enforceHotTabBudget()
+        return tab
     }
 
     fun current(): Tab? = _tabs.value.firstOrNull { it.id == currentId.value }
@@ -471,10 +526,6 @@ class TabManager(
         }
     }
 
-    /**
-     * Called only after the Activity is fully stopped. Keep the selected tab plus a small recent
-     * warm set; restorable cold sessions can be rebuilt when the user returns to them.
-     */
     fun trimForBackground() {
         if (closed) return
         backgroundTrimRequested = true
@@ -484,11 +535,6 @@ class TabManager(
     private fun effectiveHotTabLimit(): Int =
         if (backgroundTrimRequested) backgroundHotTabLimit else hotTabLimit
 
-    /**
-     * Keep only a bounded LRU set of fully open Gecko sessions. Closed cold tabs remain logical tabs
-     * and reopen from Gecko's SessionState, so history/scroll/zoom/form state is retained without
-     * paying the resident cost of an unlimited number of content sessions.
-     */
     private fun enforceHotTabBudget() {
         if (closed) return
         val targetLimit = effectiveHotTabLimit()
@@ -503,8 +549,6 @@ class TabManager(
             .toList()
         for (tab in coldest) {
             if (openCount <= targetLimit) break
-            // Never discard an in-flight navigation merely to hit the steady-state budget. Once
-            // Gecko finishes or flushes a restorable state, its callback retries the trim.
             if (tab.progress >= 0f) continue
             val hasRestorableState = tab.url.isBlank() || tab.url == "about:blank" ||
                 (tab.latestSessionState != null && tab.latestSessionStateUrl == tab.url)
@@ -520,8 +564,6 @@ class TabManager(
         tab.session.setFocused(false)
         tab.session.setActive(false)
         tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
-        // Keep the SessionState object in memory. Serializing it here can be surprisingly expensive
-        // and would run on the tab-switch UI path; persistence serializes snapshots on Dispatchers.IO.
         closeIfOpen(tab.session)
         tab.restoreUrlOnOpen = true
     }
@@ -537,9 +579,6 @@ class TabManager(
         _tabs.value = emptyList()
         currentId.value = null
 
-        // Any callbacks emitted while the old sessions were closing have already advanced the
-        // revision. The clear barrier is therefore newer than every snapshot that can still
-        // contain those tabs, and it is fsynced before Gecko's asynchronous storage clear starts.
         val clearRevision = TabStore.nextRevision(storeDir)
         withContext(Dispatchers.IO) {
             TabStore.saveStateVersioned(storeDir, PersistedBrowserState(), clearRevision)
@@ -679,16 +718,11 @@ class TabManager(
                 val stateUrl = currentSessionStateUrl(state)
                 tab.latestSessionState = state
                 tab.latestSessionStateUrl = stateUrl
-                // Once Gecko has produced a fresh restorable state for this URL, the serialized
-                // startup backup is redundant. Release it instead of retaining two copies of the
-                // same session history in memory for every restored tab the user has reopened.
                 if (stateUrl != null && stateUrl == tab.url) {
                     tab.persistedSessionState = null
                     tab.persistedSessionStateUrl = null
                 }
                 if (!tab.isPrivate) requestPersist(immediate = false)
-                // setActive(false) flushes state asynchronously. Retry whichever foreground/background
-                // budget is currently active once the restorable state actually arrives.
                 if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > effectiveHotTabLimit()) {
                     enforceHotTabBudget()
                 }
@@ -743,7 +777,6 @@ class TabManager(
                 tab.canGoForward = canGoForward
             }
 
-            // target="_blank"/window.open — GeckoView loads the URI into the returned session.
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
                 if (BuildConfig.DEBUG) {
                     Log.d("MinibrowserNavigation", "new session uri=${navigationDebugLabel(uri)}")
