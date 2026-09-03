@@ -19,11 +19,11 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,6 +48,7 @@ import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.SettingsViewModel
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
+import com.artt.minibrowser.engine.ClosedTabSnapshot
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.NavigationTarget
 import com.artt.minibrowser.engine.PageLoadError
@@ -83,7 +84,6 @@ import com.artt.minibrowser.ui.TabPreviewStore
 import com.artt.minibrowser.ui.chromiumSharedXAxisEnter
 import com.artt.minibrowser.ui.chromiumSharedXAxisExit
 import java.io.File
-import kotlinx.coroutines.launch
 
 /**
  * Screen-level browser route. It collects state from browser ViewModels and translates user
@@ -123,7 +123,7 @@ internal fun BrowserRoute(
     val showSiteInfo = browserUi.showSiteInfo
     var downloadsReturnToSettings by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val routeScope = rememberCoroutineScope()
+    var pendingClosedTab by remember { mutableStateOf<ClosedTabSnapshot?>(null) }
 
     val tabs by tabManager.tabs.collectAsStateWithLifecycle()
     val currentId by tabManager.currentId.collectAsStateWithLifecycle()
@@ -161,7 +161,7 @@ internal fun BrowserRoute(
     )
 
     val bookmarked = pageBookmarkUi.url == currentTab?.url && pageBookmarkUi.isBookmarked
-    val showStart = currentTab?.url.isNullOrBlank() || currentTab?.url == "about:blank"
+    val showStart = currentTab?.url.isNullOrBlank() || currentTab.url == "about:blank"
     val toggleAdblock: (Boolean) -> Unit = settingsViewModel::setAdblock
     val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
     val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
@@ -279,6 +279,23 @@ internal fun BrowserRoute(
     val bookmarksPaneTitle = stringResource(R.string.bookmarks_title)
     val tabClosedMessage = stringResource(R.string.tab_closed_message)
     val undoLabel = stringResource(R.string.action_undo)
+
+    LaunchedEffect(pendingClosedTab) {
+        val closed = pendingClosedTab ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = tabClosedMessage,
+            actionLabel = undoLabel,
+            withDismissAction = true,
+            duration = SnackbarDuration.Long,
+        )
+        if (pendingClosedTab?.id != closed.id) return@LaunchedEffect
+        if (result == SnackbarResult.ActionPerformed) {
+            tabManager.restoreClosedTab(closed)
+        } else {
+            tabPreviewStore.remove(closed.id)
+        }
+        pendingClosedTab = null
+    }
 
     MinibrowserTheme(darkTheme = darkTheme) {
         Box(
@@ -449,22 +466,10 @@ internal fun BrowserRoute(
                     previewStore = tabPreviewStore,
                     onSelect = { tabManager.select(it) },
                     onClose = { id ->
-                        val closed = tabManager.closeTab(id)
-                        if (closed != null) {
-                            routeScope.launch {
-                                val result = snackbarHostState.showSnackbar(
-                                    message = tabClosedMessage,
-                                    actionLabel = undoLabel,
-                                    withDismissAction = true,
-                                    duration = SnackbarDuration.Long,
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    tabManager.restoreClosedTab(closed)
-                                } else {
-                                    tabPreviewStore.remove(closed.id)
-                                }
-                            }
+                        pendingClosedTab?.let { previous ->
+                            tabPreviewStore.remove(previous.id)
                         }
+                        pendingClosedTab = tabManager.closeTab(id)
                     },
                     onNew = { tabManager.newTab(null) },
                     onDismiss = { browserViewModel.showSwitcher(false) },
