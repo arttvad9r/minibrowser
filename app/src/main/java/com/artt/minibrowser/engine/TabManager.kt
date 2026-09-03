@@ -263,7 +263,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     internal var lastAccess = System.currentTimeMillis()
 }
 
-internal data class ClosedTabSnapshot(
+data class ClosedTabSnapshot(
     val id: Long,
     val index: Int,
     val wasCurrent: Boolean,
