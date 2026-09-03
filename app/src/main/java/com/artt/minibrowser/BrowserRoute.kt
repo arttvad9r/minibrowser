@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -459,6 +460,17 @@ internal fun BrowserRoute(
             }
 
             if (showSwitcher) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitPointerEvent().changes.forEach { it.consume() }
+                                }
+                            }
+                        },
+                )
                 BrowserTabSwitcher(
                     tabs = tabItems,
                     currentId = currentId,
@@ -529,7 +541,7 @@ private fun SearchEngine.toSettingsUiState(): SettingsSearchEngineUiState = when
 
 private fun SettingsSearchEngineUiState.toSearchEngine(): SearchEngine = when (this) {
     SettingsSearchEngineUiState.Google -> SearchEngine.GOOGLE
-    SettingsSearchEngineUiState.DuckDuckGo -> SearchEngine.DUCKDUCKGO
+    SettingsSearchEngineUiState.DuckDuckGo -> SearchEngineUiState.DuckDuckGo
     SettingsSearchEngineUiState.Yandex -> SearchEngine.YANDEX
     SettingsSearchEngineUiState.Bing -> SearchEngine.BING
 }
