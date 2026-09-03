@@ -719,7 +719,7 @@ private fun MenuSheet(
                             stringResource(R.string.settings_adblock),
                             true,
                             dense = true,
-                            onToggleAdblock,
+                            onChecked = onToggleAdblock,
                         )
                     BrowserExtensionUiState.Disabled ->
                         CompactMenuToggleRow(
@@ -727,7 +727,7 @@ private fun MenuSheet(
                             stringResource(R.string.settings_adblock),
                             false,
                             dense = true,
-                            onToggleAdblock,
+                            onChecked = onToggleAdblock,
                         )
                 }
                 CompactMenuRow(
