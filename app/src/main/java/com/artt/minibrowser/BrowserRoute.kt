@@ -457,18 +457,20 @@ internal fun BrowserRoute(
                     previewStore = tabPreviewStore,
                     onSelect = { tabManager.select(it) },
                     onClose = { id ->
-                        val closed = tabManager.closeTab(id) ?: return@BrowserTabSwitcher
-                        routeScope.launch {
-                            val result = snackbarHostState.showSnackbar(
-                                message = tabClosedMessage,
-                                actionLabel = undoLabel,
-                                withDismissAction = true,
-                                duration = SnackbarDuration.Long,
-                            )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                tabManager.restoreClosedTab(closed)
-                            } else {
-                                tabPreviewStore.remove(closed.id)
+                        val closed = tabManager.closeTab(id)
+                        if (closed != null) {
+                            routeScope.launch {
+                                val result = snackbarHostState.showSnackbar(
+                                    message = tabClosedMessage,
+                                    actionLabel = undoLabel,
+                                    withDismissAction = true,
+                                    duration = SnackbarDuration.Long,
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    tabManager.restoreClosedTab(closed)
+                                } else {
+                                    tabPreviewStore.remove(closed.id)
+                                }
                             }
                         }
                     },
@@ -533,5 +535,5 @@ private fun SettingsSearchEngineUiState.toSearchEngine(): SearchEngine = when (t
     SettingsSearchEngineUiState.Google -> SearchEngine.GOOGLE
     SettingsSearchEngineUiState.DuckDuckGo -> SearchEngine.DUCKDUCKGO
     SettingsSearchEngineUiState.Yandex -> SearchEngine.YANDEX
-    SettingsSearchEngineUiState.BING -> SearchEngine.BING
+    SettingsSearchEngineUiState.Bing -> SearchEngine.BING
 }
