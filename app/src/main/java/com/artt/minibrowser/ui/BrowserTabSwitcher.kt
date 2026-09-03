@@ -421,6 +421,11 @@ internal fun BrowserTabSwitcher(
                     .weight(1f)
                     .fillMaxWidth(),
             ) {
+                val columns = tabGridColumnCount(windowSizeClass)
+                val singleCardWidth = (
+                    maxWidth - 24.dp - 10.dp * (columns - 1).toFloat()
+                    ) / columns.toFloat()
+
                 when {
                     tabs.isEmpty() ->
                         EmptyState(AppIcons.Globe, stringResource(R.string.no_open_tabs))
@@ -442,7 +447,7 @@ internal fun BrowserTabSwitcher(
                                 swipeExitDistancePx = overviewWidthPx,
                                 iconsDir = iconsDir,
                                 previewStore = previewStore,
-                                modifier = Modifier.width(224.dp),
+                                modifier = Modifier.width(singleCardWidth),
                                 previewVisible = !isPreviewCoveredByTransform(
                                     tab.id,
                                     overviewCurrentId,
@@ -459,7 +464,6 @@ internal fun BrowserTabSwitcher(
                     }
 
                     else -> {
-                        val columns = tabGridColumnCount(windowSizeClass)
                         val initialIndex =
                             visibleTabs.indexOfFirst { it.id == overviewCurrentId }.coerceAtLeast(0)
                         val gridState = rememberLazyGridState(
