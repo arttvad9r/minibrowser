@@ -1,10 +1,10 @@
 # Physical-device QA status
 
-Последнее обновление: 2026-09-02.
+Последнее обновление: 2026-09-03.
 
-## Проверенная сборка
+## Последний полный physical-device проход
 
-- Git SHA: `5629a3c09a897ba28a1414e52b0966a249a3e137`
+- Git SHA: `5629a3c09a897ba28a1414e52b0966a249a3e137` (ветка `master` на момент проверки)
 - APK SHA256: `8b54a1c00f8781daaf9c6f47dd5bd0ec1e5cc3338429517f9983803432cc56bb`
 - Install mode: `adb install -r`, пользовательские данные сохранены
 - Device: OnePlus CPH2723 / OnePlus 13s
@@ -12,7 +12,7 @@
 - ABI: `arm64-v8a`
 - PAGE_SIZE: 4096
 
-## Автоматические проверки
+## Автоматические проверки physical-device SHA
 
 | Проверка | Результат |
 | --- | --- |
@@ -26,7 +26,19 @@
 | GitHub Actions | PASS — run `33563450818` |
 | Production crash/ANR scan | PASS |
 
-## Physical-device результаты
+## Интеграционный набор `ux-tab-polish`
+
+Перед слиянием в `master` набор проверяется тремя независимыми GitHub Actions workflows:
+
+- `Android`: unit/screenshot tests, lint, debug/release packaging, R8/resource shrink, baseline profiles, benchmark/profile APK, API 36 instrumentation, minSdk 26 startup smoke, 16 KB page-size lane и Android 17 compatibility lane;
+- `Room Schema`: KSP повторно генерирует `app/schemas/com.artt.minibrowser.data.AppDb/3.json` и проверяет отсутствие schema drift;
+- `Bundled Extensions`: повторно скачивает XPI из `extensions.lock`, проверяет SHA256/version/id и сравнивает распакованные assets с содержимым репозитория.
+
+Android 17 lane использует явный target-package Intent для startup/recreation tests, чтобы AndroidX Test не пытался разрешать `MainActivity` внутри test APK package.
+
+Отдельный physical-device проход именно для `ux-tab-polish` до слияния не выполнялся.
+
+## Physical-device результаты последнего прохода
 
 | Сценарий | Результат | Примечание |
 | --- | --- | --- |
@@ -48,44 +60,22 @@
 | Large font | PASS | layout/scroll проверены |
 | Accessibility automated checks | PASS | instrumentation suite |
 | TalkBack spoken navigation | MANUAL CHECK REQUIRED | требует ручной оценки |
-| Private mode | FAIL | persistent black screen |
-| External intent | NOT VALIDATED | тестовый VIEW intent перехватил другой установленный browser |
-| HTTP | NOT RUN | QA остановлен после blocker |
-| Bookmarks full flow | NOT RUN | QA остановлен после blocker |
-| Extensions full lifecycle | NOT RUN | QA остановлен после blocker |
-| Dark mode physical pass | NOT RUN | QA остановлен после blocker |
-| Exit animation acceptance | NOT RUN | QA остановлен после blocker |
+| Private mode | PASS | пользовательский viewport отображается нормально; screen capture защищён `FLAG_SECURE` |
+| External intent | PASS (эмулятор) | `mailto:` → Gmail, `tel:` → Dialer, `topResumedActivity` меняется; на устройстве не перепроверялось |
+| HTTP | NOT RUN | не выполнялось в этом physical-device проходе |
+| Bookmarks full flow | NOT RUN | не выполнялось в этом проходе |
+| Extensions full lifecycle | NOT RUN | не выполнялось в этом проходе |
+| Dark mode physical pass | NOT RUN | не выполнялось в этом проходе |
+| Exit animation acceptance | NOT RUN | не выполнялось в этом проходе |
 
-## Blocking known issue
+## Network policy
 
-### Private tab -> persistent black screen
-
-Issue: https://github.com/arttvad9r/minibrowser/issues/2
-
-Reproduction:
-
-1. Открыть главное меню.
-2. Нажать «Приватная вкладка».
-3. Подождать 15+ секунд.
-
-Expected: отображается usable private tab/start page.
-
-Actual: весь viewport приложения становится чёрным и остаётся чёрным. Activity остаётся `RESUMED`; production crash, ANR и `FATAL EXCEPTION` не обнаружены.
-
-Severity: **High**.
-
-Этот дефект должен оставаться явно отслеживаемым после интеграции в `master` и не должен быть скрыт зелёным CI: автоматические тесты не воспроизводят device-only failure.
+MiniBrowser принимает `http://` и `https://` как браузерные схемы. Android manifest явно разрешает cleartext traffic, поэтому платформенный same-origin favicon fetcher и Gecko navigation не расходятся по базовой политике HTTP.
 
 ## Performance limitation
 
 На production user-build Android benchmark instrumentation может не иметь `android.permission.CLEAR_APP_USER_DATA`. В таком окружении сценарии, которым нужен `pm clear`, нельзя считать полноценным baseline/profile performance comparison; это ограничение test environment, а не доказанный production crash.
 
-## Acceptance gates после merge
+## Оставшийся manual/device QA
 
-Перед объявлением private mode production-ready требуется:
-
-1. воспроизвести issue #2 с диагностикой состояния active tab / GeckoSession / Compose route;
-2. исправить root cause;
-3. добавить regression test;
-4. повторить private browsing flow на физическом устройстве;
-5. завершить оставшиеся manual/device scenarios: HTTP, external VIEW intent с явным package/component при необходимости, bookmarks, extensions, dark mode, exit animations, TalkBack и predictive back.
+После интеграции остаётся вручную проверить на физическом устройстве HTTP, bookmarks, extensions lifecycle, dark mode, exit animations, TalkBack spoken navigation и predictive back. External VIEW intent проверен на эмуляторе; physical-device перепроверка остаётся желательной.

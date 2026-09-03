@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -562,144 +563,194 @@ private fun MenuSheet(
     onToggleDesktop: () -> Unit,
 ) {
     val httpPage = state.isWebPage
-    BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
-        Row(
+    val density = LocalDensity.current
+    val popupOffset = IntOffset(
+        with(density) { (-8).dp.roundToPx() },
+        with(density) { 60.dp.roundToPx() },
+    )
+    fun dismissThen(action: () -> Unit) {
+        onDismiss()
+        action()
+    }
+
+    Popup(
+        alignment = Alignment.TopEnd,
+        offset = popupOffset,
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.PopupProperties(
+            focusable = true,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        ),
+    ) {
+        Column(
             Modifier
-                .fillMaxWidth()
-                .clip(Radius.button)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .width(260.dp)
+                .heightIn(max = 500.dp)
+                .clip(Radius.card)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card)
+                .verticalScroll(rememberScrollState())
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            MenuNavigationAction(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                stringResource(R.string.action_back),
-                state.canGoBack,
-                Modifier.weight(1f),
-            ) { dismissThen(onBack) }
-            MenuNavigationAction(
-                Icons.AutoMirrored.Filled.ArrowForward,
-                stringResource(R.string.action_forward),
-                state.canGoForward,
-                Modifier.weight(1f),
-            ) { dismissThen(onForward) }
-            MenuNavigationAction(
-                if (state.isLoading) Icons.Filled.Stop else Icons.Filled.Refresh,
-                stringResource(if (state.isLoading) R.string.action_stop else R.string.action_reload),
-                httpPage,
-                Modifier.weight(1f),
-            ) { dismissThen(onReload) }
-            MenuNavigationAction(
-                if (bookmarked) Icons.Filled.Star else AppIcons.Star,
-                stringResource(
-                    if (bookmarked) R.string.remove_from_bookmarks_action else R.string.add_to_bookmarks_action,
-                ),
-                httpPage,
-                Modifier.weight(1f),
-            ) { dismissThen(onToggleBookmark) }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.Incognito, stringResource(R.string.private_tab_title)) {
-                    dismissThen(onNewPrivateTab)
+            MenuSection {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    MenuNavigationAction(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        stringResource(R.string.action_back),
+                        state.canGoBack,
+                        Modifier.weight(1f),
+                    ) { dismissThen(onBack) }
+                    MenuNavigationAction(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        stringResource(R.string.action_forward),
+                        state.canGoForward,
+                        Modifier.weight(1f),
+                    ) { dismissThen(onForward) }
+                    MenuNavigationAction(
+                        if (state.isLoading) Icons.Filled.Stop else Icons.Filled.Refresh,
+                        stringResource(if (state.isLoading) R.string.action_stop else R.string.action_reload),
+                        httpPage,
+                        Modifier.weight(1f),
+                    ) { dismissThen(onReload) }
+                    MenuNavigationAction(
+                        if (bookmarked) Icons.Filled.Star else AppIcons.Star,
+                        stringResource(
+                            if (bookmarked) R.string.remove_from_bookmarks_action else R.string.add_to_bookmarks_action,
+                        ),
+                        httpPage,
+                        Modifier.weight(1f),
+                    ) { dismissThen(onToggleBookmark) }
                 }
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.Download, stringResource(R.string.downloads_title)) {
-                    dismissThen(onDownloads)
+
+            MenuSection {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                        CompactMenuQuickAction(AppIcons.Incognito, stringResource(R.string.private_tab_title)) {
+                            dismissThen(onNewPrivateTab)
+                        }
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                        CompactMenuQuickAction(AppIcons.Download, stringResource(R.string.downloads_title)) {
+                            dismissThen(onDownloads)
+                        }
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                        CompactMenuQuickAction(AppIcons.History, stringResource(R.string.history_title)) {
+                            dismissThen(onHistory)
+                        }
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                        CompactMenuQuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) {
+                            dismissThen(onBookmarks)
+                        }
+                    }
                 }
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.History, stringResource(R.string.history_title)) {
-                    dismissThen(onHistory)
+
+            if (httpPage) {
+                MenuSection {
+                    CompactMenuRow(
+                        Icons.Filled.Search,
+                        stringResource(R.string.find_on_page),
+                        onClick = { dismissThen(onFind) },
+                    )
+                    CompactMenuToggleRow(
+                        AppIcons.Desktop,
+                        stringResource(R.string.desktop_site),
+                        state.desktop,
+                        onChecked = { dismissThen(onToggleDesktop) },
+                    )
+                    CompactMenuRow(
+                        Icons.Filled.Share,
+                        stringResource(R.string.action_share),
+                        onClick = { dismissThen(onShare) },
+                    )
+                    CompactMenuRow(
+                        AppIcons.Globe,
+                        stringResource(R.string.translate_page),
+                        onClick = { dismissThen(onTranslate) },
+                    )
                 }
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) {
-                    dismissThen(onBookmarks)
-                }
-            }
-        }
-        MenuDivider()
-        SheetRow(
-            Icons.Filled.Search,
-            stringResource(R.string.find_on_page),
-            enabled = httpPage,
-            onClick = { dismissThen(onFind) },
-        )
-        if (httpPage) {
-            ToggleRow(
-                AppIcons.Desktop,
-                stringResource(R.string.desktop_site),
-                state.desktop,
-                onChecked = { dismissThen(onToggleDesktop) },
-            )
-        }
-        SheetRow(
-            Icons.Filled.Share,
-            stringResource(R.string.action_share),
-            enabled = httpPage,
-            onClick = { dismissThen(onShare) },
-        )
-        SheetRow(
-            AppIcons.Globe,
-            stringResource(R.string.translate_page),
-            enabled = httpPage,
-            onClick = { dismissThen(onTranslate) },
-        )
-        MenuDivider()
-        when (adblockStatus) {
-            BrowserExtensionUiState.Installing ->
-                SheetRow(
-                    AppIcons.Shield,
-                    stringResource(R.string.settings_adblock),
-                    enabled = false,
-                    trailing = {
-                        Text(
-                            stringResource(R.string.extension_starting),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+
+            MenuSection {
+                when (adblockStatus) {
+                    BrowserExtensionUiState.Installing ->
+                        CompactMenuRow(
+                            AppIcons.Shield,
+                            stringResource(R.string.settings_adblock),
+                            dense = true,
+                            enabled = false,
+                            trailing = {
+                                Text(
+                                    stringResource(R.string.extension_starting),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
                         )
-                    },
-                )
-            BrowserExtensionUiState.Error ->
-                SheetRow(
-                    AppIcons.Shield,
-                    stringResource(R.string.settings_adblock),
-                    trailing = {
-                        Text(
-                            stringResource(R.string.extension_retry_short),
-                            color = MaterialTheme.colorScheme.error,
+                    BrowserExtensionUiState.Error ->
+                        CompactMenuRow(
+                            AppIcons.Shield,
+                            stringResource(R.string.settings_adblock),
+                            dense = true,
+                            trailing = {
+                                Text(
+                                    stringResource(R.string.extension_retry_short),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            onClick = { dismissThen(onRetryAdblock) },
                         )
-                    },
-                    onClick = { dismissThen(onRetryAdblock) },
+                    BrowserExtensionUiState.Enabled ->
+                        CompactMenuToggleRow(
+                            AppIcons.Shield,
+                            stringResource(R.string.settings_adblock),
+                            true,
+                            dense = true,
+                            onChecked = onToggleAdblock,
+                        )
+                    BrowserExtensionUiState.Disabled ->
+                        CompactMenuToggleRow(
+                            AppIcons.Shield,
+                            stringResource(R.string.settings_adblock),
+                            false,
+                            dense = true,
+                            onChecked = onToggleAdblock,
+                        )
+                }
+                CompactMenuRow(
+                    Icons.Filled.Settings,
+                    stringResource(R.string.settings_title),
+                    dense = true,
+                    onClick = { dismissThen(onSettings) },
                 )
-            BrowserExtensionUiState.Enabled ->
-                ToggleRow(
-                    AppIcons.Shield,
-                    stringResource(R.string.settings_adblock),
-                    true,
-                    onToggleAdblock,
-                    subtitle = stringResource(R.string.settings_adblock_subtitle),
-                )
-            BrowserExtensionUiState.Disabled ->
-                ToggleRow(
-                    AppIcons.Shield,
-                    stringResource(R.string.settings_adblock),
-                    false,
-                    onToggleAdblock,
-                    subtitle = stringResource(R.string.settings_adblock_subtitle),
-                )
+            }
         }
-        SheetRow(
-            Icons.Filled.Settings,
-            stringResource(R.string.settings_title),
-            onClick = { dismissThen(onSettings) },
-        )
+    }
+}
+
+@Composable
+private fun MenuSection(content: @Composable () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(Radius.small)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(2.dp),
+    ) {
+        content()
     }
 }
 
@@ -714,7 +765,7 @@ private fun MenuNavigationAction(
     val alpha = if (enabled) 1f else 0.38f
     Box(
         modifier
-            .height(48.dp)
+            .height(40.dp)
             .clip(Radius.small)
             .softClickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = description },
@@ -734,7 +785,7 @@ private fun MenuNavigationAction(
             Icon(
                 targetIcon,
                 null,
-                Modifier.size(23.dp),
+                Modifier.size(19.dp),
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
             )
         }
@@ -742,10 +793,128 @@ private fun MenuNavigationAction(
 }
 
 @Composable
-private fun MenuDivider() {
-    Spacer(Modifier.height(4.dp))
-    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    Spacer(Modifier.height(4.dp))
+private fun CompactMenuQuickAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(Radius.small)
+            .softClickable(onClick = onClick)
+            .padding(horizontal = 2.dp, vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(36.dp).background(MaterialTheme.colorScheme.surface, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun CompactMenuRow(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    dense: Boolean = false,
+    enabled: Boolean = true,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    if (!enabled && onClick != null) return
+
+    val alpha = if (enabled) 1f else 0.52f
+    Row(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = if (dense) 34.dp else 40.dp)
+            .clip(Radius.small)
+            .then(
+                if (onClick != null) {
+                    Modifier.softClickable(enabled = enabled, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            null,
+            Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+        )
+        Spacer(Modifier.width(9.dp))
+        Text(
+            label,
+            Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+        )
+        trailing?.invoke()
+    }
+}
+
+@Composable
+private fun CompactMenuToggleRow(
+    icon: ImageVector,
+    label: String,
+    checked: Boolean,
+    dense: Boolean = false,
+    onChecked: (Boolean) -> Unit,
+) {
+    CompactMenuRow(
+        icon = icon,
+        label = label,
+        dense = dense,
+        trailing = { CompactMenuSwitch(checked) },
+        onClick = { onChecked(!checked) },
+    )
+}
+
+@Composable
+private fun CompactMenuSwitch(checked: Boolean) {
+    val trackColor = if (checked) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
+    val thumbColor = if (checked) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+    Box(
+        Modifier
+            .width(34.dp)
+            .height(20.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(trackColor)
+            .padding(2.dp),
+    ) {
+        Box(
+            Modifier
+                .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
+                .size(16.dp)
+                .background(thumbColor, CircleShape),
+        )
+    }
 }
 
 @Composable

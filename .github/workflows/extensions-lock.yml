@@ -1,0 +1,28 @@
+name: Bundled Extensions
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extensions-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-bundled-extensions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Fetch and verify locked extensions
+        run: bash scripts/fetch-extensions.sh
+      - name: Verify bundled assets match lock
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- app/src/main/assets/extensions extensions.lock
+          test -z "$(git status --porcelain -- app/src/main/assets/extensions extensions.lock)"

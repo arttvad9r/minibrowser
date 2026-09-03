@@ -49,6 +49,29 @@ install_apk() {
 install_apk "$app_apk"
 install_apk "$test_apk"
 
+# Preview system images can report a successful install before PackageManager has finished
+# publishing the launcher's activity resolver state. ActivityScenario consults that resolver, so
+# wait for the actual MAIN/LAUNCHER component rather than treating `adb install` as readiness.
+launcher_ready=0
+for attempt in $(seq 1 30); do
+  resolved="$(adb shell cmd package resolve-activity --brief \
+    -a android.intent.action.MAIN \
+    -c android.intent.category.LAUNCHER \
+    com.artt.minibrowser 2>/dev/null | tr -d '\r' || true)"
+  if [[ "$resolved" == *"com.artt.minibrowser/.MainActivity"* ]]; then
+    launcher_ready=1
+    break
+  fi
+  echo "Launcher activity not registered yet (attempt $attempt/30): ${resolved:-<empty>}"
+  adb wait-for-device || true
+  sleep 2
+done
+if (( launcher_ready == 0 )); then
+  echo "Launcher activity did not become resolvable"
+  adb shell dumpsys package com.artt.minibrowser || true
+  exit 1
+fi
+
 echo '--- guest memory before instrumentation ---'
 adb shell free -m || adb shell cat /proc/meminfo | head -n 20 || true
 

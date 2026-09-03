@@ -22,7 +22,7 @@ internal class TabPreviewStore {
         const val DEFAULT_MAX_CACHE_BYTES = 16L * 1024L * 1024L
         const val DEFAULT_BACKGROUND_CACHE_BYTES = 4L * 1024L * 1024L
         const val RETIRE_DELAY_MS = 1_000L
-        const val OVERVIEW_CAPTURE_DELAY_MS = 420L
+        const val PREWARM_CAPTURE_DELAY_MS = 850L
     }
 
     private data class DeferredPreview(val bitmap: Bitmap, val url: String)
@@ -33,6 +33,7 @@ internal class TabPreviewStore {
     private var maxCacheBytes = DEFAULT_MAX_CACHE_BYTES
     private var backgroundCacheBytes = DEFAULT_BACKGROUND_CACHE_BYTES
     private val lastCapturedUrl = mutableMapOf<Long, String>()
+    private val scheduledCaptureUrl = mutableMapOf<Long, String>()
     private val inFlight = mutableSetOf<Long>()
     private val removedTabs = mutableSetOf<Long>()
     private val privateTabs = mutableSetOf<Long>()
@@ -80,6 +81,7 @@ internal class TabPreviewStore {
         generation++
         deferredPreviews.values.map { it.bitmap }.forEach(::retire)
         deferredPreviews.clear()
+        scheduledCaptureUrl.clear()
         inFlight.clear()
         if (aggressive) {
             previews.keys.toList().forEach(::removePreview)
@@ -90,12 +92,15 @@ internal class TabPreviewStore {
 
     /**
      * Keep newly captured pixels out of a currently visible overview. A preview that appears halfway
-     * through the user's glance reads as a card jump even if the capture itself is fast. Deferred
-     * previews are published after the overview leaves composition and are ready on the next open.
+     * through the user's glance reads as a card jump even if the capture itself is fast. When the
+     * overview closes, a missing preview is prewarmed again after a short idle delay.
      */
     fun setOverviewVisible(visible: Boolean) {
         overviewVisible = visible
-        if (!visible) flushDeferredPreviews()
+        if (!visible) {
+            flushDeferredPreviews()
+            scheduleCurrentPrewarm(PREWARM_CAPTURE_DELAY_MS / 2)
+        }
     }
 
     fun attach(view: GeckoView, tabId: Long?, url: String, isPrivate: Boolean) {
@@ -106,6 +111,7 @@ internal class TabPreviewStore {
             // marks that host boundary. Invalidate every old compositor callback before releasing
             // the tombstones so a late bitmap cannot be published into a reused id.
             generation++
+            scheduledCaptureUrl.clear()
             inFlight.clear()
             removedTabs.clear()
             hostView = WeakReference(view)
@@ -119,6 +125,7 @@ internal class TabPreviewStore {
             removePreview(tabId)
             removeDeferredPreview(tabId)
             lastCapturedUrl.remove(tabId)
+            scheduledCaptureUrl.remove(tabId)
             inFlight.remove(tabId)
             return
         }
@@ -127,6 +134,7 @@ internal class TabPreviewStore {
             removePreview(tabId)
             removeDeferredPreview(tabId)
             lastCapturedUrl.remove(tabId)
+            scheduledCaptureUrl.remove(tabId)
             inFlight.remove(tabId)
         } else {
             privateTabs.remove(tabId)
@@ -134,10 +142,9 @@ internal class TabPreviewStore {
     }
 
     /**
-     * Keep track of the visible GeckoView, but do not take a screenshot automatically when every
-     * page finishes loading. capturePixels() is compositor work and downscaling allocates a bitmap;
-     * doing that on the normal navigation path made page completion visibly hitch. A fresh frame is
-     * captured only when the user actually opens the tab overview.
+     * Prewarm a normal web-tab preview only after the page is settled. The delayed task is cancelled
+     * logically by generation/tab/url checks and never starts while the tab overview is visible, so
+     * opening the overview itself performs no compositor readback.
      */
     fun maybeCapture(
         view: GeckoView,
@@ -147,45 +154,8 @@ internal class TabPreviewStore {
         pageSettled: Boolean,
     ) {
         attach(view, tabId, url, isPrivate)
-        if (!pageSettled) return
-        // Intentionally deferred to captureCurrent().
-    }
-
-    /**
-     * Reuse the existing preview while the tab remains on the same URL. A compositor readback is
-     * only needed when the page URL changed or there is no preview yet, and it is scheduled well
-     * after the overview reveal so it cannot land in the transition's critical frames.
-     */
-    fun captureCurrent() {
-        val view = currentView.get() ?: return
-        val id = currentTabId ?: return
-        val url = currentUrl
-        if (id in privateTabs || id in removedTabs || !isPreviewableUrl(url)) return
-
-        val cached = previews[id]
-        if (lastCapturedUrl[id] == url && cached != null && !cached.isRecycled) {
-            lru[id] = Unit
-            return
-        }
-
-        val expectedGeneration = generation
-        mainHandler.postDelayed({
-            if (
-                generation != expectedGeneration ||
-                currentView.get() !== view ||
-                currentTabId != id ||
-                currentUrl != url ||
-                id in privateTabs ||
-                id in removedTabs
-            ) return@postDelayed
-            capture(view, id, url)
-        }, OVERVIEW_CAPTURE_DELAY_MS)
-    }
-
-    /** Session swaps are latency-critical; never read back the old compositor here. */
-    fun captureBeforeSessionSwap(view: GeckoView) {
-        if (currentView.get() !== view) return
-        // Deliberately no-op.
+        if (!pageSettled || tabId == null || isPrivate) return
+        schedulePrewarm(view, tabId, url, PREWARM_CAPTURE_DELAY_MS)
     }
 
     fun remove(tabId: Long) {
@@ -194,6 +164,7 @@ internal class TabPreviewStore {
         removePreview(tabId)
         removeDeferredPreview(tabId)
         lastCapturedUrl.remove(tabId)
+        scheduledCaptureUrl.remove(tabId)
         inFlight.remove(tabId)
         if (currentTabId == tabId) {
             currentTabId = null
@@ -211,6 +182,7 @@ internal class TabPreviewStore {
         removedTabs += previews.keys
         removedTabs += deferredPreviews.keys
         removedTabs += lastCapturedUrl.keys
+        removedTabs += scheduledCaptureUrl.keys
         removedTabs += inFlight
         removedTabs += privateTabs
         currentTabId?.let(removedTabs::add)
@@ -220,6 +192,7 @@ internal class TabPreviewStore {
         lru.clear()
         cachedBytes = 0L
         lastCapturedUrl.clear()
+        scheduledCaptureUrl.clear()
         inFlight.clear()
         privateTabs.clear()
         overviewVisible = false
@@ -227,6 +200,47 @@ internal class TabPreviewStore {
         currentTabId = null
         currentUrl = ""
         retired.forEach(::retire)
+    }
+
+    private fun scheduleCurrentPrewarm(delayMs: Long) {
+        val view = currentView.get() ?: return
+        val id = currentTabId ?: return
+        val url = currentUrl
+        if (id in privateTabs || id in removedTabs || !isPreviewableUrl(url)) return
+        schedulePrewarm(view, id, url, delayMs)
+    }
+
+    private fun schedulePrewarm(view: GeckoView, tabId: Long, url: String, delayMs: Long) {
+        if (tabId in privateTabs || tabId in removedTabs || !isPreviewableUrl(url)) return
+        val cached = previews[tabId]
+        if (lastCapturedUrl[tabId] == url && cached != null && !cached.isRecycled) {
+            lru[tabId] = Unit
+            return
+        }
+        if (scheduledCaptureUrl[tabId] == url || tabId in inFlight) return
+
+        val expectedGeneration = generation
+        scheduledCaptureUrl[tabId] = url
+        mainHandler.postDelayed({
+            if (scheduledCaptureUrl[tabId] != url) return@postDelayed
+            scheduledCaptureUrl.remove(tabId)
+            if (
+                generation != expectedGeneration ||
+                overviewVisible ||
+                currentView.get() !== view ||
+                currentTabId != tabId ||
+                currentUrl != url ||
+                tabId in privateTabs ||
+                tabId in removedTabs
+            ) return@postDelayed
+
+            val latestCached = previews[tabId]
+            if (lastCapturedUrl[tabId] == url && latestCached != null && !latestCached.isRecycled) {
+                lru[tabId] = Unit
+                return@postDelayed
+            }
+            capture(view, tabId, url)
+        }, delayMs.coerceAtLeast(0L))
     }
 
     private fun capture(view: GeckoView, tabId: Long, url: String) {

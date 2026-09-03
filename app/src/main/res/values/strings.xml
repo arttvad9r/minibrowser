@@ -11,6 +11,7 @@
     <string name="action_reload">Обновить</string>
     <string name="action_clear">Очистить</string>
     <string name="action_cancel">Отмена</string>
+    <string name="action_undo">Отменить</string>
     <string name="action_retry">Повторить</string>
     <string name="action_hide">Скрыть</string>
     <string name="action_open">Открыть</string>
@@ -158,6 +159,9 @@
     <string name="no_open_tabs">Нет открытых вкладок</string>
     <string name="close_tab_content_description">Закрыть вкладку</string>
     <string name="private_mode_title">Приватный режим</string>
+    <string name="tab_search_hint">Поиск по вкладкам</string>
+    <string name="no_tab_search_results">Вкладки не найдены</string>
+    <string name="tab_closed_message">Вкладка закрыта</string>
 
     <plurals name="tabs_count">
         <item quantity="one">%d вкладка</item>

@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import com.artt.minibrowser.BuildConfig
 import kotlin.math.PI
 import kotlin.math.cos
 
@@ -128,14 +129,18 @@ fun <T> chromiumBottomSheetShrinkSpec(): FiniteAnimationSpec<T> = tween(
  *
  * This keeps programmatic show/hide at Chromium's exact 350/250 ms EMPHASIZED timing. The drag
  * settle spec is set to Chromium's 250 ms shrink timing, which covers the interactive dismiss path.
+ *
+ * The exact field names survive R8 through proguard-rules.pro; without that rule this silently
+ * did nothing in release only. A missing field now fails the debug build instead of shipping
+ * release with a different timing than every test observed.
  */
 fun applyChromiumBottomSheetMotion(sheetState: Any) {
-    val fields = sheetState.javaClass.declaredFields
     fun setSpec(name: String, value: Any) {
-        val field = fields.firstOrNull { it.name == name || it.name.contains(name) } ?: return
-        runCatching {
-            field.isAccessible = true
-            field.set(sheetState, value)
+        val applied = runCatching {
+            sheetState.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(sheetState, value)
+        }.isSuccess
+        check(applied || !BuildConfig.DEBUG) {
+            "SheetState.$name is gone; update Motion.kt and proguard-rules.pro"
         }
     }
     setSpec("showMotionSpec", chromiumBottomSheetExpandSpec<Float>())

@@ -249,7 +249,7 @@ jobs:
     # visible without making them equivalent to stable release gates until this lane proves reliable.
     continue-on-error: true
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
@@ -301,7 +301,7 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Android 17 startup and recreation smoke
+      - name: Android 17 startup, recreation and instrumentation
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 37.1
@@ -321,3 +321,6 @@ jobs:
             adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
             adb shell df -h /data
             bash scripts/run-startup-smoke.sh
+            # Полный instrumentation-набор гоняется и на API 37: lane с API 36 не видит
+            # регрессы, вызванные удалением приватных платформенных API в Android 17.
+            ./gradlew :app:connectedDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace

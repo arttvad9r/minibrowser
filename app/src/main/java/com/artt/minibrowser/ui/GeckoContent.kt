@@ -35,7 +35,6 @@ internal fun GeckoContent(
         update = { view ->
             view.updateBrowserContentAccessibility(hiddenFromAccessibility)
             if (view.session !== session) {
-                previewStore.captureBeforeSessionSwap(view)
                 view.releaseSession()
                 session?.let(view::setSession)
             }
