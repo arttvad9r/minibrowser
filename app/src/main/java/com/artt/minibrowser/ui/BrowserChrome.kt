@@ -689,6 +689,7 @@ private fun MenuSheet(
                         CompactMenuRow(
                             AppIcons.Shield,
                             stringResource(R.string.settings_adblock),
+                            dense = true,
                             enabled = false,
                             trailing = {
                                 Text(
@@ -702,6 +703,7 @@ private fun MenuSheet(
                         CompactMenuRow(
                             AppIcons.Shield,
                             stringResource(R.string.settings_adblock),
+                            dense = true,
                             trailing = {
                                 Text(
                                     stringResource(R.string.extension_retry_short),
@@ -716,6 +718,7 @@ private fun MenuSheet(
                             AppIcons.Shield,
                             stringResource(R.string.settings_adblock),
                             true,
+                            dense = true,
                             onToggleAdblock,
                         )
                     BrowserExtensionUiState.Disabled ->
@@ -723,12 +726,14 @@ private fun MenuSheet(
                             AppIcons.Shield,
                             stringResource(R.string.settings_adblock),
                             false,
+                            dense = true,
                             onToggleAdblock,
                         )
                 }
                 CompactMenuRow(
                     Icons.Filled.Settings,
                     stringResource(R.string.settings_title),
+                    dense = true,
                     onClick = { dismissThen(onSettings) },
                 )
             }
@@ -824,6 +829,7 @@ private fun CompactMenuRow(
     icon: ImageVector,
     label: String,
     modifier: Modifier = Modifier,
+    dense: Boolean = false,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
@@ -834,7 +840,7 @@ private fun CompactMenuRow(
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 40.dp)
+            .heightIn(min = if (dense) 34.dp else 40.dp)
             .clip(Radius.small)
             .then(
                 if (onClick != null) {
@@ -870,11 +876,13 @@ private fun CompactMenuToggleRow(
     icon: ImageVector,
     label: String,
     checked: Boolean,
+    dense: Boolean = false,
     onChecked: (Boolean) -> Unit,
 ) {
     CompactMenuRow(
         icon = icon,
         label = label,
+        dense = dense,
         trailing = { CompactMenuSwitch(checked) },
         onClick = { onChecked(!checked) },
     )
