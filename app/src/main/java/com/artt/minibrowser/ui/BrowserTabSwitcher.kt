@@ -288,8 +288,8 @@ internal fun BrowserTabSwitcher(
                         val tab = tabs.first()
                         val highlightedId = switchTarget ?: overviewCurrentId
                         Box(
-                            Modifier.fillMaxSize().padding(top = 8.dp),
-                            contentAlignment = Alignment.TopCenter,
+                            Modifier.fillMaxSize().padding(start = 12.dp, top = 8.dp),
+                            contentAlignment = Alignment.TopStart,
                         ) {
                             BrowserTabCard(
                                 tab = tab,
