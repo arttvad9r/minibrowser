@@ -562,144 +562,174 @@ private fun MenuSheet(
     onToggleDesktop: () -> Unit,
 ) {
     val httpPage = state.isWebPage
-    BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
-        Row(
+    val density = LocalDensity.current
+    val popupOffset = IntOffset(
+        with(density) { (-12).dp.roundToPx() },
+        with(density) { 64.dp.roundToPx() },
+    )
+    fun dismissThen(action: () -> Unit) {
+        onDismiss()
+        action()
+    }
+
+    Popup(
+        alignment = Alignment.TopEnd,
+        offset = popupOffset,
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.PopupProperties(
+            focusable = true,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        ),
+    ) {
+        Column(
             Modifier
-                .fillMaxWidth()
-                .clip(Radius.button)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .width(320.dp)
+                .heightIn(max = 620.dp)
+                .clip(Radius.card)
+                .background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card)
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp),
         ) {
-            MenuNavigationAction(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                stringResource(R.string.action_back),
-                state.canGoBack,
-                Modifier.weight(1f),
-            ) { dismissThen(onBack) }
-            MenuNavigationAction(
-                Icons.AutoMirrored.Filled.ArrowForward,
-                stringResource(R.string.action_forward),
-                state.canGoForward,
-                Modifier.weight(1f),
-            ) { dismissThen(onForward) }
-            MenuNavigationAction(
-                if (state.isLoading) Icons.Filled.Stop else Icons.Filled.Refresh,
-                stringResource(if (state.isLoading) R.string.action_stop else R.string.action_reload),
-                httpPage,
-                Modifier.weight(1f),
-            ) { dismissThen(onReload) }
-            MenuNavigationAction(
-                if (bookmarked) Icons.Filled.Star else AppIcons.Star,
-                stringResource(
-                    if (bookmarked) R.string.remove_from_bookmarks_action else R.string.add_to_bookmarks_action,
-                ),
-                httpPage,
-                Modifier.weight(1f),
-            ) { dismissThen(onToggleBookmark) }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.Incognito, stringResource(R.string.private_tab_title)) {
-                    dismissThen(onNewPrivateTab)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(Radius.button)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                MenuNavigationAction(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    stringResource(R.string.action_back),
+                    state.canGoBack,
+                    Modifier.weight(1f),
+                ) { dismissThen(onBack) }
+                MenuNavigationAction(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    stringResource(R.string.action_forward),
+                    state.canGoForward,
+                    Modifier.weight(1f),
+                ) { dismissThen(onForward) }
+                MenuNavigationAction(
+                    if (state.isLoading) Icons.Filled.Stop else Icons.Filled.Refresh,
+                    stringResource(if (state.isLoading) R.string.action_stop else R.string.action_reload),
+                    httpPage,
+                    Modifier.weight(1f),
+                ) { dismissThen(onReload) }
+                MenuNavigationAction(
+                    if (bookmarked) Icons.Filled.Star else AppIcons.Star,
+                    stringResource(
+                        if (bookmarked) R.string.remove_from_bookmarks_action else R.string.add_to_bookmarks_action,
+                    ),
+                    httpPage,
+                    Modifier.weight(1f),
+                ) { dismissThen(onToggleBookmark) }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                    QuickAction(AppIcons.Incognito, stringResource(R.string.private_tab_title)) {
+                        dismissThen(onNewPrivateTab)
+                    }
+                }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                    QuickAction(AppIcons.Download, stringResource(R.string.downloads_title)) {
+                        dismissThen(onDownloads)
+                    }
+                }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                    QuickAction(AppIcons.History, stringResource(R.string.history_title)) {
+                        dismissThen(onHistory)
+                    }
+                }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                    QuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) {
+                        dismissThen(onBookmarks)
+                    }
                 }
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.Download, stringResource(R.string.downloads_title)) {
-                    dismissThen(onDownloads)
-                }
+            MenuDivider()
+            SheetRow(
+                Icons.Filled.Search,
+                stringResource(R.string.find_on_page),
+                enabled = httpPage,
+                onClick = { dismissThen(onFind) },
+            )
+            if (httpPage) {
+                ToggleRow(
+                    AppIcons.Desktop,
+                    stringResource(R.string.desktop_site),
+                    state.desktop,
+                    onChecked = { dismissThen(onToggleDesktop) },
+                )
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.History, stringResource(R.string.history_title)) {
-                    dismissThen(onHistory)
-                }
+            SheetRow(
+                Icons.Filled.Share,
+                stringResource(R.string.action_share),
+                enabled = httpPage,
+                onClick = { dismissThen(onShare) },
+            )
+            SheetRow(
+                AppIcons.Globe,
+                stringResource(R.string.translate_page),
+                enabled = httpPage,
+                onClick = { dismissThen(onTranslate) },
+            )
+            MenuDivider()
+            when (adblockStatus) {
+                BrowserExtensionUiState.Installing ->
+                    SheetRow(
+                        AppIcons.Shield,
+                        stringResource(R.string.settings_adblock),
+                        enabled = false,
+                        trailing = {
+                            Text(
+                                stringResource(R.string.extension_starting),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                    )
+                BrowserExtensionUiState.Error ->
+                    SheetRow(
+                        AppIcons.Shield,
+                        stringResource(R.string.settings_adblock),
+                        trailing = {
+                            Text(
+                                stringResource(R.string.extension_retry_short),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        onClick = { dismissThen(onRetryAdblock) },
+                    )
+                BrowserExtensionUiState.Enabled ->
+                    ToggleRow(
+                        AppIcons.Shield,
+                        stringResource(R.string.settings_adblock),
+                        true,
+                        onToggleAdblock,
+                        subtitle = stringResource(R.string.settings_adblock_subtitle),
+                    )
+                BrowserExtensionUiState.Disabled ->
+                    ToggleRow(
+                        AppIcons.Shield,
+                        stringResource(R.string.settings_adblock),
+                        false,
+                        onToggleAdblock,
+                        subtitle = stringResource(R.string.settings_adblock_subtitle),
+                    )
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                QuickAction(AppIcons.Star, stringResource(R.string.bookmarks_title)) {
-                    dismissThen(onBookmarks)
-                }
-            }
-        }
-        MenuDivider()
-        SheetRow(
-            Icons.Filled.Search,
-            stringResource(R.string.find_on_page),
-            enabled = httpPage,
-            onClick = { dismissThen(onFind) },
-        )
-        if (httpPage) {
-            ToggleRow(
-                AppIcons.Desktop,
-                stringResource(R.string.desktop_site),
-                state.desktop,
-                onChecked = { dismissThen(onToggleDesktop) },
+            SheetRow(
+                Icons.Filled.Settings,
+                stringResource(R.string.settings_title),
+                onClick = { dismissThen(onSettings) },
             )
         }
-        SheetRow(
-            Icons.Filled.Share,
-            stringResource(R.string.action_share),
-            enabled = httpPage,
-            onClick = { dismissThen(onShare) },
-        )
-        SheetRow(
-            AppIcons.Globe,
-            stringResource(R.string.translate_page),
-            enabled = httpPage,
-            onClick = { dismissThen(onTranslate) },
-        )
-        MenuDivider()
-        when (adblockStatus) {
-            BrowserExtensionUiState.Installing ->
-                SheetRow(
-                    AppIcons.Shield,
-                    stringResource(R.string.settings_adblock),
-                    enabled = false,
-                    trailing = {
-                        Text(
-                            stringResource(R.string.extension_starting),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
-            BrowserExtensionUiState.Error ->
-                SheetRow(
-                    AppIcons.Shield,
-                    stringResource(R.string.settings_adblock),
-                    trailing = {
-                        Text(
-                            stringResource(R.string.extension_retry_short),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    },
-                    onClick = { dismissThen(onRetryAdblock) },
-                )
-            BrowserExtensionUiState.Enabled ->
-                ToggleRow(
-                    AppIcons.Shield,
-                    stringResource(R.string.settings_adblock),
-                    true,
-                    onToggleAdblock,
-                    subtitle = stringResource(R.string.settings_adblock_subtitle),
-                )
-            BrowserExtensionUiState.Disabled ->
-                ToggleRow(
-                    AppIcons.Shield,
-                    stringResource(R.string.settings_adblock),
-                    false,
-                    onToggleAdblock,
-                    subtitle = stringResource(R.string.settings_adblock_subtitle),
-                )
-        }
-        SheetRow(
-            Icons.Filled.Settings,
-            stringResource(R.string.settings_title),
-            onClick = { dismissThen(onSettings) },
-        )
     }
 }
 
