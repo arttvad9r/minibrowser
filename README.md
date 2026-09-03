@@ -131,7 +131,6 @@ app/src/main/baselineProfiles/startup-prof.txt
 
 ## Known issues
 
-- **Private tab black screen на физическом OnePlus 13s / Android 16.** После выбора «Приватная вкладка» Activity остаётся `RESUMED`, crash/ANR не фиксируется, но viewport становится полностью чёрным. Отслеживается в [issue #2](https://github.com/arttvad9r/minibrowser/issues/2). До исправления private mode нельзя считать production-ready. Учтите при диагностике: приватный режим ставит `FLAG_SECURE`, поэтому чёрный `screencap` сам по себе не является воспроизведением дефекта.
 - Полный performance/baseline comparison на обычном production user build может быть ограничен отсутствием `android.permission.CLEAR_APP_USER_DATA` у benchmark instrumentation.
 - TalkBack spoken navigation и субъективное качество predictive-back требуют ручной acceptance-проверки на реальном устройстве.
 
