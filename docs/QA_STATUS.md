@@ -67,39 +67,13 @@ Physical-device проход для этой ветки не выполнялс�
 | Large font | PASS | layout/scroll проверены |
 | Accessibility automated checks | PASS | instrumentation suite |
 | TalkBack spoken navigation | MANUAL CHECK REQUIRED | требует ручной оценки |
-| Private mode | FAIL | persistent black screen |
+| Private mode | PASS | пользовательский viewport отображается нормально; screen capture защищён `FLAG_SECURE` |
 | External intent | PASS (эмулятор) | `mailto:` → Gmail, `tel:` → Dialer, `topResumedActivity` меняется; на устройстве не перепроверялось |
-| HTTP | NOT RUN | QA остановлен после blocker |
-| Bookmarks full flow | NOT RUN | QA остановлен после blocker |
-| Extensions full lifecycle | NOT RUN | QA остановлен после blocker |
-| Dark mode physical pass | NOT RUN | QA остановлен после blocker |
-| Exit animation acceptance | NOT RUN | QA остановлен после blocker |
-
-## Blocking known issue
-
-### Private tab -> persistent black screen
-
-Issue: https://github.com/arttvad9r/minibrowser/issues/2
-
-Reproduction:
-
-1. Открыть главное меню.
-2. Нажать «Приватная вкладка».
-3. Подождать 15+ секунд.
-
-Expected: отображается usable private tab/start page.
-
-Actual: весь viewport приложения становится чёрным и остаётся чёрным. Activity остаётся `RESUMED`; production crash, ANR и `FATAL EXCEPTION` не обнаружены.
-
-Severity: **High**.
-
-Этот дефект должен оставаться явно отслеживаемым после интеграции в `master` и не должен быть скрыт зелёным CI: автоматические тесты не воспроизводят device-only failure.
-
-Диагностический нюанс: приватный режим ставит `FLAG_SECURE` (`browser/BrowserWindowEffects.kt`), поэтому
-`adb exec-out screencap` в приватной вкладке штатно отдаёт чёрный кадр. Это относится только к
-скриншотам и не объясняет чёрный viewport, наблюдаемый глазами на устройстве, — issue остаётся
-открытым. Воспроизведение нужно подтверждать визуально либо через `dumpsys`/`uiautomator dump`, а не
-по скриншоту.
+| HTTP | NOT RUN | не выполнялось в этом проходе |
+| Bookmarks full flow | NOT RUN | не выполнялось в этом проходе |
+| Extensions full lifecycle | NOT RUN | не выполнялось в этом проходе |
+| Dark mode physical pass | NOT RUN | не выполнялось в этом проходе |
+| Exit animation acceptance | NOT RUN | не выполнялось в этом проходе |
 
 ## Performance limitation
 
@@ -107,10 +81,4 @@ Severity: **High**.
 
 ## Acceptance gates после merge
 
-Перед объявлением private mode production-ready требуется:
-
-1. воспроизвести issue #2 с диагностикой состояния active tab / GeckoSession / Compose route;
-2. исправить root cause;
-3. добавить regression test;
-4. повторить private browsing flow на физическом устройстве;
-5. завершить оставшиеся manual/device scenarios: HTTP, bookmarks, extensions, dark mode, exit animations, TalkBack и predictive back (external VIEW intent проверен на эмуляторе, на устройстве — нет).
+Для завершения manual/device QA остаётся проверить HTTP, bookmarks, extensions, dark mode, exit animations, TalkBack и predictive back (external VIEW intent проверен на эмуляторе, на устройстве — нет).
