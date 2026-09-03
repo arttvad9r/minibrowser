@@ -121,7 +121,7 @@ data class Bookmark(
     suspend fun bookmarkCount(url: String): Int
 }
 
-@Database(entities = [HistoryEntry::class, Bookmark::class], version = 3, exportSchema = false)
+@Database(entities = [HistoryEntry::class, Bookmark::class], version = 3, exportSchema = true)
 abstract class AppDb : RoomDatabase() { abstract fun dao(): AppDao }
 
 internal const val DB_CREATE_TRACE = "DbHolder.create"
