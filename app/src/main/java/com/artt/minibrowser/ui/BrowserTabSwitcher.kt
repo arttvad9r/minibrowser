@@ -1,6 +1,5 @@
 package com.artt.minibrowser.ui
 
-import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
@@ -54,23 +53,18 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -84,7 +78,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.window.core.layout.WindowSizeClass
@@ -99,8 +92,7 @@ import kotlinx.coroutines.launch
 private const val ChromiumTabAddDurationMs = 120
 private const val TabSearchThreshold = 8
 
-private enum class OverviewEntryMode { Measuring, Morph, Fade, Done }
-private enum class OverviewExitMode { None, Morph, Fade }
+private enum class OverviewEntryMode { Measuring, Fade, Done }
 
 internal data class BrowserTabItemUiState(
     val id: Long,
@@ -110,10 +102,7 @@ internal data class BrowserTabItemUiState(
 )
 
 /**
- * Adaptive tab overview. When a prewarmed thumbnail and both source/target rectangles are available,
- * the current page preview follows Chromium's 325 ms emphasized rect transform. The animation never
- * asks GeckoView for pixels: missing geometry or a missing thumbnail falls back to the existing Hub
- * fade, keeping the transition path deterministic and allocation-free.
+ * Adaptive tab overview with a simple fade transition.
  */
 @Composable
 internal fun BrowserTabSwitcher(
@@ -125,23 +114,17 @@ internal fun BrowserTabSwitcher(
     onClose: (Long) -> Unit,
     onNew: () -> Unit,
     onDismiss: () -> Unit,
-    sourceContentBoundsInWindow: Rect? = null,
 ) {
     val reveal = remember { Animatable(0f) }
-    val entryProgress = remember { Animatable(0f) }
-    val exitProgress = remember { Animatable(0f) }
     val newTabProgress = remember { Animatable(0f) }
     val newTabToolbarAlpha = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
-    val previewBoundsInWindow = remember { mutableStateMapOf<Long, Rect>() }
-    var rootBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
     var switchTarget by remember { mutableStateOf<Long?>(null) }
     var exiting by remember { mutableStateOf(false) }
     var newTabAnimating by remember { mutableStateOf(false) }
     var overviewWidthPx by remember { mutableFloatStateOf(1f) }
     var query by remember { mutableStateOf("") }
     var entryMode by remember { mutableStateOf(OverviewEntryMode.Measuring) }
-    var exitMode by remember { mutableStateOf(OverviewExitMode.None) }
     val overviewCurrentId = remember { currentId }
     val closeSwitcherDescription = stringResource(R.string.close_tab_switcher_content_description)
     val newTabTitle = stringResource(R.string.new_tab_title)
@@ -154,7 +137,6 @@ internal fun BrowserTabSwitcher(
     } else {
         Alignment.TopStart
     }
-    val entryBitmap = overviewCurrentId?.let(previewStore::get)
 
     DisposableEffect(previewStore) {
         previewStore.setOverviewVisible(true)
@@ -168,64 +150,20 @@ internal fun BrowserTabSwitcher(
         )
     }
 
-    LaunchedEffect(overviewCurrentId, entryBitmap, sourceContentBoundsInWindow != null) {
+    LaunchedEffect(Unit) {
         if (entryMode != OverviewEntryMode.Measuring) return@LaunchedEffect
-        // Let the invisible Hub lay itself out so the destination preview rect is measurable. The
-        // effect keys deliberately use geometry availability rather than exact Rect values; grid
-        // relayouts must not restart a transform that is already running.
-        withFrameNanos { }
-        withFrameNanos { }
-        val id = overviewCurrentId
-        val canMorph = id != null && entryBitmap != null && !entryBitmap.isRecycled &&
-            sourceContentBoundsInWindow != null && rootBoundsInWindow != null &&
-            previewBoundsInWindow[id] != null
-        if (canMorph) {
-            entryMode = OverviewEntryMode.Morph
-            reveal.snapTo(1f)
-            entryProgress.snapTo(0f)
-            entryProgress.animateTo(
-                1f,
-                animationSpec = tween(
-                    MotionTokens.TabTransform,
-                    easing = MotionEasing.Emphasized,
-                ),
-            )
-            entryMode = OverviewEntryMode.Done
-        } else {
-            entryMode = OverviewEntryMode.Fade
-            reveal.snapTo(0f)
-            animateReveal(1f, MotionEasing.FadeIn)
-            entryMode = OverviewEntryMode.Done
-        }
+        entryMode = OverviewEntryMode.Fade
+        reveal.snapTo(0f)
+        animateReveal(1f, MotionEasing.FadeIn)
+        entryMode = OverviewEntryMode.Done
     }
 
     LaunchedEffect(switchTarget, currentId) {
         val target = switchTarget ?: return@LaunchedEffect
         if (currentId != target || exiting) return@LaunchedEffect
         exiting = true
-        withFrameNanos { }
-        val bitmap = previewStore[target]
-        val canMorph = bitmap != null && !bitmap.isRecycled &&
-            sourceContentBoundsInWindow != null && rootBoundsInWindow != null &&
-            previewBoundsInWindow[target] != null
-        if (canMorph) {
-            exitMode = OverviewExitMode.Morph
-            exitProgress.snapTo(0f)
-            exitProgress.animateTo(
-                1f,
-                animationSpec = tween(
-                    MotionTokens.TabTransform,
-                    easing = MotionEasing.Emphasized,
-                ),
-            )
-            // Keep the final cached frame for one real display frame before handing the content
-            // rectangle back to the already-selected GeckoSession.
-            withFrameNanos { }
-        } else {
-            exitMode = OverviewExitMode.Fade
-            reveal.snapTo(1f)
-            animateReveal(0f, MotionEasing.FadeOut)
-        }
+        reveal.snapTo(1f)
+        animateReveal(0f, MotionEasing.FadeOut)
         switchTarget = null
         onDismiss()
     }
@@ -233,7 +171,6 @@ internal fun BrowserTabSwitcher(
     fun requestExit(action: () -> Unit) {
         if (switchTarget != null || exiting || newTabAnimating || entryMode != OverviewEntryMode.Done) return
         exiting = true
-        exitMode = OverviewExitMode.Fade
         scope.launch {
             reveal.snapTo(1f)
             animateReveal(0f, MotionEasing.FadeOut)
@@ -292,18 +229,15 @@ internal fun BrowserTabSwitcher(
 
     val entryAlpha = when (entryMode) {
         OverviewEntryMode.Measuring -> 0f
-        OverviewEntryMode.Morph -> entryProgress.value
         OverviewEntryMode.Fade -> reveal.value
         OverviewEntryMode.Done -> 1f
     }
     val hubAlpha = when {
         newTabAnimating -> 1f
-        exiting && exitMode == OverviewExitMode.Morph -> 1f - exitProgress.value
-        exiting && exitMode == OverviewExitMode.Fade -> reveal.value
+        exiting -> reveal.value
         else -> entryAlpha
     }
-    val motionActive = entryMode == OverviewEntryMode.Morph ||
-        (exiting && exitMode == OverviewExitMode.Morph) || newTabAnimating
+    val motionActive = newTabAnimating
     HighFrameRateDuringMotion(motionActive)
 
     val normalizedQuery = query.trim()
@@ -320,7 +254,6 @@ internal fun BrowserTabSwitcher(
     Box(
         Modifier
             .fillMaxSize()
-            .onGloballyPositioned { rootBoundsInWindow = it.boundsInWindow() }
             .onSizeChanged { overviewWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             .background(MaterialTheme.colorScheme.background.copy(alpha = hubAlpha))
             .semantics { paneTitle = overviewPaneTitle },
@@ -448,15 +381,7 @@ internal fun BrowserTabSwitcher(
                                 iconsDir = iconsDir,
                                 previewStore = previewStore,
                                 modifier = Modifier.width(singleCardWidth),
-                                previewVisible = !isPreviewCoveredByTransform(
-                                    tab.id,
-                                    overviewCurrentId,
-                                    switchTarget,
-                                    entryMode,
-                                    exitMode,
-                                    exiting,
-                                ),
-                                onPreviewBounds = { previewBoundsInWindow[tab.id] = it },
+                                previewVisible = true,
                                 onSelect = { activateAndExit(tab.id) },
                                 onClose = { if (inputEnabled) onClose(tab.id) },
                             )
@@ -505,15 +430,7 @@ internal fun BrowserTabSwitcher(
                                             easing = MotionEasing.StandardAccelerate,
                                         ),
                                     ),
-                                    previewVisible = !isPreviewCoveredByTransform(
-                                        tab.id,
-                                        overviewCurrentId,
-                                        switchTarget,
-                                        entryMode,
-                                        exitMode,
-                                        exiting,
-                                    ),
-                                    onPreviewBounds = { previewBoundsInWindow[tab.id] = it },
+                                    previewVisible = true,
                                     onSelect = { activateAndExit(tab.id) },
                                     onClose = { if (inputEnabled) onClose(tab.id) },
                                 )
@@ -539,97 +456,8 @@ internal fun BrowserTabSwitcher(
             }
         }
 
-        val root = rootBoundsInWindow
-        val source = sourceContentBoundsInWindow
-        when {
-            entryMode == OverviewEntryMode.Morph &&
-                entryBitmap != null && root != null && source != null -> {
-                val target = overviewCurrentId?.let(previewBoundsInWindow::get)
-                if (target != null) {
-                    TabTransformOverlay(
-                        bitmap = entryBitmap,
-                        from = source,
-                        to = target,
-                        root = root,
-                        progress = entryProgress.value,
-                        radiusProgress = entryProgress.value,
-                    )
-                }
-            }
-
-            exiting && exitMode == OverviewExitMode.Morph && root != null && source != null -> {
-                val id = switchTarget
-                val bitmap = id?.let(previewStore::get)
-                val from = id?.let(previewBoundsInWindow::get)
-                if (bitmap != null && from != null) {
-                    TabTransformOverlay(
-                        bitmap = bitmap,
-                        from = from,
-                        to = source,
-                        root = root,
-                        progress = exitProgress.value,
-                        radiusProgress = 1f - exitProgress.value,
-                    )
-                }
-            }
-        }
     }
 }
-
-private fun isPreviewCoveredByTransform(
-    tabId: Long,
-    entryId: Long?,
-    exitId: Long?,
-    entryMode: OverviewEntryMode,
-    exitMode: OverviewExitMode,
-    exiting: Boolean,
-): Boolean =
-    (entryMode == OverviewEntryMode.Morph && tabId == entryId) ||
-        (exiting && exitMode == OverviewExitMode.Morph && tabId == exitId)
-
-@Composable
-private fun TabTransformOverlay(
-    bitmap: Bitmap,
-    from: Rect,
-    to: Rect,
-    root: Rect,
-    progress: Float,
-    radiusProgress: Float,
-) {
-    if (bitmap.isRecycled) return
-    val density = LocalDensity.current
-    val left = mix(from.left, to.left, progress)
-    val top = mix(from.top, to.top, progress)
-    val widthPx = mix(from.width, to.width, progress).coerceAtLeast(1f)
-    val heightPx = mix(from.height, to.height, progress).coerceAtLeast(1f)
-    val widthDp = with(density) { widthPx.toDp() }
-    val heightDp = with(density) { heightPx.toDp() }
-    val radius = (10f * radiusProgress.coerceIn(0f, 1f)).dp
-    Box(
-        Modifier
-            .offset {
-                IntOffset(
-                    (left - root.left).roundToInt(),
-                    (top - root.top).roundToInt(),
-                )
-            }
-            .width(widthDp)
-            .height(heightDp)
-            .clip(RoundedCornerShape(radius))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        Image(
-            bitmap.asImageBitmap(),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.TopCenter,
-        )
-    }
-}
-
-private fun mix(start: Float, end: Float, fraction: Float): Float =
-    start + (end - start) * fraction.coerceIn(0f, 1f)
 
 internal fun tabGridColumnCount(windowSizeClass: WindowSizeClass): Int = when {
     windowSizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXTRA_LARGE_LOWER_BOUND) -> 6
@@ -649,7 +477,6 @@ private fun BrowserTabCard(
     previewStore: TabPreviewStore,
     modifier: Modifier = Modifier,
     previewVisible: Boolean = true,
-    onPreviewBounds: (Rect) -> Unit = {},
     onSelect: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -838,7 +665,6 @@ private fun BrowserTabCard(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.88f)
-                .onGloballyPositioned { onPreviewBounds(it.boundsInWindow()) }
                 .background(
                     if (tab.isPrivate) MaterialTheme.colorScheme.surfaceContainerHigh
                     else MaterialTheme.colorScheme.surfaceVariant,

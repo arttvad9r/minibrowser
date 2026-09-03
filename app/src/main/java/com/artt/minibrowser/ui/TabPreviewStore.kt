@@ -158,25 +158,6 @@ internal class TabPreviewStore {
         schedulePrewarm(view, tabId, url, PREWARM_CAPTURE_DELAY_MS)
     }
 
-    /**
-     * Kept for callers that want to touch the current cached preview. This method intentionally does
-     * not call capturePixels(); the overview-open path must stay allocation/compositor-work free.
-     */
-    fun captureCurrent() {
-        val id = currentTabId ?: return
-        val url = currentUrl
-        val cached = previews[id]
-        if (lastCapturedUrl[id] == url && cached != null && !cached.isRecycled) {
-            lru[id] = Unit
-        }
-    }
-
-    /** Session swaps are latency-critical; never read back the old compositor here. */
-    fun captureBeforeSessionSwap(view: GeckoView) {
-        if (currentView.get() !== view) return
-        // Deliberately no-op.
-    }
-
     fun remove(tabId: Long) {
         removedTabs += tabId
         privateTabs.remove(tabId)

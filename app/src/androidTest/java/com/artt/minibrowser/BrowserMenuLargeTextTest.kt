@@ -123,9 +123,15 @@ class BrowserMenuLargeTextTest {
                 abs(gap - referenceGap) <= symmetryTolerancePx,
             )
         }
+        // Меню — это правый popup фиксированной ширины, а не sheet во всю ширину экрана,
+        // поэтому симметрия проверяется относительно контейнера меню, а не окна.
+        val menuBounds = composeRule.onNode(
+            hasScrollAction() and hasAnyDescendant(hasText(settingsLabel)),
+        ).fetchSemanticsNode().boundsInRoot
         assertTrue(
-            "Quick action row should be horizontally symmetric: $centers",
-            abs(centers.first() - (windowWidthPx - centers.last())) <= symmetryTolerancePx,
+            "Quick action row should be symmetric inside the menu: $centers in $menuBounds",
+            abs((centers.first() - menuBounds.left) - (menuBounds.right - centers.last())) <=
+                symmetryTolerancePx,
         )
 
         composeRule.onNode(

@@ -13371,7 +13371,6 @@ Lcom/artt/minibrowser/ui/TabPreviewStore;
 SPLcom/artt/minibrowser/ui/TabPreviewStore;-><clinit>()V
 SPLcom/artt/minibrowser/ui/TabPreviewStore;-><init>()V
 SPLcom/artt/minibrowser/ui/TabPreviewStore;->attach(Lorg/mozilla/geckoview/GeckoView;Ljava/lang/Long;Ljava/lang/String;Z)V
-SPLcom/artt/minibrowser/ui/TabPreviewStore;->captureBeforeSessionSwap(Lorg/mozilla/geckoview/GeckoView;)V
 SPLcom/artt/minibrowser/ui/TabPreviewStore;->configureMemoryPolicy(JJ)V
 SPLcom/artt/minibrowser/ui/TabPreviewStore;->maybeCapture(Lorg/mozilla/geckoview/GeckoView;Ljava/lang/Long;Ljava/lang/String;ZZ)V
 SPLcom/artt/minibrowser/ui/TabPreviewStore;->trimCache(J)V

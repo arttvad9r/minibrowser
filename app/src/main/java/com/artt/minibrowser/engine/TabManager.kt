@@ -351,6 +351,10 @@ class TabManager(
         currentId.value = tab.id
         tab.session.setPriorityHint(if (appVisible) GeckoSession.PRIORITY_HIGH else GeckoSession.PRIORITY_DEFAULT)
         runtime.webExtensionController.setTabActive(tab.session, true)
+        // Popup-вкладка публикуется в _tabs так же, как newTab, поэтому она обязана
+        // подчиняться тому же бюджету горячих вкладок. Gecko открывает сессию сам, поэтому
+        // openTab здесь не вызывается; persist приходит из onSessionStateChange, как и для newTab.
+        enforceHotTabBudget()
         return tab.session
     }
 

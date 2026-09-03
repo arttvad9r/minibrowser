@@ -28,9 +28,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -125,7 +122,6 @@ internal fun BrowserRoute(
     val showFind = browserUi.showFind
     val showSiteInfo = browserUi.showSiteInfo
     var downloadsReturnToSettings by rememberSaveable { mutableStateOf(false) }
-    var browserContentBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val routeScope = rememberCoroutineScope()
 
@@ -302,11 +298,7 @@ internal fun BrowserRoute(
                         GeckoContent(
                             currentTab,
                             tabPreviewStore,
-                            Modifier
-                                .fillMaxSize()
-                                .onGloballyPositioned {
-                                    browserContentBoundsInWindow = it.boundsInWindow()
-                                },
+                            Modifier.fillMaxSize(),
                         )
                         BrowserPageProgress(currentTab?.progress ?: -1f)
                     },
@@ -476,7 +468,6 @@ internal fun BrowserRoute(
                     },
                     onNew = { tabManager.newTab(null) },
                     onDismiss = { browserViewModel.showSwitcher(false) },
-                    sourceContentBoundsInWindow = browserContentBoundsInWindow,
                 )
             }
             if (showSiteInfo && currentTab != null) {

@@ -1,10 +1,10 @@
 # Physical-device QA status
 
-Последнее обновление: 2026-09-02.
+Последнее обновление: 2026-09-03.
 
 ## Проверенная сборка
 
-- Git SHA: `5629a3c09a897ba28a1414e52b0966a249a3e137`
+- Git SHA: `5629a3c09a897ba28a1414e52b0966a249a3e137` (ветка `master`)
 - APK SHA256: `8b54a1c00f8781daaf9c6f47dd5bd0ec1e5cc3338429517f9983803432cc56bb`
 - Install mode: `adb install -r`, пользовательские данные сохранены
 - Device: OnePlus CPH2723 / OnePlus 13s
@@ -25,6 +25,25 @@
 | Startup/recreation instrumentation | PASS — 2 tests |
 | GitHub Actions | PASS — run `33563450818` |
 | Production crash/ANR scan | PASS |
+
+## Ветка `ux-tab-polish` (эмулятор, 2026-09-03)
+
+Проверено на `af5513f` + правки этого прохода. Эмулятор `opencode-main-phone`, Android 17 / API 37 / x86_64.
+
+| Проверка | Результат |
+| --- | --- |
+| Unit tests | PASS — 298 tests |
+| Lint | PASS — 23 warning, 0 error |
+| Debug build (arm64 + x86_64) | PASS |
+| Release build (R8 + shrink) | PASS |
+| Full instrumentation | PASS — 67 tests |
+
+До правок этого прохода instrumentation на API 37 давал 13 PASS / 54 FAIL: `ui-test-junit4` тянул
+`espresso-core:3.5.0`, чей `InputManagerEventInjectionStrategy` вызывает удалённый в Android 17
+приватный `InputManager.getInstance()`. Lane CI с API 36 этот класс отказов не воспроизводит,
+поэтому полный набор теперь гоняется и на API 37.
+
+Physical-device проход для этой ветки не выполнялся.
 
 ## Physical-device результаты
 
@@ -49,7 +68,7 @@
 | Accessibility automated checks | PASS | instrumentation suite |
 | TalkBack spoken navigation | MANUAL CHECK REQUIRED | требует ручной оценки |
 | Private mode | FAIL | persistent black screen |
-| External intent | NOT VALIDATED | тестовый VIEW intent перехватил другой установленный browser |
+| External intent | PASS (эмулятор) | `mailto:` → Gmail, `tel:` → Dialer, `topResumedActivity` меняется; на устройстве не перепроверялось |
 | HTTP | NOT RUN | QA остановлен после blocker |
 | Bookmarks full flow | NOT RUN | QA остановлен после blocker |
 | Extensions full lifecycle | NOT RUN | QA остановлен после blocker |
@@ -76,6 +95,12 @@ Severity: **High**.
 
 Этот дефект должен оставаться явно отслеживаемым после интеграции в `master` и не должен быть скрыт зелёным CI: автоматические тесты не воспроизводят device-only failure.
 
+Диагностический нюанс: приватный режим ставит `FLAG_SECURE` (`browser/BrowserWindowEffects.kt`), поэтому
+`adb exec-out screencap` в приватной вкладке штатно отдаёт чёрный кадр. Это относится только к
+скриншотам и не объясняет чёрный viewport, наблюдаемый глазами на устройстве, — issue остаётся
+открытым. Воспроизведение нужно подтверждать визуально либо через `dumpsys`/`uiautomator dump`, а не
+по скриншоту.
+
 ## Performance limitation
 
 На production user-build Android benchmark instrumentation может не иметь `android.permission.CLEAR_APP_USER_DATA`. В таком окружении сценарии, которым нужен `pm clear`, нельзя считать полноценным baseline/profile performance comparison; это ограничение test environment, а не доказанный production crash.
@@ -88,4 +113,4 @@ Severity: **High**.
 2. исправить root cause;
 3. добавить regression test;
 4. повторить private browsing flow на физическом устройстве;
-5. завершить оставшиеся manual/device scenarios: HTTP, external VIEW intent с явным package/component при необходимости, bookmarks, extensions, dark mode, exit animations, TalkBack и predictive back.
+5. завершить оставшиеся manual/device scenarios: HTTP, bookmarks, extensions, dark mode, exit animations, TalkBack и predictive back (external VIEW intent проверен на эмуляторе, на устройстве — нет).

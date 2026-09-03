@@ -123,16 +123,20 @@ app/src/main/baselineProfiles/startup-prof.txt
 
 ## Текущий QA status
 
-Последний полный physical-device проход выполнялся на OnePlus 13s / Android 16 / API 36 / arm64-v8a. На проверенном SHA прошли host build checks, полный instrumentation suite (`66` tests), startup/recreation, омнибокс, 10 вкладок, rotation, history, large-font и основные accessibility checks.
+Последний полный physical-device проход выполнялся на OnePlus 13s / Android 16 / API 36 / arm64-v8a, на SHA `5629a3c` в `master`. На проверенном SHA прошли host build checks, полный instrumentation suite (`66` tests), startup/recreation, омнибокс, 10 вкладок, rotation, history, large-font и основные accessibility checks.
+
+Ветка `ux-tab-polish` проверена только на эмуляторе Android 17 / API 37: unit (`298`), lint, debug/release build и полный instrumentation suite (`67` tests). Physical-device проход для неё не выполнялся.
 
 Подробный статус и ограничения: [`docs/QA_STATUS.md`](docs/QA_STATUS.md).
 
 ## Known issues
 
-- **Private tab black screen на физическом OnePlus 13s / Android 16.** После выбора «Приватная вкладка» Activity остаётся `RESUMED`, crash/ANR не фиксируется, но viewport становится полностью чёрным. Отслеживается в [issue #2](https://github.com/arttvad9r/minibrowser/issues/2). До исправления private mode нельзя считать production-ready.
+- **Private tab black screen на физическом OnePlus 13s / Android 16.** После выбора «Приватная вкладка» Activity остаётся `RESUMED`, crash/ANR не фиксируется, но viewport становится полностью чёрным. Отслеживается в [issue #2](https://github.com/arttvad9r/minibrowser/issues/2). До исправления private mode нельзя считать production-ready. Учтите при диагностике: приватный режим ставит `FLAG_SECURE`, поэтому чёрный `screencap` сам по себе не является воспроизведением дефекта.
 - Полный performance/baseline comparison на обычном production user build может быть ограничен отсутствием `android.permission.CLEAR_APP_USER_DATA` у benchmark instrumentation.
 - TalkBack spoken navigation и субъективное качество predictive-back требуют ручной acceptance-проверки на реальном устройстве.
 
 ## Ветки
 
 Главная ветка репозитория — `master`. После интеграции feature-веток документация и CI должны отражать состояние `master`; долгоживущие ветки не должны содержать отдельные незамерженные исправления без явной причины.
+
+Актуальное отклонение: ветка `ux-tab-polish` содержит 15 незамерженных коммитов сверх `master` (undo закрытия вкладки, поиск по вкладкам, morph-переход в переключатель, компактное overflow-меню, prewarm превью). До мержа `master` не отражает текущее состояние UI.
