@@ -57,6 +57,7 @@ fun BrowserMotionScreen(
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
+        InputShield()
         content(::requestExit)
     }
 }
