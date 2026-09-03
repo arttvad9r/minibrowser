@@ -657,33 +657,30 @@ private fun MenuSheet(
                 }
             }
 
-            MenuSection {
-                CompactMenuRow(
-                    Icons.Filled.Search,
-                    stringResource(R.string.find_on_page),
-                    enabled = httpPage,
-                    onClick = { dismissThen(onFind) },
-                )
-                if (httpPage) {
+            if (httpPage) {
+                MenuSection {
+                    CompactMenuRow(
+                        Icons.Filled.Search,
+                        stringResource(R.string.find_on_page),
+                        onClick = { dismissThen(onFind) },
+                    )
                     CompactMenuToggleRow(
                         AppIcons.Desktop,
                         stringResource(R.string.desktop_site),
                         state.desktop,
                         onChecked = { dismissThen(onToggleDesktop) },
                     )
+                    CompactMenuRow(
+                        Icons.Filled.Share,
+                        stringResource(R.string.action_share),
+                        onClick = { dismissThen(onShare) },
+                    )
+                    CompactMenuRow(
+                        AppIcons.Globe,
+                        stringResource(R.string.translate_page),
+                        onClick = { dismissThen(onTranslate) },
+                    )
                 }
-                CompactMenuRow(
-                    Icons.Filled.Share,
-                    stringResource(R.string.action_share),
-                    enabled = httpPage,
-                    onClick = { dismissThen(onShare) },
-                )
-                CompactMenuRow(
-                    AppIcons.Globe,
-                    stringResource(R.string.translate_page),
-                    enabled = httpPage,
-                    onClick = { dismissThen(onTranslate) },
-                )
             }
 
             MenuSection {
