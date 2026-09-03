@@ -11,6 +11,7 @@
 - uBlock Origin и VOT как built-in WebExtensions;
 - поиск на странице, desktop mode, share, permissions и Gecko prompts;
 - загрузки через MediaStore на Android 10+ и public Downloads на Android 8–9;
+- явная поддержка `http://` и `https://` навигации;
 - локальный favicon-кэш без стороннего favicon proxy;
 - светлая/тёмная тема, крупный шрифт, accessibility semantics и edge-to-edge UI;
 - Baseline/Startup Profiles и Macrobenchmark-сценарии.
@@ -82,7 +83,9 @@ GitHub Actions дополнительно проверяет:
 - native/ZIP alignment;
 - Baseline/Startup Profile packaging;
 - benchmark/profile APK packaging;
-- Android 17 preview как неблокирующий compatibility diagnostic.
+- Android 17 preview как неблокирующий compatibility diagnostic;
+- соответствие сгенерированной Room schema её committed JSON-версии;
+- соответствие bundled uBlock/VOT содержимому и SHA256 из `extensions.lock`.
 
 Для GeckoView, IME, permissions, fullscreen, downloads, WebExtensions, predictive back и device-specific UI обязательна дополнительная проверка на физическом Android-устройстве.
 
@@ -110,6 +113,12 @@ app/src/main/assets/extensions/
 
 uBlock Origin и VOT устанавливаются через GeckoView WebExtension API. Состояние enable/disable хранится приложением и применяется через `ExtensionLoader`.
 
+Исходные XPI зафиксированы в `extensions.lock` по версии, extension id, URL и SHA256. CI повторно скачивает их, проверяет checksum и сравнивает распакованное содержимое с bundled assets.
+
+## Data schema
+
+Room schema экспортируется в `app/schemas/` и хранится в git. CI повторно запускает KSP и отклоняет изменение схемы, если соответствующий JSON не обновлён вместе с кодом/миграцией.
+
 ## Performance
 
 Модуль `benchmark/` содержит Macrobenchmark/Baseline Profile сценарии. Release-like benchmark variant использует оптимизированную конфигурацию, а profile variant остаётся отдельным для получения стабильных unobfuscated profile rules.
@@ -125,7 +134,7 @@ app/src/main/baselineProfiles/startup-prof.txt
 
 Последний полный physical-device проход выполнялся на OnePlus 13s / Android 16 / API 36 / arm64-v8a, на SHA `5629a3c` в `master`. На проверенном SHA прошли host build checks, полный instrumentation suite (`66` tests), startup/recreation, омнибокс, 10 вкладок, rotation, history, large-font и основные accessibility checks.
 
-Ветка `ux-tab-polish` проверена только на эмуляторе Android 17 / API 37: unit (`298`), lint, debug/release build и полный instrumentation suite (`67` tests). Physical-device проход для неё не выполнялся.
+Интеграционный набор `ux-tab-polish` проходит автоматические host/emulator gates перед слиянием в `master`; отдельный physical-device проход этой ветки не выполнялся.
 
 Подробный статус и ограничения: [`docs/QA_STATUS.md`](docs/QA_STATUS.md).
 
@@ -136,6 +145,4 @@ app/src/main/baselineProfiles/startup-prof.txt
 
 ## Ветки
 
-Главная ветка репозитория — `master`. После интеграции feature-веток документация и CI должны отражать состояние `master`; долгоживущие ветки не должны содержать отдельные незамерженные исправления без явной причины.
-
-Актуальное отклонение: ветка `ux-tab-polish` содержит 15 незамерженных коммитов сверх `master` (undo закрытия вкладки, поиск по вкладкам, morph-переход в переключатель, компактное overflow-меню, prewarm превью). До мержа `master` не отражает текущее состояние UI.
+Главная ветка репозитория — `master`. Feature-ветки интегрируются только после автоматических проверок; документация и CI в `master` должны описывать фактически слитое состояние.
