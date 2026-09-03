@@ -32,9 +32,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -312,9 +311,6 @@ internal fun BrowserTabSwitcher(
                         val gridState =
                             rememberLazyGridState(initialFirstVisibleItemIndex = initialIndex)
                         val highlightedId = switchTarget ?: overviewCurrentId
-                        val gridSpacing = 10.dp
-                        val centeredOrphanIndex =
-                            if (columns > 1 && tabs.size % columns == 1) tabs.lastIndex else -1
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(columns),
                             state = gridState,
@@ -325,66 +321,34 @@ internal fun BrowserTabSwitcher(
                                 top = 8.dp,
                                 bottom = 24.dp,
                             ),
-                            horizontalArrangement = Arrangement.spacedBy(gridSpacing),
-                            verticalArrangement = Arrangement.spacedBy(gridSpacing),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            itemsIndexed(
-                                items = tabs,
-                                key = { _, tab -> tab.id },
-                                span = { index, _ ->
-                                    if (index == centeredOrphanIndex) {
-                                        GridItemSpan(columns)
-                                    } else {
-                                        GridItemSpan(1)
-                                    }
-                                },
-                            ) { index, tab ->
-                                val itemMotion = Modifier.animateItem(
-                                    fadeInSpec = tween(
-                                        ChromiumTabAddDurationMs,
-                                        easing = MotionEasing.Linear,
+                            items(tabs, key = { it.id }) { tab ->
+                                BrowserTabCard(
+                                    tab = tab,
+                                    isCurrent = tab.id == highlightedId,
+                                    gesturesEnabled = inputEnabled,
+                                    swipeExitDistancePx = overviewWidthPx,
+                                    iconsDir = iconsDir,
+                                    previewStore = previewStore,
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = tween(
+                                            ChromiumTabAddDurationMs,
+                                            easing = MotionEasing.Linear,
+                                        ),
+                                        placementSpec = tween(
+                                            MotionTokens.TabMove,
+                                            easing = MotionEasing.Standard,
+                                        ),
+                                        fadeOutSpec = tween(
+                                            MotionTokens.TabRemove,
+                                            easing = MotionEasing.StandardAccelerate,
+                                        ),
                                     ),
-                                    placementSpec = tween(
-                                        MotionTokens.TabMove,
-                                        easing = MotionEasing.Standard,
-                                    ),
-                                    fadeOutSpec = tween(
-                                        MotionTokens.TabRemove,
-                                        easing = MotionEasing.StandardAccelerate,
-                                    ),
+                                    onSelect = { activateAndExit(tab.id) },
+                                    onClose = { if (inputEnabled) onClose(tab.id) },
                                 )
-                                if (index == centeredOrphanIndex) {
-                                    BoxWithConstraints(
-                                        modifier = itemMotion.fillMaxWidth(),
-                                        contentAlignment = Alignment.TopCenter,
-                                    ) {
-                                        val cardWidth =
-                                            (maxWidth - gridSpacing * (columns - 1)) / columns
-                                        BrowserTabCard(
-                                            tab = tab,
-                                            isCurrent = tab.id == highlightedId,
-                                            gesturesEnabled = inputEnabled,
-                                            swipeExitDistancePx = overviewWidthPx,
-                                            iconsDir = iconsDir,
-                                            previewStore = previewStore,
-                                            modifier = Modifier.width(cardWidth),
-                                            onSelect = { activateAndExit(tab.id) },
-                                            onClose = { if (inputEnabled) onClose(tab.id) },
-                                        )
-                                    }
-                                } else {
-                                    BrowserTabCard(
-                                        tab = tab,
-                                        isCurrent = tab.id == highlightedId,
-                                        gesturesEnabled = inputEnabled,
-                                        swipeExitDistancePx = overviewWidthPx,
-                                        iconsDir = iconsDir,
-                                        previewStore = previewStore,
-                                        modifier = itemMotion,
-                                        onSelect = { activateAndExit(tab.id) },
-                                        onClose = { if (inputEnabled) onClose(tab.id) },
-                                    )
-                                }
                             }
                         }
                     }
