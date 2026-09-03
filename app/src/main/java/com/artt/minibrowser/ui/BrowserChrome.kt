@@ -585,21 +585,21 @@ private fun MenuSheet(
     ) {
         Column(
             Modifier
-                .width(286.dp)
-                .heightIn(max = 500.dp)
+                .width(260.dp)
+                .heightIn(max = 468.dp)
                 .clip(Radius.card)
                 .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, Radius.card)
                 .verticalScroll(rememberScrollState())
-                .padding(8.dp),
+                .padding(6.dp),
         ) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clip(Radius.button)
+                    .clip(Radius.small)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    .padding(1.dp),
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 MenuNavigationAction(
                     Icons.AutoMirrored.Filled.ArrowBack,
@@ -628,10 +628,10 @@ private fun MenuSheet(
                     Modifier.weight(1f),
                 ) { dismissThen(onToggleBookmark) }
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
@@ -745,7 +745,7 @@ private fun MenuNavigationAction(
     val alpha = if (enabled) 1f else 0.38f
     Box(
         modifier
-            .height(40.dp)
+            .height(36.dp)
             .clip(Radius.small)
             .softClickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = description },
@@ -765,7 +765,7 @@ private fun MenuNavigationAction(
             Icon(
                 targetIcon,
                 null,
-                Modifier.size(20.dp),
+                Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
             )
         }
@@ -783,16 +783,16 @@ private fun CompactMenuQuickAction(
             .fillMaxWidth()
             .clip(Radius.small)
             .softClickable(onClick = onClick)
-            .padding(horizontal = 2.dp, vertical = 2.dp),
+            .padding(horizontal = 1.dp, vertical = 1.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            Modifier.size(36.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+            Modifier.size(34.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+            Icon(icon, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.onSurface)
         }
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(1.dp))
         Text(
             label,
             maxLines = 1,
@@ -819,7 +819,7 @@ private fun CompactMenuRow(
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 40.dp)
+            .heightIn(min = 36.dp)
             .clip(Radius.small)
             .then(
                 if (onClick != null) {
@@ -828,7 +828,7 @@ private fun CompactMenuRow(
                     Modifier
                 },
             )
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -837,7 +837,7 @@ private fun CompactMenuRow(
             Modifier.size(18.dp),
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
         )
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         Text(
             label,
             Modifier.weight(1f),
@@ -857,30 +857,51 @@ private fun CompactMenuToggleRow(
     checked: Boolean,
     onChecked: (Boolean) -> Unit,
 ) {
-    val stateLabel = stringResource(if (checked) R.string.state_on else R.string.state_off)
     CompactMenuRow(
         icon = icon,
         label = label,
-        trailing = {
-            Text(
-                stateLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (checked) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-        },
+        trailing = { CompactMenuSwitch(checked) },
         onClick = { onChecked(!checked) },
     )
 }
 
 @Composable
+private fun CompactMenuSwitch(checked: Boolean) {
+    val trackColor = if (checked) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val thumbColor = if (checked) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+    Box(
+        Modifier
+            .width(34.dp)
+            .height(20.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(trackColor)
+            .padding(2.dp),
+    ) {
+        Box(
+            Modifier
+                .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
+                .size(16.dp)
+                .background(thumbColor, CircleShape),
+        )
+    }
+}
+
+@Composable
 private fun MenuDivider() {
-    Spacer(Modifier.height(2.dp))
-    androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    Spacer(Modifier.height(2.dp))
+    Spacer(Modifier.height(1.dp))
+    androidx.compose.material3.HorizontalDivider(
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+    )
+    Spacer(Modifier.height(1.dp))
 }
 
 @Composable
