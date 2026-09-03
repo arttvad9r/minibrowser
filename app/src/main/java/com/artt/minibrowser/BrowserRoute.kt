@@ -7,15 +7,30 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -71,6 +86,7 @@ import com.artt.minibrowser.ui.TabPreviewStore
 import com.artt.minibrowser.ui.chromiumSharedXAxisEnter
 import com.artt.minibrowser.ui.chromiumSharedXAxisExit
 import java.io.File
+import kotlinx.coroutines.launch
 
 /**
  * Screen-level browser route. It collects state from browser ViewModels and translates user
@@ -109,6 +125,9 @@ internal fun BrowserRoute(
     val showFind = browserUi.showFind
     val showSiteInfo = browserUi.showSiteInfo
     var downloadsReturnToSettings by rememberSaveable { mutableStateOf(false) }
+    var browserContentBoundsInWindow by remember { mutableStateOf<Rect?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val routeScope = rememberCoroutineScope()
 
     val tabs by tabManager.tabs.collectAsStateWithLifecycle()
     val currentId by tabManager.currentId.collectAsStateWithLifecycle()
@@ -146,9 +165,6 @@ internal fun BrowserRoute(
     )
 
     val bookmarked = pageBookmarkUi.url == currentTab?.url && pageBookmarkUi.isBookmarked
-    // Keep the start page composed while app destinations cover the browser. Otherwise returning
-    // from History/Downloads/Bookmarks briefly exposes an empty Gecko surface before StartPage
-    // finishes its enter transition.
     val showStart = currentTab?.url.isNullOrBlank() || currentTab?.url == "about:blank"
     val toggleAdblock: (Boolean) -> Unit = settingsViewModel::setAdblock
     val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
@@ -233,10 +249,7 @@ internal fun BrowserRoute(
             if (isLoading) currentSession?.stop() else currentSession?.reload()
         },
         onSiteInfo = { browserViewModel.showSiteInfo(true) },
-        onSwitcher = {
-            tabPreviewStore.captureCurrent()
-            browserViewModel.showSwitcher(true)
-        },
+        onSwitcher = { browserViewModel.showSwitcher(true) },
         onNewTab = { tabManager.newTab(null) },
         onNewPrivateTab = { tabManager.newTab(null, private = true) },
         onFind = { browserViewModel.showFind(true) },
@@ -268,6 +281,8 @@ internal fun BrowserRoute(
     val downloadsPaneTitle = stringResource(R.string.downloads_title)
     val historyPaneTitle = stringResource(R.string.history_title)
     val bookmarksPaneTitle = stringResource(R.string.bookmarks_title)
+    val tabClosedMessage = stringResource(R.string.tab_closed_message)
+    val undoLabel = stringResource(R.string.action_undo)
 
     MinibrowserTheme(darkTheme = darkTheme) {
         Box(
@@ -275,8 +290,6 @@ internal fun BrowserRoute(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            // Chromium's shared-X pair animates both surfaces. Keep GeckoView alive as the underlay
-            // and apply open_exit while an app destination opens, then close_enter when returning.
             ChromiumSharedXAxisUnderlay(
                 visible = screen == BrowserScreen.Browser,
                 modifier = Modifier.hideFromAccessibilityWhen(browserContentHiddenByRoute),
@@ -286,7 +299,15 @@ internal fun BrowserRoute(
                     actions = pageActions,
                     iconsDir = iconsDir,
                     browserContent = {
-                        GeckoContent(currentTab, tabPreviewStore, Modifier.fillMaxSize())
+                        GeckoContent(
+                            currentTab,
+                            tabPreviewStore,
+                            Modifier
+                                .fillMaxSize()
+                                .onGloballyPositioned {
+                                    browserContentBoundsInWindow = it.boundsInWindow()
+                                },
+                        )
                         BrowserPageProgress(currentTab?.progress ?: -1f)
                     },
                     findContent = if (currentTab != null) {
@@ -319,7 +340,9 @@ internal fun BrowserRoute(
                                 historyRepository = historyRepository,
                                 iconsDir = iconsDir,
                                 refreshKey = currentTab?.id,
-                                onOpen = { uri -> currentTab?.session?.loadUri(uri) },
+                                onOpen = { uri ->
+                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                },
                                 onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
                                 onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
                             )
@@ -433,12 +456,25 @@ internal fun BrowserRoute(
                     iconsDir = iconsDir,
                     previewStore = tabPreviewStore,
                     onSelect = { tabManager.select(it) },
-                    onClose = {
-                        tabPreviewStore.remove(it)
-                        tabManager.closeTab(it)
+                    onClose = { id ->
+                        val closed = tabManager.closeTab(id) ?: return@BrowserTabSwitcher
+                        routeScope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = tabClosedMessage,
+                                actionLabel = undoLabel,
+                                withDismissAction = true,
+                                duration = SnackbarDuration.Long,
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                tabManager.restoreClosedTab(closed)
+                            } else {
+                                tabPreviewStore.remove(closed.id)
+                            }
+                        }
                     },
                     onNew = { tabManager.newTab(null) },
                     onDismiss = { browserViewModel.showSwitcher(false) },
+                    sourceContentBoundsInWindow = browserContentBoundsInWindow,
                 )
             }
             if (showSiteInfo && currentTab != null) {
@@ -446,6 +482,13 @@ internal fun BrowserRoute(
                     browserViewModel.showSiteInfo(false)
                 }
             }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+            )
         }
     }
 }
@@ -490,5 +533,5 @@ private fun SettingsSearchEngineUiState.toSearchEngine(): SearchEngine = when (t
     SettingsSearchEngineUiState.Google -> SearchEngine.GOOGLE
     SettingsSearchEngineUiState.DuckDuckGo -> SearchEngine.DUCKDUCKGO
     SettingsSearchEngineUiState.Yandex -> SearchEngine.YANDEX
-    SettingsSearchEngineUiState.Bing -> SearchEngine.BING
+    SettingsSearchEngineUiState.BING -> SearchEngine.BING
 }
