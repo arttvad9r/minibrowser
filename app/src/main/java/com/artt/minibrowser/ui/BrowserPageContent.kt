@@ -177,6 +177,9 @@ internal fun BrowserPageContent(
                     browserContent()
                 }
             }
+            if (browserContentOccluded) {
+                InputShield()
+            }
             AnimatedVisibility(
                 visible = state.showStart,
                 enter = fadeIn(tween(MotionTokens.Popup, easing = MotionEasing.FadeIn)),
