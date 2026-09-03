@@ -74,6 +74,10 @@ kotlin {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 roborazzi {
     outputDir.set(file("src/test/snapshots"))
 }
