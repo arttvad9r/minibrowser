@@ -72,6 +72,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -312,10 +313,10 @@ internal fun BrowserTabSwitcher(
                     Modifier
                         .fillMaxWidth()
                         .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-                        .height(48.dp)
+                        .heightIn(min = 48.dp)
                         .clip(Radius.button)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 14.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
@@ -329,6 +330,7 @@ internal fun BrowserTabSwitcher(
                         if (query.isEmpty()) {
                             Text(
                                 tabSearchHint,
+                                Modifier.clearAndSetSemantics { },
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
@@ -343,6 +345,9 @@ internal fun BrowserTabSwitcher(
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
                                 color = MaterialTheme.colorScheme.onSurface,
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(
+                                MaterialTheme.colorScheme.onSurface,
                             ),
                         )
                     }
@@ -361,10 +366,14 @@ internal fun BrowserTabSwitcher(
 
                 when {
                     tabs.isEmpty() ->
-                        EmptyState(AppIcons.Globe, stringResource(R.string.no_open_tabs))
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            EmptyState(AppIcons.Globe, stringResource(R.string.no_open_tabs))
+                        }
 
                     visibleTabs.isEmpty() ->
-                        EmptyState(Icons.Filled.Search, noTabSearchResults)
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            EmptyState(Icons.Filled.Search, noTabSearchResults)
+                        }
 
                     tabs.size == 1 && normalizedQuery.isEmpty() -> {
                         val tab = tabs.first()
@@ -608,7 +617,7 @@ private fun BrowserTabCard(
             Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                 Text(
                     displayTitle,
-                    Modifier.align(Alignment.Center),
+                    Modifier.align(Alignment.Center).padding(horizontal = 48.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
