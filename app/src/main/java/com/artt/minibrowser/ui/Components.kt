@@ -376,12 +376,15 @@ fun BrowserBottomSheet(
         if (!dismissing) {
             dismissing = true
             scope.launch {
-                state.hide()
-                if (!state.isVisible) {
-                    after()
-                    onDismissRequest()
+                try {
+                    state.hide()
+                    if (!state.isVisible) {
+                        after()
+                        onDismissRequest()
+                    }
+                } finally {
+                    dismissing = false
                 }
-                dismissing = false
             }
         }
     }
