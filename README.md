@@ -87,6 +87,8 @@ GitHub Actions дополнительно проверяет:
 - соответствие сгенерированной Room schema её committed JSON-версии;
 - соответствие bundled uBlock/VOT содержимому и SHA256 из `extensions.lock`.
 
+Android 17 preview lane намеренно не является release gate: текущий API 37 preview system image `CE2A.260420.019` аварийно завершает системный `surfaceflinger` в `RegionSamplingThread` во время instrumentation. Ошибка воспроизводится и на обычном 4 KB image, и на 16 KB image, а также с разными software graphics backends; в crash stack нет app-level `FATAL EXCEPTION` MiniBrowser. До обновления preview image/emulator этот lane считается инфраструктурной диагностикой, а не подтверждением или опровержением совместимости приложения.
+
 Для GeckoView, IME, permissions, fullscreen, downloads, WebExtensions, predictive back и device-specific UI обязательна дополнительная проверка на физическом Android-устройстве.
 
 ## Архитектура
@@ -134,12 +136,13 @@ app/src/main/baselineProfiles/startup-prof.txt
 
 Последний полный physical-device проход выполнялся на OnePlus 13s / Android 16 / API 36 / arm64-v8a, на SHA `5629a3c` в `master`. На проверенном SHA прошли host build checks, полный instrumentation suite (`66` tests), startup/recreation, омнибокс, 10 вкладок, rotation, history, large-font и основные accessibility checks.
 
-Интеграционный набор `ux-tab-polish` проходит автоматические host/emulator gates перед слиянием в `master`; отдельный physical-device проход этой ветки не выполнялся.
+Текущий draft-набор аудита находится в `ui-polish-audit` / PR #5. Для него автоматизированы accessibility/touch-target проверки меню, large-font сценарии, Room schema и bundled-extension verification, API 26 startup, API 36 instrumentation и отдельная 16 KB lane. Отдельный physical-device acceptance-проход именно `ui-polish-audit` ещё не выполнялся. Android 17 preview compatibility пока не подтверждена из-за описанного выше системного `surfaceflinger` crash в preview emulator.
 
 Подробный статус и ограничения: [`docs/QA_STATUS.md`](docs/QA_STATUS.md).
 
 ## Known issues
 
+- Android 17/API 37 preview emulator `CE2A.260420.019` падает в системном `surfaceflinger`/`RegionSamplingThread` до завершения compatibility instrumentation; lane остаётся неблокирующим до исправления preview infrastructure.
 - Полный performance/baseline comparison на обычном production user build может быть ограничен отсутствием `android.permission.CLEAR_APP_USER_DATA` у benchmark instrumentation.
 - TalkBack spoken navigation и субъективное качество predictive-back требуют ручной acceptance-проверки на реальном устройстве.
 
