@@ -2,10 +2,13 @@ package com.artt.minibrowser
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -24,7 +27,7 @@ class SettingsLargeTextTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun settingsRemainStaticWithLargeText() {
+    fun settingsKeepBottomActionsReachableWithLargeText() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val clearDataLabel = context.getString(R.string.settings_clear_data)
 
@@ -62,7 +65,8 @@ class SettingsLargeTextTest {
         }
 
         composeRule.waitForIdle()
-        composeRule.onAllNodes(hasScrollAction()).assertCountEquals(0)
-        composeRule.onNodeWithText(clearDataLabel).assertExists()
+        composeRule.onNode(hasScrollAction())
+            .performScrollToNode(hasText(clearDataLabel))
+        composeRule.onNodeWithText(clearDataLabel).assertIsDisplayed()
     }
 }
