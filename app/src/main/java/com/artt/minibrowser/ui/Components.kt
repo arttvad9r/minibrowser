@@ -55,7 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -378,10 +377,12 @@ fun BrowserBottomSheet(
     val dismissThen: (after: () -> Unit) -> Unit = { after ->
         if (!dismissing) {
             dismissing = true
-            after()
             scope.launch {
                 state.hide()
-                if (!state.isVisible) onDismissRequest()
+                if (!state.isVisible) {
+                    after()
+                    onDismissRequest()
+                }
                 dismissing = false
             }
         }
@@ -391,7 +392,7 @@ fun BrowserBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = state,
         containerColor = MaterialTheme.colorScheme.surface,
-        scrimColor = if (dismissing) Color.Transparent else BottomSheetDefaults.ScrimColor,
+        scrimColor = BottomSheetDefaults.ScrimColor,
         shape = Radius.sheet,
     ) {
         Column(
@@ -423,11 +424,13 @@ fun BookmarkActionsSheet(
     var renaming by remember { mutableStateOf(false) }
     var text by remember(bookmarkKey) { mutableStateOf(bookmarkTitle) }
     val renameFocusRequester = remember { FocusRequester() }
-    val submitRename: () -> Unit = { onRename(text.trim().ifBlank { bookmarkTitle }) }
     LaunchedEffect(renaming) {
         if (renaming) renameFocusRequester.requestFocus()
     }
     BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
+        val submitRename: () -> Unit = {
+            dismissThen { onRename(text.trim().ifBlank { bookmarkTitle }) }
+        }
         Column {
             if (renaming) {
                 Text(stringResource(R.string.action_rename), style = MaterialTheme.typography.titleMedium)
