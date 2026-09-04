@@ -2,10 +2,12 @@ package com.artt.minibrowser
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -67,25 +69,31 @@ internal fun StartPageRoute(
         )
     }
 
-    Box(Modifier.fillMaxSize()) {
-        StartPage(
-            bookmarks = bookmarkItems,
-            iconsDir = iconsDir,
-            recent = recentItems,
-            isPrivate = false,
-            onOpen = onOpen,
-            onAllBookmarks = onAllBookmarks,
-            onAllHistory = onAllHistory,
-            onRefreshRecent = startPageViewModel::refreshRecent,
-            onRename = startPageViewModel::rename,
-            onDelete = startPageViewModel::delete,
-            onAdd = startPageViewModel::add,
-        )
-
-        if (state.isLoading && state.bookmarks.isEmpty() && state.recent.isEmpty()) {
-            LinearProgressIndicator(
-                modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+    Column(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            StartPage(
+                bookmarks = bookmarkItems,
+                iconsDir = iconsDir,
+                recent = recentItems,
+                isPrivate = false,
+                onOpen = onOpen,
+                onAllBookmarks = onAllBookmarks,
+                onAllHistory = onAllHistory,
+                onRefreshRecent = startPageViewModel::refreshRecent,
+                onRename = startPageViewModel::rename,
+                onDelete = startPageViewModel::delete,
+                onAdd = startPageViewModel::add,
             )
+
+            if (state.isLoading && state.bookmarks.isEmpty() && state.recent.isEmpty()) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+                )
+            }
         }
 
         state.error?.let { operation ->
@@ -107,7 +115,6 @@ internal fun StartPageRoute(
                 message = message,
                 actionLabel = stringResource(if (retryable) R.string.action_retry else R.string.action_hide),
                 onAction = if (retryable) startPageViewModel::retry else startPageViewModel::dismissError,
-                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }
