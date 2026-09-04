@@ -229,7 +229,7 @@ fun ToggleRow(
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = 48.dp)
             .clip(Radius.small)
             .toggleable(value = checked, role = Role.Switch, onValueChange = onChecked)
             .padding(horizontal = 8.dp, vertical = 10.dp),
