@@ -20,6 +20,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,6 +78,8 @@ fun CompactChoiceSheet(
             content(dismiss)
         }
     }
+
+    SideEffect { applyChromiumBottomSheetMotion(state) }
 }
 
 /** At least 48dp radio-button target; large text may expand the row instead of being clipped. */
