@@ -8,7 +8,6 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
-import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
@@ -51,11 +50,6 @@ object MotionTokens {
     const val SharedXAxisExitFade = 83
     const val SharedXAxisEnterFade = 283
     const val SharedXAxisTransition = 366
-
-    // components/browser_ui/bottomsheet BottomSheet.java. Retained as reference tokens until the
-    // stable Material3 API exposes supported per-sheet motion customization.
-    const val BottomSheetExpand = 350
-    const val BottomSheetShrink = 250
 
     // HubAnimationConstants.java + TabListItemAnimator.java.
     const val TabTransform = 325
@@ -111,16 +105,6 @@ object MotionEasing {
         ((cos((fraction + 1f) * PI) / 2.0) + 0.5).toFloat()
     }
 }
-
-fun <T> chromiumBottomSheetExpandSpec(): FiniteAnimationSpec<T> = tween(
-    durationMillis = MotionTokens.BottomSheetExpand,
-    easing = MotionEasing.Emphasized,
-)
-
-fun <T> chromiumBottomSheetShrinkSpec(): FiniteAnimationSpec<T> = tween(
-    durationMillis = MotionTokens.BottomSheetShrink,
-    easing = MotionEasing.Emphasized,
-)
 
 /** Chromium shared_x_axis_open_enter / shared_x_axis_close_enter. */
 fun chromiumSharedXAxisEnter(forward: Boolean): EnterTransition =
