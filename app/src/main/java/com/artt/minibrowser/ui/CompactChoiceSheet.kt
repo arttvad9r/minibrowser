@@ -52,9 +52,12 @@ fun CompactChoiceSheet(
         if (!dismissing) {
             dismissing = true
             scope.launch {
-                state.hide()
-                if (!state.isVisible) onDismissRequest()
-                dismissing = false
+                try {
+                    state.hide()
+                    if (!state.isVisible) onDismissRequest()
+                } finally {
+                    dismissing = false
+                }
             }
         }
     }
