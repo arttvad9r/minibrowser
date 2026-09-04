@@ -135,11 +135,13 @@ internal fun HistoryScreenContent(
                             }
                         }
                         HistoryScreenUiState.Empty -> {
-                            EmptyState(
-                                AppIcons.History,
-                                stringResource(R.string.history_empty_title),
-                                stringResource(R.string.history_empty_subtitle),
-                            )
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                EmptyState(
+                                    AppIcons.History,
+                                    stringResource(R.string.history_empty_title),
+                                    stringResource(R.string.history_empty_subtitle),
+                                )
+                            }
                         }
                         is HistoryScreenUiState.Error -> {
                             val title = when (targetState.operation) {
@@ -309,11 +311,13 @@ internal fun BookmarksScreenContent(
                         )
                     }
                     state.bookmarks.isEmpty() -> {
-                        EmptyState(
-                            AppIcons.Star,
-                            stringResource(R.string.bookmarks_empty_title),
-                            stringResource(R.string.bookmarks_empty_subtitle),
-                        )
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            EmptyState(
+                                AppIcons.Star,
+                                stringResource(R.string.bookmarks_empty_title),
+                                stringResource(R.string.bookmarks_empty_subtitle),
+                            )
+                        }
                     }
                     else -> {
                         state.error?.let { operation ->
