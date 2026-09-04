@@ -247,8 +247,9 @@ jobs:
   android-17-compat:
     # Android 17 is still a preview/Beta compatibility signal. Keep infrastructure/image failures
     # visible without making them equivalent to stable release gates until this lane proves reliable.
-    # 16 KB compatibility is covered independently by page-size-16k; keeping the preview lane on a
-    # regular google_apis image avoids conflating API 37 behavior with PS16K emulator graphics bugs.
+    # 16 KB compatibility is covered independently by page-size-16k. The preview lane deliberately
+    # uses the emulator's supported software renderer because deprecated indirect SwiftShader crashes
+    # SurfaceFlinger RegionSampling on the current API 37 preview image.
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -316,7 +317,7 @@ jobs:
           disk-size: 6G
           disable-animations: true
           emulator-options: >-
-            -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+            -no-window -gpu software -noaudio -no-boot-anim
             -camera-back none -camera-front none -no-snapshot -no-metrics
           script: |
             adb shell getconf PAGE_SIZE
