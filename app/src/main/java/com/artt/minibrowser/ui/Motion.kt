@@ -52,7 +52,8 @@ object MotionTokens {
     const val SharedXAxisEnterFade = 283
     const val SharedXAxisTransition = 366
 
-    // components/browser_ui/bottomsheet BottomSheet.java.
+    // components/browser_ui/bottomsheet BottomSheet.java. Retained as reference tokens until the
+    // stable Material3 API exposes supported per-sheet motion customization.
     const val BottomSheetExpand = 350
     const val BottomSheetShrink = 250
 
@@ -120,17 +121,6 @@ fun <T> chromiumBottomSheetShrinkSpec(): FiniteAnimationSpec<T> = tween(
     durationMillis = MotionTokens.BottomSheetShrink,
     easing = MotionEasing.Emphasized,
 )
-
-/**
- * Material3 1.4.0, selected by the stable Compose BOM used by this project, does not expose
- * ModalBottomSheet motion specs as public SheetState API. Reaching into private fields makes the
- * release depend on Material3 implementation details and R8 field names, so MiniBrowser now leaves
- * sheet settle/show/hide motion under Material3 ownership.
- *
- * Keep this compatibility shim until the existing BrowserBottomSheet call site is simplified. It is
- * intentionally a no-op; custom sheet timing should only return through a supported public API.
- */
-fun applyChromiumBottomSheetMotion(@Suppress("UNUSED_PARAMETER") sheetState: Any) = Unit
 
 /** Chromium shared_x_axis_open_enter / shared_x_axis_close_enter. */
 fun chromiumSharedXAxisEnter(forward: Boolean): EnterTransition =
