@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
-import com.artt.minibrowser.BuildConfig
 import kotlin.math.PI
 import kotlin.math.cos
 
@@ -123,30 +122,15 @@ fun <T> chromiumBottomSheetShrinkSpec(): FiniteAnimationSpec<T> = tween(
 )
 
 /**
- * The Material3 version used by MiniBrowser keeps SheetState's motion specs internal. Set the
- * library-owned specs reflectively rather than duplicating ModalBottomSheet's gesture/semantics
- * implementation. These are ordinary app-library fields, not Android hidden platform APIs.
+ * Material3 1.4.0, selected by the stable Compose BOM used by this project, does not expose
+ * ModalBottomSheet motion specs as public SheetState API. Reaching into private fields makes the
+ * release depend on Material3 implementation details and R8 field names, so MiniBrowser now leaves
+ * sheet settle/show/hide motion under Material3 ownership.
  *
- * This keeps programmatic show/hide at Chromium's exact 350/250 ms EMPHASIZED timing. The drag
- * settle spec is set to Chromium's 250 ms shrink timing, which covers the interactive dismiss path.
- *
- * The exact field names survive R8 through proguard-rules.pro; without that rule this silently
- * did nothing in release only. A missing field now fails the debug build instead of shipping
- * release with a different timing than every test observed.
+ * Keep this compatibility shim until the existing BrowserBottomSheet call site is simplified. It is
+ * intentionally a no-op; custom sheet timing should only return through a supported public API.
  */
-fun applyChromiumBottomSheetMotion(sheetState: Any) {
-    fun setSpec(name: String, value: Any) {
-        val applied = runCatching {
-            sheetState.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(sheetState, value)
-        }.isSuccess
-        check(applied || !BuildConfig.DEBUG) {
-            "SheetState.$name is gone; update Motion.kt and proguard-rules.pro"
-        }
-    }
-    setSpec("showMotionSpec", chromiumBottomSheetExpandSpec<Float>())
-    setSpec("hideMotionSpec", chromiumBottomSheetShrinkSpec<Float>())
-    setSpec("anchoredDraggableMotionSpec", chromiumBottomSheetShrinkSpec<Float>())
-}
+fun applyChromiumBottomSheetMotion(@Suppress("UNUSED_PARAMETER") sheetState: Any) = Unit
 
 /** Chromium shared_x_axis_open_enter / shared_x_axis_close_enter. */
 fun chromiumSharedXAxisEnter(forward: Boolean): EnterTransition =
