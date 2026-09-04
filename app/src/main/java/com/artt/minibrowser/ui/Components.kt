@@ -44,7 +44,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -360,10 +359,9 @@ fun ChoiceRow(
 }
 
 /**
- * Bottom sheet with Chromium's current settle timing. The Material3 version pinned by this project
- * keeps SheetState's animation specs internal, so [applyChromiumBottomSheetMotion] updates those
- * library-owned fields after Material's own SideEffect. This preserves Material's gestures and
- * accessibility while using Chromium's 350 ms expand / 250 ms shrink EMPHASIZED motion.
+ * Bottom sheet stays on Material3's public state/gesture/semantics contract. The stable Material3
+ * version used by this project does not expose sheet motion specs publicly, so MiniBrowser accepts
+ * Material3's own settle/show/hide motion instead of reflecting into private SheetState fields.
  */
 @Composable
 fun BrowserBottomSheet(
@@ -405,10 +403,6 @@ fun BrowserBottomSheet(
             content(dismissThen)
         }
     }
-
-    // Registered after ModalBottomSheet's own SideEffect, so these exact Chromium specs win before
-    // the sheet's show LaunchedEffect or any subsequent programmatic hide call executes.
-    SideEffect { applyChromiumBottomSheetMotion(state) }
 }
 
 /** Действия над закладкой без зависимости reusable UI от data-layer модели. */
