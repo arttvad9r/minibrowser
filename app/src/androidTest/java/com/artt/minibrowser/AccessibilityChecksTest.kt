@@ -2,10 +2,10 @@ package com.artt.minibrowser
 
 import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.tryPerformAccessibilityChecks
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -102,9 +102,9 @@ class AccessibilityChecksTest {
     }
 
     @Test
-    fun settingsScreenDoesNotExposeScrollAction() {
+    fun settingsScreenExposesScrollableContent() {
         renderSettings(darkTheme = false)
-        composeRule.onAllNodes(hasScrollAction()).assertCountEquals(0)
+        composeRule.onNode(hasScrollAction()).assertExists()
     }
 
     @Test
