@@ -15,8 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -86,6 +88,7 @@ internal fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     BrowserMotionScreen(onBack = onBack, fromBottom = true, backEnabled = backEnabled) { requestExit ->
         CenteredSinglePane(maxWidth = 720.dp) {
@@ -101,9 +104,11 @@ internal fun SettingsScreen(
                 }
                 Column(
                     Modifier
-                        .fillMaxSize()
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
                         .padding(horizontal = 20.dp)
-                        .padding(bottom = 12.dp),
+                        .padding(bottom = 20.dp),
                 ) {
                     GroupLabel(stringResource(R.string.settings_group_search))
                     SettingsGroup {
