@@ -247,6 +247,8 @@ jobs:
   android-17-compat:
     # Android 17 is still a preview/Beta compatibility signal. Keep infrastructure/image failures
     # visible without making them equivalent to stable release gates until this lane proves reliable.
+    # 16 KB compatibility is covered independently by page-size-16k; keeping the preview lane on a
+    # regular google_apis image avoids conflating API 37 behavior with PS16K emulator graphics bugs.
     continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -306,7 +308,7 @@ jobs:
         with:
           api-level: 37.1
           system-image-api-level: '37.0'
-          target: google_apis_ps16k
+          target: google_apis
           arch: x86_64
           profile: pixel_5
           channel: beta
@@ -318,7 +320,6 @@ jobs:
             -camera-back none -camera-front none -no-snapshot -no-metrics
           script: |
             adb shell getconf PAGE_SIZE
-            adb shell getconf PAGE_SIZE | tr -d '\r' | grep -qx '16384'
             adb shell df -h /data
             bash scripts/run-startup-smoke.sh
             # Полный instrumentation-набор гоняется и на API 37: lane с API 36 не видит
