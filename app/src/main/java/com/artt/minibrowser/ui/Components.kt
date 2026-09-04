@@ -189,8 +189,6 @@ fun SheetRow(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    if (!enabled && onClick != null) return
-
     val alpha = if (enabled) 1f else 0.52f
     Row(
         modifier
@@ -232,6 +230,7 @@ fun ToggleRow(
     Row(
         modifier
             .fillMaxWidth()
+            .heightIn(min = 56.dp)
             .clip(Radius.small)
             .toggleable(value = checked, role = Role.Switch, onValueChange = onChecked)
             .padding(horizontal = 8.dp, vertical = 10.dp),
@@ -329,6 +328,7 @@ fun SettingsRow(
             }
         }
         if (value != null) {
+            Spacer(Modifier.width(8.dp))
             Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         trailing?.invoke()
