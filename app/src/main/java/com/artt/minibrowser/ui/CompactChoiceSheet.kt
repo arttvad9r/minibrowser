@@ -20,7 +20,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,7 +34,7 @@ import kotlinx.coroutines.launch
 /**
  * Content-height picker sheet. Material3's default partially-expanded anchor can make a short
  * four-item chooser occupy roughly half the display; pickers should instead open only as tall as
- * their content while retaining the native modal-sheet gesture and animation.
+ * their content while retaining Material3's public modal-sheet gesture, semantics and motion.
  *
  * Content-triggered dismissal must animate SheetState to Hidden before the caller removes the
  * sheet from composition. Otherwise a choice tap cuts off Material's closing motion in one frame.
@@ -78,8 +77,6 @@ fun CompactChoiceSheet(
             content(dismiss)
         }
     }
-
-    SideEffect { applyChromiumBottomSheetMotion(state) }
 }
 
 /** At least 48dp radio-button target; large text may expand the row instead of being clipped. */
