@@ -5,13 +5,14 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.StringRes
 import com.artt.minibrowser.R
 import org.mozilla.geckoview.GeckoSession
 
-/** Minimal browser context menu for long-pressed links and media. */
+/** Browser context menu for long-pressed links and media. Text selection uses Gecko's selection delegate. */
 class GeckoContextMenuController(
     private val activity: Activity,
     private val openTab: (String, Boolean) -> Unit,
@@ -31,9 +32,15 @@ class GeckoContextMenuController(
                 if (isAllowedWebUri(link)) {
                     labels += activity.getString(R.string.context_open_new_tab)
                     actions += { openTab(link, private) }
+                    if (!private) {
+                        labels += activity.getString(R.string.context_open_private_tab)
+                        actions += { openTab(link, true) }
+                    }
                 }
                 labels += activity.getString(R.string.context_copy_link)
                 actions += { copy(link, R.string.clipboard_label_link) }
+                labels += activity.getString(R.string.context_share_link)
+                actions += { share(link) }
             }
 
             if (media != null) {
@@ -42,11 +49,17 @@ class GeckoContextMenuController(
                         if (link == null) R.string.context_open_new_tab else R.string.context_open_media_new_tab,
                     )
                     actions += { openTab(media, private) }
+                    if (!private) {
+                        labels += activity.getString(R.string.context_open_media_private_tab)
+                        actions += { openTab(media, true) }
+                    }
                 }
                 labels += activity.getString(
                     if (link == null) R.string.context_copy_address else R.string.context_copy_media_address,
                 )
                 actions += { copy(media, R.string.clipboard_label_address) }
+                labels += activity.getString(R.string.context_share_media)
+                actions += { share(media) }
             }
 
             if (labels.isNotEmpty()) {
@@ -66,5 +79,17 @@ class GeckoContextMenuController(
         val clipboard = activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(activity.getString(labelRes), value))
         Toast.makeText(activity, activity.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun share(value: String) {
+        if (activity.isFinishing || activity.isDestroyed) return
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_TEXT, value)
+        runCatching {
+            activity.startActivity(Intent.createChooser(send, activity.getString(R.string.share_chooser_title)))
+        }.onFailure { error ->
+            Log.w("MinibrowserContext", "Failed to share context target", error)
+        }
     }
 }
