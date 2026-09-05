@@ -1,6 +1,9 @@
 package com.artt.minibrowser.browser
 
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import com.artt.minibrowser.R
 import com.artt.minibrowser.engine.createSafeExternalIntent
@@ -32,6 +35,29 @@ internal class BrowserIntentController(
         safeExternalFallbackUrl(value)?.let(loadFallback)
     }
 
+    fun canOpenInExternalApp(value: String?): Boolean {
+        val intent = webViewIntent(value) ?: return false
+        return activity.packageManager
+            .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            .any { it.activityInfo?.packageName != activity.packageName }
+    }
+
+    fun openInExternalApp(value: String?) {
+        if (activity.isFinishing || activity.isDestroyed) return
+        val intent = webViewIntent(value) ?: return
+        if (!canOpenInExternalApp(value)) return
+
+        runCatching {
+            val chooser = Intent.createChooser(intent, activity.getString(R.string.external_chooser_title)).apply {
+                putExtra(
+                    Intent.EXTRA_EXCLUDE_COMPONENTS,
+                    arrayOf(ComponentName(activity, activity::class.java)),
+                )
+            }
+            activity.startActivity(chooser)
+        }
+    }
+
     fun shareUrl(value: String?) {
         val url = shareableBrowserUrl(value) ?: return
         if (activity.isFinishing || activity.isDestroyed) return
@@ -47,5 +73,10 @@ internal class BrowserIntentController(
                 ),
             )
         }
+    }
+
+    private fun webViewIntent(value: String?): Intent? {
+        val url = shareableBrowserUrl(value) ?: return null
+        return Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
     }
 }
