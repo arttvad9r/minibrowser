@@ -119,7 +119,17 @@ internal fun SettingsScreen(
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                importSucceeded = backupController.import(uri).isSuccess
+                backupController.import(uri).fold(
+                    onSuccess = { restored ->
+                        // DataStore restore updates the UI preferences. Extension enable/disable is
+                        // also an active Gecko runtime side effect, so converge it immediately instead
+                        // of requiring an app restart after importing a backup.
+                        onAdblock(restored.adblockEnabled)
+                        onVot(restored.votEnabled)
+                        importSucceeded = true
+                    },
+                    onFailure = { importSucceeded = false },
+                )
             }
         }
     }
