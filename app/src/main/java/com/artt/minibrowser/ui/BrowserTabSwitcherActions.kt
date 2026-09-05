@@ -54,7 +54,7 @@ internal fun BrowserTabSwitcher(
         )
 
         var expanded by remember { mutableStateOf(false) }
-        val actionsDescription = stringResource(R.string.actions_content_description)
+        val actionsDescription = stringResource(R.string.tab_actions_content_description)
         Box(
             Modifier
                 .align(Alignment.TopEnd)
