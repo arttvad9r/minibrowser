@@ -69,8 +69,9 @@ internal class SiteSettingsController(
     }
 
     suspend fun clearSiteData(host: String): Result<Unit> = runCatching {
-        storageController.clearDataFromHost(host, StorageController.ClearFlags.SITE_DATA).awaitValue()
-        Unit
+        storageController.clearDataFromHost(host, StorageController.ClearFlags.SITE_DATA)
+            .awaitValue()
+            .let { Unit }
     }
 }
 
