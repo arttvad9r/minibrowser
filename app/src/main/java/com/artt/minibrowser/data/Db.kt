@@ -65,6 +65,9 @@ data class Bookmark(
     @Query("SELECT * FROM history ORDER BY visitedAt DESC LIMIT :limit")
     suspend fun recentHistory(limit: Int): List<HistoryEntry>
 
+    @Query("SELECT * FROM history ORDER BY visitedAt DESC")
+    suspend fun allHistory(): List<HistoryEntry>
+
     @Query("SELECT * FROM history WHERE url LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' ORDER BY visitedAt DESC LIMIT 50")
     suspend fun searchHistory(q: String): List<HistoryEntry>
 
@@ -73,6 +76,9 @@ data class Bookmark(
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertHistory(e: HistoryEntry)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertHistory(entries: List<HistoryEntry>)
 
     @Transaction
     suspend fun recordVisit(url: String, title: String?, now: Long) {
@@ -102,6 +108,9 @@ data class Bookmark(
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertBookmark(b: Bookmark)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertBookmarks(bookmarks: List<Bookmark>)
+
     @Transaction
     suspend fun appendBookmark(bookmark: Bookmark) {
         val nextPosition = maxBookmarkPosition() + 1
@@ -119,6 +128,15 @@ data class Bookmark(
 
     @Query("SELECT COUNT(*) FROM bookmarks WHERE url = :url")
     suspend fun bookmarkCount(url: String): Int
+
+    /** Replace only user-visible local data after a backup has been fully parsed and validated. */
+    @Transaction
+    suspend fun replaceUserData(history: List<HistoryEntry>, bookmarks: List<Bookmark>) {
+        clearHistory()
+        clearBookmarks()
+        if (history.isNotEmpty()) upsertHistory(history)
+        if (bookmarks.isNotEmpty()) upsertBookmarks(bookmarks)
+    }
 }
 
 @Database(entities = [HistoryEntry::class, Bookmark::class], version = 3, exportSchema = true)
