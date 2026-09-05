@@ -97,7 +97,7 @@ internal class LocalBackupController(context: Context) {
         }
     }
 
-    suspend fun import(uri: Uri): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun import(uri: Uri): Result<Prefs> = withContext(Dispatchers.IO) {
         runCatching {
             val encoded = appContext.contentResolver.openInputStream(uri)?.use { input ->
                 input.readUtf8Limited(MAX_BACKUP_BYTES)
@@ -147,6 +147,7 @@ internal class LocalBackupController(context: Context) {
                 bookmarks = restoredBookmarks,
             )
             settings.replace(restoredPrefs)
+            restoredPrefs
         }
     }
 }
