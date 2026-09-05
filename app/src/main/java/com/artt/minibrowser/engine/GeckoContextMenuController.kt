@@ -13,7 +13,7 @@ import com.artt.minibrowser.R
 import org.mozilla.geckoview.GeckoSession
 
 /** Implemented by the browser Activity so context actions can create a tab without selecting it. */
-internal interface BackgroundTabHost {
+interface BackgroundTabHost {
     fun openBackgroundTab(uri: String, private: Boolean)
 }
 
