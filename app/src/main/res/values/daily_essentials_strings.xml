@@ -1,0 +1,9 @@
+<resources>
+    <string name="context_open_background_tab">Открыть в фоновой вкладке</string>
+    <string name="context_open_media_background_tab">Открыть медиа в фоновой вкладке</string>
+    <string name="tab_opened_in_background">Открыто в фоновой вкладке</string>
+    <string name="action_switch_to_tab">Перейти</string>
+    <string name="close_all_tabs">Закрыть все вкладки</string>
+    <string name="close_private_tabs">Закрыть приватные вкладки</string>
+    <string name="open_in_external_app">Открыть во внешнем приложении</string>
+</resources>
