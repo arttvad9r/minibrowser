@@ -39,6 +39,7 @@ internal class SiteSettingsController(
 ) {
     suspend fun load(): Result<List<SitePermissionGroup>> = runCatching {
         storageController.getAllPermissions().awaitValue()
+            .orEmpty()
             .asSequence()
             .filterNot { it.privateMode }
             .filter { it.value != GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT }
@@ -89,7 +90,7 @@ private fun permissionKind(permission: Int): SitePermissionKind = when (permissi
     else -> SitePermissionKind.Other
 }
 
-private suspend fun <T> GeckoResult<T>.awaitValue(): T = suspendCancellableCoroutine { continuation ->
+private suspend fun <T> GeckoResult<T>.awaitValue(): T? = suspendCancellableCoroutine { continuation ->
     accept(
         { value ->
             if (continuation.isActive) continuation.resume(value)
