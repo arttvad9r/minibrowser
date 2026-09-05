@@ -17,9 +17,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.engine.FaviconRepository
 import java.io.File
 
@@ -39,6 +39,7 @@ fun Favicon(
     var bitmap by remember(request.key, cacheGeneration) {
         mutableStateOf(FaviconRepository.cached(request))
     }
+    val fallbackFontSize = with(LocalDensity.current) { (size * 0.45f).toSp() }
 
     LaunchedEffect(request, iconsDir, cacheGeneration) {
         if (bitmap == null && request.origin != null) {
@@ -63,7 +64,7 @@ fun Favicon(
                     displayHost.removePrefix("www.").take(1).uppercase(),
                     modifier = Modifier.clearAndSetSemantics { },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = (size.value * 0.45f).sp,
+                    fontSize = fallbackFontSize,
                 )
             }
         }

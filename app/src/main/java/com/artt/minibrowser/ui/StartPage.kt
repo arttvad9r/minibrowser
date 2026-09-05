@@ -353,14 +353,15 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
     var url by remember { mutableStateOf("") }
     val addressFocusRequester = remember { FocusRequester() }
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
-    val submit: () -> Unit = {
-        if (url.isNotBlank()) {
-            focusManager.clearFocus(force = true)
-            onAdd(url, title.trim())
-        }
-    }
 
-    BrowserBottomSheet(onDismissRequest = onDismiss) {
+    BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
+        val submit: () -> Unit = {
+            if (url.isNotBlank()) {
+                focusManager.clearFocus(force = true)
+                dismissThen { onAdd(url, title.trim()) }
+            }
+        }
+
         Text(stringResource(R.string.add_bookmark_title), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(20.dp))
         Field(
@@ -386,7 +387,7 @@ fun AddBookmarkSheet(onDismiss: () -> Unit, onAdd: (url: String, title: String) 
         )
         Spacer(Modifier.height(20.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+            TextButton(onClick = { dismissThen {} }, modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.action_cancel))
             }
             Button(

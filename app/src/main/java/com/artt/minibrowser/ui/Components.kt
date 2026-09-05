@@ -44,7 +44,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -189,8 +187,6 @@ fun SheetRow(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    if (!enabled && onClick != null) return
-
     val alpha = if (enabled) 1f else 0.52f
     Row(
         modifier
@@ -232,6 +228,7 @@ fun ToggleRow(
     Row(
         modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clip(Radius.small)
             .toggleable(value = checked, role = Role.Switch, onValueChange = onChecked)
             .padding(horizontal = 8.dp, vertical = 10.dp),
@@ -329,6 +326,7 @@ fun SettingsRow(
             }
         }
         if (value != null) {
+            Spacer(Modifier.width(8.dp))
             Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         trailing?.invoke()
@@ -361,10 +359,9 @@ fun ChoiceRow(
 }
 
 /**
- * Bottom sheet with Chromium's current settle timing. The Material3 version pinned by this project
- * keeps SheetState's animation specs internal, so [applyChromiumBottomSheetMotion] updates those
- * library-owned fields after Material's own SideEffect. This preserves Material's gestures and
- * accessibility while using Chromium's 350 ms expand / 250 ms shrink EMPHASIZED motion.
+ * Bottom sheet stays on Material3's public state/gesture/semantics contract. The stable Material3
+ * version used by this project does not expose sheet motion specs publicly, so MiniBrowser accepts
+ * Material3's own settle/show/hide motion instead of reflecting into private SheetState fields.
  */
 @Composable
 fun BrowserBottomSheet(
@@ -378,11 +375,16 @@ fun BrowserBottomSheet(
     val dismissThen: (after: () -> Unit) -> Unit = { after ->
         if (!dismissing) {
             dismissing = true
-            after()
             scope.launch {
-                state.hide()
-                if (!state.isVisible) onDismissRequest()
-                dismissing = false
+                try {
+                    state.hide()
+                    if (!state.isVisible) {
+                        after()
+                        onDismissRequest()
+                    }
+                } finally {
+                    dismissing = false
+                }
             }
         }
     }
@@ -391,7 +393,7 @@ fun BrowserBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = state,
         containerColor = MaterialTheme.colorScheme.surface,
-        scrimColor = if (dismissing) Color.Transparent else BottomSheetDefaults.ScrimColor,
+        scrimColor = BottomSheetDefaults.ScrimColor,
         shape = Radius.sheet,
     ) {
         Column(
@@ -404,10 +406,6 @@ fun BrowserBottomSheet(
             content(dismissThen)
         }
     }
-
-    // Registered after ModalBottomSheet's own SideEffect, so these exact Chromium specs win before
-    // the sheet's show LaunchedEffect or any subsequent programmatic hide call executes.
-    SideEffect { applyChromiumBottomSheetMotion(state) }
 }
 
 /** Действия над закладкой без зависимости reusable UI от data-layer модели. */
@@ -423,11 +421,13 @@ fun BookmarkActionsSheet(
     var renaming by remember { mutableStateOf(false) }
     var text by remember(bookmarkKey) { mutableStateOf(bookmarkTitle) }
     val renameFocusRequester = remember { FocusRequester() }
-    val submitRename: () -> Unit = { onRename(text.trim().ifBlank { bookmarkTitle }) }
     LaunchedEffect(renaming) {
         if (renaming) renameFocusRequester.requestFocus()
     }
     BrowserBottomSheet(onDismissRequest = onDismiss) { dismissThen ->
+        val submitRename: () -> Unit = {
+            dismissThen { onRename(text.trim().ifBlank { bookmarkTitle }) }
+        }
         Column {
             if (renaming) {
                 Text(stringResource(R.string.action_rename), style = MaterialTheme.typography.titleMedium)

@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -81,6 +82,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
@@ -182,12 +184,13 @@ internal fun TopBar(
         Box(
             Modifier
                 .weight(1f)
-                .height(52.dp)
+                .heightIn(min = 52.dp)
                 .onGloballyPositioned { fieldSize = it.size },
         ) {
             Row(
                 Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
                     .clip(RoundedCornerShape(fieldRadius))
                     .background(fieldColor)
                     .padding(horizontal = 16.dp),
@@ -347,6 +350,7 @@ internal fun TopBar(
                             .semantics { contentDescription = omniboxDescription },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.onSurface),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { navigate(text) }),
                     )
@@ -765,7 +769,7 @@ private fun MenuNavigationAction(
     val alpha = if (enabled) 1f else 0.38f
     Box(
         modifier
-            .height(40.dp)
+            .heightIn(min = 48.dp)
             .clip(Radius.small)
             .softClickable(enabled = enabled, onClick = onClick)
             .semantics { contentDescription = description },
@@ -829,18 +833,16 @@ private fun CompactMenuRow(
     icon: ImageVector,
     label: String,
     modifier: Modifier = Modifier,
-    dense: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") dense: Boolean = false,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    if (!enabled && onClick != null) return
-
     val alpha = if (enabled) 1f else 0.52f
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = if (dense) 34.dp else 40.dp)
+            .heightIn(min = 48.dp)
             .clip(Radius.small)
             .then(
                 if (onClick != null) {
@@ -876,16 +878,34 @@ private fun CompactMenuToggleRow(
     icon: ImageVector,
     label: String,
     checked: Boolean,
-    dense: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") dense: Boolean = false,
     onChecked: (Boolean) -> Unit,
 ) {
-    CompactMenuRow(
-        icon = icon,
-        label = label,
-        dense = dense,
-        trailing = { CompactMenuSwitch(checked) },
-        onClick = { onChecked(!checked) },
-    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(Radius.small)
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onChecked,
+            )
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
+        Spacer(Modifier.width(9.dp))
+        Text(
+            label,
+            Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        CompactMenuSwitch(checked)
+    }
 }
 
 @Composable
@@ -906,7 +926,8 @@ private fun CompactMenuSwitch(checked: Boolean) {
             .height(20.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(trackColor)
-            .padding(2.dp),
+            .padding(2.dp)
+            .clearAndSetSemantics { },
     ) {
         Box(
             Modifier

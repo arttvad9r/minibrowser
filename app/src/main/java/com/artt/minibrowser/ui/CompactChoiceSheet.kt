@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 /**
  * Content-height picker sheet. Material3's default partially-expanded anchor can make a short
  * four-item chooser occupy roughly half the display; pickers should instead open only as tall as
- * their content while retaining the native modal-sheet gesture and animation.
+ * their content while retaining Material3's public modal-sheet gesture, semantics and motion.
  *
  * Content-triggered dismissal must animate SheetState to Hidden before the caller removes the
  * sheet from composition. Otherwise a choice tap cuts off Material's closing motion in one frame.
@@ -52,9 +52,12 @@ fun CompactChoiceSheet(
         if (!dismissing) {
             dismissing = true
             scope.launch {
-                state.hide()
-                if (!state.isVisible) onDismissRequest()
-                dismissing = false
+                try {
+                    state.hide()
+                    if (!state.isVisible) onDismissRequest()
+                } finally {
+                    dismissing = false
+                }
             }
         }
     }

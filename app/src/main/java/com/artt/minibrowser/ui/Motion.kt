@@ -8,7 +8,6 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
-import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
@@ -33,7 +32,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
-import com.artt.minibrowser.BuildConfig
 import kotlin.math.PI
 import kotlin.math.cos
 
@@ -52,10 +50,6 @@ object MotionTokens {
     const val SharedXAxisExitFade = 83
     const val SharedXAxisEnterFade = 283
     const val SharedXAxisTransition = 366
-
-    // components/browser_ui/bottomsheet BottomSheet.java.
-    const val BottomSheetExpand = 350
-    const val BottomSheetShrink = 250
 
     // HubAnimationConstants.java + TabListItemAnimator.java.
     const val TabTransform = 325
@@ -110,42 +104,6 @@ object MotionEasing {
     val AccelerateDecelerate = Easing { fraction ->
         ((cos((fraction + 1f) * PI) / 2.0) + 0.5).toFloat()
     }
-}
-
-fun <T> chromiumBottomSheetExpandSpec(): FiniteAnimationSpec<T> = tween(
-    durationMillis = MotionTokens.BottomSheetExpand,
-    easing = MotionEasing.Emphasized,
-)
-
-fun <T> chromiumBottomSheetShrinkSpec(): FiniteAnimationSpec<T> = tween(
-    durationMillis = MotionTokens.BottomSheetShrink,
-    easing = MotionEasing.Emphasized,
-)
-
-/**
- * The Material3 version used by MiniBrowser keeps SheetState's motion specs internal. Set the
- * library-owned specs reflectively rather than duplicating ModalBottomSheet's gesture/semantics
- * implementation. These are ordinary app-library fields, not Android hidden platform APIs.
- *
- * This keeps programmatic show/hide at Chromium's exact 350/250 ms EMPHASIZED timing. The drag
- * settle spec is set to Chromium's 250 ms shrink timing, which covers the interactive dismiss path.
- *
- * The exact field names survive R8 through proguard-rules.pro; without that rule this silently
- * did nothing in release only. A missing field now fails the debug build instead of shipping
- * release with a different timing than every test observed.
- */
-fun applyChromiumBottomSheetMotion(sheetState: Any) {
-    fun setSpec(name: String, value: Any) {
-        val applied = runCatching {
-            sheetState.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(sheetState, value)
-        }.isSuccess
-        check(applied || !BuildConfig.DEBUG) {
-            "SheetState.$name is gone; update Motion.kt and proguard-rules.pro"
-        }
-    }
-    setSpec("showMotionSpec", chromiumBottomSheetExpandSpec<Float>())
-    setSpec("hideMotionSpec", chromiumBottomSheetShrinkSpec<Float>())
-    setSpec("anchoredDraggableMotionSpec", chromiumBottomSheetShrinkSpec<Float>())
 }
 
 /** Chromium shared_x_axis_open_enter / shared_x_axis_close_enter. */

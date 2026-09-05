@@ -274,7 +274,7 @@ private fun DownloadCard(
                         contentDescription = statusDescription
                         liveRegion = LiveRegionMode.Polite
                     },
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (status == DownloadStatusUiState.Failed) {
