@@ -46,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -120,6 +121,8 @@ internal fun TopBar(
     onNewPrivateTab: () -> Unit,
     onFind: () -> Unit,
     onShare: () -> Unit,
+    canOpenExternal: Boolean,
+    onOpenExternal: () -> Unit,
     onToggleBookmark: () -> Unit,
     onBookmarks: () -> Unit,
     onHistory: () -> Unit,
@@ -479,6 +482,8 @@ internal fun TopBar(
             onDownloads = onDownloads,
             onFind = onFind,
             onShare = onShare,
+            canOpenExternal = canOpenExternal,
+            onOpenExternal = onOpenExternal,
             onTranslate = onTranslate,
             onToggleAdblock = onToggleAdblock,
             onRetryAdblock = onRetryAdblock,
@@ -560,6 +565,8 @@ private fun MenuSheet(
     onDownloads: () -> Unit,
     onFind: () -> Unit,
     onShare: () -> Unit,
+    canOpenExternal: Boolean,
+    onOpenExternal: () -> Unit,
     onTranslate: () -> Unit,
     onToggleAdblock: (Boolean) -> Unit,
     onRetryAdblock: () -> Unit,
@@ -679,6 +686,13 @@ private fun MenuSheet(
                         stringResource(R.string.action_share),
                         onClick = { dismissThen(onShare) },
                     )
+                    if (canOpenExternal) {
+                        CompactMenuRow(
+                            Icons.Filled.OpenInNew,
+                            stringResource(R.string.open_in_external_app),
+                            onClick = { dismissThen(onOpenExternal) },
+                        )
+                    }
                     CompactMenuRow(
                         AppIcons.Globe,
                         stringResource(R.string.translate_page),
