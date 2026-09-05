@@ -1,5 +1,6 @@
 package com.artt.minibrowser.browser
 
+import android.app.Activity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -21,12 +22,19 @@ internal class BrowserTabLifecycleController(
     }
 
     override fun onPause(owner: LifecycleOwner) {
-        tabManager.setAppVisible(false)
+        val inPictureInPicture = (owner as? Activity)?.isInPictureInPictureMode == true
+        tabManager.setAppVisible(inPictureInPicture)
         tabManager.persist()
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        tabManager.trimForBackground()
+        val inPictureInPicture = (owner as? Activity)?.isInPictureInPictureMode == true
+        if (!inPictureInPicture) {
+            // onPause can still observe PiP=true while the user dismisses the PiP window. onStop is
+            // the final signal that the browser is actually backgrounded, so deactivate Gecko here.
+            tabManager.setAppVisible(false)
+            tabManager.trimForBackground()
+        }
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
