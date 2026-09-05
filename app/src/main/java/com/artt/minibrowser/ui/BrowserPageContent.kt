@@ -48,6 +48,7 @@ internal data class BrowserPageUiState(
     val showStart: Boolean,
     val inFullscreen: Boolean,
     val loadError: BrowserPageLoadErrorUiState?,
+    val canOpenExternal: Boolean = false,
     val browserContentHiddenByRoute: Boolean = false,
 )
 
@@ -76,6 +77,7 @@ internal data class BrowserPageActions(
     val onRetryAdblock: () -> Unit,
     val onTranslate: () -> Unit,
     val onToggleDesktop: () -> Unit,
+    val onOpenExternal: () -> Unit = {},
 )
 
 /** Browser-page renderer. Engine content is supplied through slots by the screen route. */
@@ -140,6 +142,8 @@ internal fun BrowserPageContent(
                     onHistory = actions.onHistory,
                     onDownloads = actions.onDownloads,
                     onShare = actions.onShare,
+                    canOpenExternal = state.canOpenExternal,
+                    onOpenExternal = actions.onOpenExternal,
                     onSettings = actions.onSettings,
                     onToggleAdblock = actions.onToggleAdblock,
                     onRetryAdblock = actions.onRetryAdblock,
