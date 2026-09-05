@@ -12,6 +12,11 @@ import androidx.annotation.StringRes
 import com.artt.minibrowser.R
 import org.mozilla.geckoview.GeckoSession
 
+/** Implemented by the browser Activity so context actions can create a tab without selecting it. */
+internal interface BackgroundTabHost {
+    fun openBackgroundTab(uri: String, private: Boolean)
+}
+
 /** Browser context menu for long-pressed links and media. Text selection uses Gecko's selection delegate. */
 class GeckoContextMenuController(
     private val activity: Activity,
@@ -30,8 +35,8 @@ class GeckoContextMenuController(
 
             if (link != null) {
                 if (isAllowedWebUri(link)) {
-                    labels += activity.getString(R.string.context_open_new_tab)
-                    actions += { openTab(link, private) }
+                    labels += activity.getString(R.string.context_open_background_tab)
+                    actions += { openBackground(link, private) }
                     if (!private) {
                         labels += activity.getString(R.string.context_open_private_tab)
                         actions += { openTab(link, true) }
@@ -46,9 +51,9 @@ class GeckoContextMenuController(
             if (media != null) {
                 if (isAllowedWebUri(media)) {
                     labels += activity.getString(
-                        if (link == null) R.string.context_open_new_tab else R.string.context_open_media_new_tab,
+                        if (link == null) R.string.context_open_background_tab else R.string.context_open_media_background_tab,
                     )
-                    actions += { openTab(media, private) }
+                    actions += { openBackground(media, private) }
                     if (!private) {
                         labels += activity.getString(R.string.context_open_media_private_tab)
                         actions += { openTab(media, true) }
@@ -71,6 +76,15 @@ class GeckoContextMenuController(
                     Log.w("MinibrowserContext", "Failed to show context menu", error)
                 }
             }
+        }
+    }
+
+    private fun openBackground(value: String, private: Boolean) {
+        val host = activity as? BackgroundTabHost
+        if (host != null) {
+            host.openBackgroundTab(value, private)
+        } else {
+            openTab(value, private)
         }
     }
 
