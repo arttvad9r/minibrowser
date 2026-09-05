@@ -2,6 +2,8 @@ package com.artt.minibrowser.ui
 
 // Настройки: компактные группы; большие списки выбора вынесены в bottom sheet.
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -33,11 +35,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -50,6 +54,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.artt.minibrowser.R
+import com.artt.minibrowser.data.LocalBackupController
+import java.time.LocalDate
+import kotlinx.coroutines.launch
 
 private val translationLanguageCodes = listOf("ru", "en", "de", "fr")
 
@@ -88,7 +95,34 @@ internal fun SettingsScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var showEnginePicker by remember { mutableStateOf(false) }
     var showLanguagePicker by remember { mutableStateOf(false) }
+    var showImportDialog by remember { mutableStateOf(false) }
+    var showSiteSettings by remember { mutableStateOf(false) }
+    var exportSucceeded by remember { mutableStateOf<Boolean?>(null) }
+    var importSucceeded by remember { mutableStateOf<Boolean?>(null) }
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val backupController = remember(context.applicationContext) {
+        LocalBackupController(context.applicationContext)
+    }
+    val scope = rememberCoroutineScope()
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                exportSucceeded = backupController.export(uri).isSuccess
+            }
+        }
+    }
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                importSucceeded = backupController.import(uri).isSuccess
+            }
+        }
+    }
 
     BrowserMotionScreen(onBack = onBack, fromBottom = true, backEnabled = backEnabled) { requestExit ->
         CenteredSinglePane(maxWidth = 720.dp) {
@@ -158,6 +192,32 @@ internal fun SettingsScreen(
                             onClick = onDownloads,
                             trailing = { PickerChevron() },
                         )
+                        HorizontalDividerThin()
+                        SettingsRow(
+                            stringResource(R.string.settings_backup_export),
+                            subtitle = when (exportSucceeded) {
+                                true -> stringResource(R.string.settings_backup_exported)
+                                false -> stringResource(R.string.settings_backup_failed)
+                                null -> stringResource(R.string.settings_backup_export_subtitle)
+                            },
+                            onClick = {
+                                exportSucceeded = null
+                                exportBackupLauncher.launch("minibrowser-backup-${LocalDate.now()}.json")
+                            },
+                        )
+                        HorizontalDividerThin()
+                        SettingsRow(
+                            stringResource(R.string.settings_backup_import),
+                            subtitle = when (importSucceeded) {
+                                true -> stringResource(R.string.settings_backup_imported)
+                                false -> stringResource(R.string.settings_backup_failed)
+                                null -> stringResource(R.string.settings_backup_import_subtitle)
+                            },
+                            onClick = {
+                                importSucceeded = null
+                                showImportDialog = true
+                            },
+                        )
                     }
 
                     GroupLabel(stringResource(R.string.settings_group_privacy))
@@ -178,6 +238,13 @@ internal fun SettingsScreen(
                                 subtitle = stringResource(R.string.settings_adblock_subtitle),
                             )
                         }
+                        HorizontalDividerThin()
+                        SettingsRow(
+                            stringResource(R.string.settings_site_settings),
+                            subtitle = stringResource(R.string.settings_site_settings_subtitle),
+                            onClick = { showSiteSettings = true },
+                            trailing = { PickerChevron() },
+                        )
                         HorizontalDividerThin()
                         SettingsRow(
                             stringResource(R.string.settings_clear_data),
@@ -224,6 +291,33 @@ internal fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showSiteSettings) {
+        SiteSettingsSheet(onDismiss = { showSiteSettings = false })
+    }
+
+    if (showImportDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportDialog = false },
+            title = { Text(stringResource(R.string.settings_backup_import_confirm_title)) },
+            text = { Text(stringResource(R.string.settings_backup_import_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showImportDialog = false
+                        importBackupLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+                    },
+                ) {
+                    Text(stringResource(R.string.action_open))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 
     if (showClearDialog) {
