@@ -1,6 +1,8 @@
 package com.artt.minibrowser
 
 import android.content.Intent
+import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +12,7 @@ import com.artt.minibrowser.browser.BrowserActivityRequestController
 import com.artt.minibrowser.browser.BrowserDataClearer
 import com.artt.minibrowser.browser.BrowserDataViewModel
 import com.artt.minibrowser.browser.BrowserIntentController
+import com.artt.minibrowser.browser.BrowserPictureInPictureController
 import com.artt.minibrowser.browser.BrowserTabLifecycleController
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.BrowserWindowController
@@ -36,6 +39,7 @@ class MainActivity : ComponentActivity() {
     private val bookmarksRepo by lazy { BookmarksRepository(DbHolder.db.dao()) }
     private val iconsDir by lazy { File(filesDir, "icons") }
     private val tabPreviewStore by lazy { browserApp.tabPreviewStore }
+    private val pictureInPicture by lazy { BrowserPictureInPictureController(this) }
     private lateinit var tabManager: TabManager
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
@@ -99,6 +103,7 @@ class MainActivity : ComponentActivity() {
         BrowserTabLifecycleController(this, tabManager)
 
         setContent {
+            BrowserPictureInPictureEffect(tabManager, pictureInPicture)
             BrowserRoute(
                 tabManager = tabManager,
                 settingsViewModel = settingsViewModel,
@@ -122,6 +127,36 @@ class MainActivity : ComponentActivity() {
                 hasSavedInstanceState = savedInstanceState != null,
             ),
         )
+    }
+
+    override fun onPictureInPictureRequested(): Boolean {
+        if (!::tabManager.isInitialized) return false
+        val entered = pictureInPicture.enterIfEligible()
+        if (entered) tabManager.setAppVisible(true)
+        return entered
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+            ::tabManager.isInitialized &&
+            pictureInPicture.enterIfEligible()
+        ) {
+            tabManager.setAppVisible(true)
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (isInPictureInPictureMode && ::tabManager.isInitialized) {
+            // BrowserTabLifecycleController may receive onPause during the transition. Keep the
+            // selected GeckoSession active so suspendMediaWhenInactive does not stop the video.
+            tabManager.setAppVisible(true)
+        }
     }
 
     override fun onDestroy() {
