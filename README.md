@@ -134,9 +134,15 @@ app/src/main/baselineProfiles/startup-prof.txt
 
 ## Текущий QA status
 
-Последний полный physical-device проход выполнялся на OnePlus 13s / Android 16 / API 36 / arm64-v8a, на SHA `5629a3c` в `master`. На проверенном SHA прошли host build checks, полный instrumentation suite (`66` tests), startup/recreation, омнибокс, 10 вкладок, rotation, history, large-font и основные accessibility checks.
+`ui-polish-audit` / PR #5 прошёл полный automated + physical-device acceptance на tested code SHA `8dca897d610dfd0d4e53df4a7c3cddc326f84c32`.
 
-Текущий draft-набор аудита находится в `ui-polish-audit` / PR #5. Для него автоматизированы accessibility/touch-target проверки меню, large-font сценарии, Room schema и bundled-extension verification, API 26 startup, API 36 instrumentation и отдельная 16 KB lane. Отдельный physical-device acceptance-проход именно `ui-polish-audit` ещё не выполнялся. Android 17 preview compatibility пока не подтверждена из-за описанного выше системного `surfaceflinger` crash в preview emulator.
+Physical device: OnePlus 13s (CPH2723), Android 16 / API 36 / arm64-v8a. Host tests, Roborazzi, lint и APK builds прошли; startup/recreation — 2/2 PASS; physical connected instrumentation — 69/69 PASS, 0 skipped, 0 failed; app-level crash/ANR не обнаружены.
+
+Ручной physical pass завершён для normal/private tabs, 10+ tabs и zero-tabs + Undo, rapid multi-close, HTTP/HTTPS, omnibox/IME, downloads, permissions, bundled extensions, bookmarks/history, find, desktop mode, share, external intents, light/dark theme, font scale 2x, TalkBack semantics, predictive back, rotation/background-foreground и internal empty/error states.
+
+Итог для tested code SHA: **READY FOR MERGE**.
+
+Android 17/API 37 остаётся отдельным неблокирующим preview diagnostic: системный `surfaceflinger` / `RegionSamplingThread` падает до завершения instrumentation, без зафиксированного app-level MiniBrowser `FATAL EXCEPTION`. 16 KB compatibility независимо подтверждена стабильной API 36 PS16K lane.
 
 Подробный статус и ограничения: [`docs/QA_STATUS.md`](docs/QA_STATUS.md).
 
@@ -144,7 +150,6 @@ app/src/main/baselineProfiles/startup-prof.txt
 
 - Android 17/API 37 preview emulator `CE2A.260420.019` падает в системном `surfaceflinger`/`RegionSamplingThread` до завершения compatibility instrumentation; lane остаётся неблокирующим до исправления preview infrastructure.
 - Полный performance/baseline comparison на обычном production user build может быть ограничен отсутствием `android.permission.CLEAR_APP_USER_DATA` у benchmark instrumentation.
-- TalkBack spoken navigation и субъективное качество predictive-back требуют ручной acceptance-проверки на реальном устройстве.
 
 ## Ветки
 
