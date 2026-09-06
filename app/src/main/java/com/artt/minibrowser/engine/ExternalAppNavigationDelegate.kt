@@ -6,10 +6,12 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.SystemClock
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
+private const val USER_NAVIGATION_CHAIN_WINDOW_MS = 10_000L
 private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*$")
 private val BLOCKED_EXTERNAL_SCHEMES = setOf(
     "http",
@@ -38,15 +40,19 @@ internal fun installExternalAppNavigationDelegate(session: GeckoSession, activit
 }
 
 /**
- * Only a direct user web navigation is eligible for a non-invasive Android resolver check.
- * Redirects and script-driven navigation stay entirely in Gecko. This function does not mean that
- * the navigation will leave Gecko: launchSpecializedWebHandler still has to find a non-browser app.
+ * A direct user web navigation is eligible for a non-invasive Android resolver check. An HTTP
+ * redirect is eligible only while it belongs to a short navigation chain that began with a real
+ * user gesture. Script-driven/background navigation never gains this capability by itself.
  */
 internal fun shouldTryExternalWebAppLink(
     targetUri: String,
     hasUserGesture: Boolean,
     isRedirect: Boolean,
-): Boolean = hasUserGesture && !isRedirect && isAllowedWebUri(targetUri)
+    redirectFromRecentUserGesture: Boolean = false,
+): Boolean {
+    if (!isAllowedWebUri(targetUri)) return false
+    return if (isRedirect) redirectFromRecentUserGesture else hasUserGesture
+}
 
 /** Pure filtering helper kept testable so browsers can never count as specialized handlers. */
 internal fun specializedHandlerPackages(
@@ -61,21 +67,38 @@ private class ExternalAppNavigationDelegate(
     private val activity: Activity,
     private val delegate: GeckoSession.NavigationDelegate,
 ) : GeckoSession.NavigationDelegate by delegate {
+    private var userNavigationChainUntilMs = 0L
+
     override fun onLoadRequest(
         session: GeckoSession,
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
         val uri = request.uri
+        val now = SystemClock.elapsedRealtime()
+
+        if (request.hasUserGesture && !request.isRedirect) {
+            userNavigationChainUntilMs = now + USER_NAVIGATION_CHAIN_WINDOW_MS
+        } else if (!request.isRedirect && !request.hasUserGesture) {
+            // A new autonomous/direct load is not part of the previous clicked navigation chain.
+            userNavigationChainUntilMs = 0L
+        }
+
+        val redirectFromRecentUserGesture = request.isRedirect && now <= userNavigationChainUntilMs
+        val userInitiatedNavigation = request.hasUserGesture || redirectFromRecentUserGesture
         val launched = when {
             shouldTryExternalWebAppLink(
                 targetUri = uri,
                 hasUserGesture = request.hasUserGesture,
                 isRedirect = request.isRedirect,
+                redirectFromRecentUserGesture = redirectFromRecentUserGesture,
             ) -> launchSpecializedWebHandler(activity, uri)
-            request.hasUserGesture && !isAllowedWebUri(uri) -> launchCustomAppLink(activity, uri)
+            userInitiatedNavigation && !isAllowedWebUri(uri) -> launchCustomAppLink(activity, uri)
             else -> false
         }
-        if (launched) return GeckoResult.fromValue(AllowOrDeny.DENY)
+        if (launched) {
+            userNavigationChainUntilMs = 0L
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
         return delegate.onLoadRequest(session, request)
     }
 }
@@ -167,9 +190,9 @@ private fun queryPackages(packageManager: PackageManager, intent: Intent): Set<S
         .mapNotNullTo(linkedSetOf()) { it.activityInfo?.packageName }
 
 /**
- * Handles explicit app schemes such as tg:// and bank-specific schemes only after a real user
- * gesture. Internal/browser schemes are never handed to Android. intent:// keeps the existing
- * sanitized parser/fallback path.
+ * Handles explicit app schemes such as tg:// and bank-specific schemes after a real user gesture,
+ * including an immediate redirect chain that began with such a gesture. Internal/browser schemes
+ * are never handed to Android. intent:// keeps the existing sanitized parser/fallback path.
  */
 private fun launchCustomAppLink(activity: Activity, value: String): Boolean {
     val intent = if (value.startsWith("intent:", ignoreCase = true)) {
