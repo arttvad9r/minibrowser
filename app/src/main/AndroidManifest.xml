@@ -8,6 +8,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
 
+    <!-- Needed to preflight specialized HTTP(S) handlers before handing a user click to Android. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW"/>
