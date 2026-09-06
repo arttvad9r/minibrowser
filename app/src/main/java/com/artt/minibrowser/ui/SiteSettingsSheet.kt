@@ -1,12 +1,40 @@
 package com.artt.minibrowser.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -17,9 +45,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
 import com.artt.minibrowser.browser.SitePermissionGroup
@@ -29,6 +64,13 @@ import com.artt.minibrowser.browser.SiteSettingsController
 import com.artt.minibrowser.engine.BrowserApp
 import kotlinx.coroutines.launch
 
+private sealed interface SiteSettingsPage {
+    data object Root : SiteSettingsPage
+    data object AllSites : SiteSettingsPage
+    data class Host(val host: String) : SiteSettingsPage
+}
+
+/** Full-screen site settings: browser defaults first, per-site exceptions second. */
 @Composable
 internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
     val app = LocalContext.current.applicationContext as BrowserApp
@@ -37,7 +79,21 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
     var groups by remember { mutableStateOf<List<SitePermissionGroup>?>(null) }
     var loadFailed by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
+    var page by remember { mutableStateOf<SiteSettingsPage>(SiteSettingsPage.Root) }
     var clearHost by remember { mutableStateOf<String?>(null) }
+
+    fun navigateBack() {
+        page = when (page) {
+            SiteSettingsPage.Root -> {
+                onDismiss()
+                SiteSettingsPage.Root
+            }
+            SiteSettingsPage.AllSites -> SiteSettingsPage.Root
+            is SiteSettingsPage.Host -> SiteSettingsPage.AllSites
+        }
+    }
+
+    BackHandler(onBack = ::navigateBack)
 
     LaunchedEffect(reloadKey) {
         controller.load().fold(
@@ -52,31 +108,45 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
         )
     }
 
-    BrowserBottomSheet(onDismissRequest = onDismiss) { _ ->
-        Text(stringResource(R.string.site_settings_title), style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
-        when {
-            loadFailed -> Text(
-                stringResource(R.string.site_settings_load_failed),
-                color = MaterialTheme.colorScheme.error,
-            )
-            groups == null -> Text(
-                "…",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            groups!!.isEmpty() -> Text(
-                stringResource(R.string.site_settings_empty),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            else -> groups!!.forEach { group ->
-                SitePermissionGroupContent(
-                    group = group,
-                    onReset = { item ->
-                        controller.resetPermission(item)
-                        reloadKey++
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        CenteredSinglePane(maxWidth = 720.dp) {
+            Column(Modifier.fillMaxSize()) {
+                SiteSettingsToolbar(
+                    title = when (val current = page) {
+                        SiteSettingsPage.Root -> stringResource(R.string.site_settings_title)
+                        SiteSettingsPage.AllSites -> stringResource(R.string.site_settings_all_sites)
+                        is SiteSettingsPage.Host -> current.host
                     },
-                    onClearData = { clearHost = group.host },
+                    onBack = ::navigateBack,
                 )
+
+                when (val current = page) {
+                    SiteSettingsPage.Root -> SiteSettingsRoot(
+                        groups = groups,
+                        loadFailed = loadFailed,
+                        onRetry = { reloadKey++ },
+                        onAllSites = { page = SiteSettingsPage.AllSites },
+                    )
+                    SiteSettingsPage.AllSites -> SiteSettingsAllSites(
+                        groups = groups,
+                        loadFailed = loadFailed,
+                        onRetry = { reloadKey++ },
+                        onHost = { page = SiteSettingsPage.Host(it) },
+                    )
+                    is SiteSettingsPage.Host -> SiteSettingsHost(
+                        group = groups?.firstOrNull { it.host == current.host },
+                        onReset = { item ->
+                            controller.resetPermission(item)
+                            reloadKey++
+                        },
+                        onClearData = { clearHost = current.host },
+                    )
+                }
             }
         }
     }
@@ -93,6 +163,7 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
                         scope.launch {
                             controller.clearSiteData(host)
                             reloadKey++
+                            page = SiteSettingsPage.AllSites
                         }
                     },
                 ) {
@@ -109,39 +180,350 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun SitePermissionGroupContent(
-    group: SitePermissionGroup,
-    onReset: (SitePermissionItem) -> Unit,
-    onClearData: () -> Unit,
+private fun SiteSettingsToolbar(title: String, onBack: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back))
+        }
+        Text(
+            title,
+            Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Spacer(Modifier.width(48.dp))
+    }
+}
+
+@Composable
+private fun SiteSettingsRoot(
+    groups: List<SitePermissionGroup>?,
+    loadFailed: Boolean,
+    onRetry: () -> Unit,
+    onAllSites: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Text(group.host, style = MaterialTheme.typography.titleSmall)
-        Spacer(Modifier.height(2.dp))
-        group.permissions.forEach { item ->
-            SheetRow(
-                icon = AppIcons.Shield,
-                label = permissionLabel(item.kind),
-                trailing = {
-                    Row {
-                        Text(
-                            stringResource(
-                                if (item.allowed) R.string.site_permission_allowed else R.string.site_permission_denied,
-                            ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        TextButton(onClick = { onReset(item) }) {
-                            Text(stringResource(R.string.site_settings_reset_permission))
-                        }
-                    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
+    ) {
+        SettingsGroup {
+            SiteSettingRow(
+                icon = Icons.Filled.List,
+                title = stringResource(R.string.site_settings_all_sites),
+                subtitle = when {
+                    loadFailed -> stringResource(R.string.site_settings_load_failed)
+                    groups == null -> stringResource(R.string.site_settings_loading)
+                    else -> pluralStringResource(
+                        R.plurals.site_settings_saved_sites_count,
+                        groups.size,
+                        groups.size,
+                    )
                 },
+                onClick = onAllSites,
             )
         }
-        TextButton(onClick = onClearData) {
-            Text(stringResource(R.string.site_settings_clear_data))
+
+        SiteSettingsSectionLabel(stringResource(R.string.site_settings_permissions_section))
+        SettingsGroup {
+            SiteSettingRow(
+                Icons.Filled.LocationOn,
+                stringResource(R.string.site_settings_category_geolocation),
+                stringResource(R.string.site_settings_default_ask),
+            )
+            SiteSettingsDivider()
+            SiteSettingRow(
+                Icons.Filled.Videocam,
+                stringResource(R.string.site_settings_category_camera),
+                stringResource(R.string.site_settings_media_prompt_each_time),
+            )
+            SiteSettingsDivider()
+            SiteSettingRow(
+                Icons.Filled.Mic,
+                stringResource(R.string.site_settings_category_microphone),
+                stringResource(R.string.site_settings_media_prompt_each_time),
+            )
+            SiteSettingsDivider()
+            SiteSettingRow(
+                Icons.Filled.Notifications,
+                stringResource(R.string.site_settings_category_notifications),
+                stringResource(R.string.site_settings_default_blocked),
+            )
+            SiteSettingsDivider()
+            SiteSettingRow(
+                Icons.Filled.Lock,
+                stringResource(R.string.site_settings_category_drm),
+                stringResource(R.string.site_settings_default_ask),
+            )
+            SiteSettingsDivider()
+            SiteSettingRow(
+                Icons.Filled.Storage,
+                stringResource(R.string.site_settings_category_storage_access),
+                stringResource(R.string.site_settings_default_ask),
+            )
+        }
+
+        SiteSettingsSectionLabel(stringResource(R.string.site_settings_content_section))
+        SettingsGroup {
+            SiteSettingRow(
+                Icons.Filled.PlayArrow,
+                stringResource(R.string.site_settings_category_autoplay),
+                stringResource(R.string.site_settings_autoplay_policy),
+            )
+            SiteSettingsDivider()
+            SiteSettingRow(
+                Icons.Filled.Storage,
+                stringResource(R.string.site_settings_category_persistent_storage),
+                stringResource(R.string.site_settings_default_blocked),
+            )
+            SiteSettingsDivider()
+            SiteSettingRow(
+                Icons.Filled.Devices,
+                stringResource(R.string.site_settings_category_local_access),
+                stringResource(R.string.site_settings_default_blocked),
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text(
+            stringResource(R.string.site_settings_global_policy_note),
+            Modifier.padding(horizontal = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (loadFailed) {
+            TextButton(onClick = onRetry, modifier = Modifier.align(Alignment.End)) {
+                Text(stringResource(R.string.action_retry))
+            }
         }
     }
 }
+
+@Composable
+private fun SiteSettingsAllSites(
+    groups: List<SitePermissionGroup>?,
+    loadFailed: Boolean,
+    onRetry: () -> Unit,
+    onHost: (String) -> Unit,
+) {
+    when {
+        groups == null -> LoadingContent()
+        loadFailed -> MessageContent(
+            message = stringResource(R.string.site_settings_load_failed),
+            action = stringResource(R.string.action_retry),
+            onAction = onRetry,
+        )
+        groups.isEmpty() -> MessageContent(stringResource(R.string.site_settings_all_sites_empty))
+        else -> Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            SettingsGroup {
+                groups.forEachIndexed { index, group ->
+                    SiteSettingRow(
+                        icon = AppIcons.Globe,
+                        title = group.host,
+                        subtitle = pluralStringResource(
+                            R.plurals.site_settings_saved_setting_count,
+                            group.visibleSettingCount(),
+                            group.visibleSettingCount(),
+                        ),
+                        onClick = { onHost(group.host) },
+                    )
+                    if (index != groups.lastIndex) SiteSettingsDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SiteSettingsHost(
+    group: SitePermissionGroup?,
+    onReset: (SitePermissionItem) -> Unit,
+    onClearData: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
+    ) {
+        Text(
+            stringResource(R.string.site_settings_host_description),
+            Modifier.padding(start = 4.dp, bottom = 10.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (group == null || group.permissions.isEmpty()) {
+            Text(
+                stringResource(R.string.site_settings_no_saved_settings),
+                Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            SettingsGroup {
+                group.permissions.forEachIndexed { index, item ->
+                    SitePermissionRow(item, onReset)
+                    if (index != group.permissions.lastIndex) SiteSettingsDivider()
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        TextButton(onClick = onClearData, modifier = Modifier.align(Alignment.End)) {
+            Text(
+                stringResource(R.string.site_settings_clear_data),
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SitePermissionRow(item: SitePermissionItem, onReset: (SitePermissionItem) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            permissionIcon(item.kind),
+            null,
+            Modifier.size(22.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(permissionLabel(item.kind), style = MaterialTheme.typography.bodyLarge)
+            Text(
+                stringResource(
+                    if (item.allowed) R.string.site_permission_allowed else R.string.site_permission_denied,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = { onReset(item) }) {
+            Text(stringResource(R.string.site_settings_reset_permission))
+        }
+    }
+}
+
+@Composable
+private fun SiteSettingRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: (() -> Unit)? = null,
+) {
+    val interaction = if (onClick != null) {
+        Modifier.clickable(role = Role.Button, onClick = onClick)
+    } else {
+        Modifier
+    }
+    Row(
+        interaction
+            .fillMaxWidth()
+            .heightIn(min = 68.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurface)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(1.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (onClick != null) {
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                AppIcons.ChevronRight,
+                null,
+                Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SiteSettingsSectionLabel(text: String) {
+    Text(
+        text,
+        Modifier.padding(start = 4.dp, top = 18.dp, bottom = 8.dp).semantics { heading() },
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun SiteSettingsDivider() {
+    androidx.compose.material3.HorizontalDivider(
+        Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+}
+
+@Composable
+private fun LoadingContent() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun MessageContent(
+    message: String,
+    action: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Column(
+        Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (action != null && onAction != null) {
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onAction) { Text(action) }
+        }
+    }
+}
+
+private fun SitePermissionGroup.visibleSettingCount(): Int = permissions
+    .map { item ->
+        when (item.kind) {
+            SitePermissionKind.AutoplayAudible,
+            SitePermissionKind.AutoplayInaudible,
+            -> "autoplay"
+            else -> item.kind.name
+        }
+    }
+    .distinct()
+    .size
 
 @Composable
 private fun permissionLabel(kind: SitePermissionKind): String = when (kind) {
@@ -149,11 +531,29 @@ private fun permissionLabel(kind: SitePermissionKind): String = when (kind) {
     SitePermissionKind.Notifications -> stringResource(R.string.site_permission_notifications)
     SitePermissionKind.PersistentStorage -> stringResource(R.string.site_permission_persistent_storage)
     SitePermissionKind.Xr -> stringResource(R.string.site_permission_xr)
-    SitePermissionKind.Autoplay -> stringResource(R.string.site_permission_autoplay)
+    SitePermissionKind.AutoplayAudible -> stringResource(R.string.site_permission_autoplay_audible)
+    SitePermissionKind.AutoplayInaudible -> stringResource(R.string.site_permission_autoplay_inaudible)
     SitePermissionKind.Drm -> stringResource(R.string.site_permission_drm)
     SitePermissionKind.Tracking -> stringResource(R.string.site_permission_tracking)
     SitePermissionKind.StorageAccess -> stringResource(R.string.site_permission_storage_access)
     SitePermissionKind.LocalDevice -> stringResource(R.string.site_permission_local_device)
     SitePermissionKind.LocalNetwork -> stringResource(R.string.site_permission_local_network)
     SitePermissionKind.Other -> stringResource(R.string.site_permission_other)
+}
+
+private fun permissionIcon(kind: SitePermissionKind): ImageVector = when (kind) {
+    SitePermissionKind.Geolocation -> Icons.Filled.LocationOn
+    SitePermissionKind.Notifications -> Icons.Filled.Notifications
+    SitePermissionKind.PersistentStorage -> Icons.Filled.Storage
+    SitePermissionKind.Xr -> AppIcons.Globe
+    SitePermissionKind.AutoplayAudible,
+    SitePermissionKind.AutoplayInaudible,
+    -> Icons.Filled.PlayArrow
+    SitePermissionKind.Drm -> Icons.Filled.Lock
+    SitePermissionKind.Tracking -> AppIcons.Shield
+    SitePermissionKind.StorageAccess -> Icons.Filled.Storage
+    SitePermissionKind.LocalDevice,
+    SitePermissionKind.LocalNetwork,
+    -> Icons.Filled.Devices
+    SitePermissionKind.Other -> AppIcons.Shield
 }
