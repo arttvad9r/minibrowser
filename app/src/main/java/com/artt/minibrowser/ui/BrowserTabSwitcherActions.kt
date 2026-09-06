@@ -1,5 +1,6 @@
 package com.artt.minibrowser.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,7 +43,31 @@ internal fun BrowserTabSwitcher(
     onNew: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize()) {
+    var newTabRequested by remember { mutableStateOf(false) }
+
+    fun createNewTab() {
+        newTabRequested = true
+        onNew()
+    }
+
+    fun dismissOverview() {
+        // A zero-tab overview is valid while it is visible. Once the user leaves it, restore the
+        // browser invariant that the page chrome always belongs to a real tab. Avoid a second tab
+        // when dismissal follows the overview's own "+" animation.
+        if (tabs.isEmpty() && !newTabRequested) {
+            onNew()
+        }
+        newTabRequested = false
+        onDismiss()
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            // The original overview fades its own background. Keep an opaque surface behind it so
+            // Gecko/start-page pixels never bleed through during entry or exit frames.
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         BrowserTabSwitcher(
             tabs = tabs,
             currentId = currentId,
@@ -49,8 +75,8 @@ internal fun BrowserTabSwitcher(
             previewStore = previewStore,
             onSelect = onSelect,
             onClose = onClose,
-            onNew = onNew,
-            onDismiss = onDismiss,
+            onNew = ::createNewTab,
+            onDismiss = ::dismissOverview,
         )
 
         var expanded by remember { mutableStateOf(false) }
