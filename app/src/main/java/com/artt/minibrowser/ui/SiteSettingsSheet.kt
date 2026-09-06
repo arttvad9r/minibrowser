@@ -36,10 +36,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +63,9 @@ import com.artt.minibrowser.browser.SitePermissionGroup
 import com.artt.minibrowser.browser.SitePermissionItem
 import com.artt.minibrowser.browser.SitePermissionKind
 import com.artt.minibrowser.browser.SiteSettingsController
+import com.artt.minibrowser.data.SitePermissionPolicy
+import com.artt.minibrowser.data.SitePermissionPolicyRepository
+import com.artt.minibrowser.data.SitePermissionPolicyType
 import com.artt.minibrowser.engine.BrowserApp
 import kotlinx.coroutines.launch
 
@@ -73,6 +78,7 @@ private enum class SiteSettingsCategory {
     StorageAccess,
     Autoplay,
     PersistentStorage,
+    Xr,
     LocalAccess,
 }
 
@@ -88,6 +94,8 @@ private sealed interface SiteSettingsPage {
 internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
     val app = LocalContext.current.applicationContext as BrowserApp
     val controller = remember(app) { SiteSettingsController(app.runtime.storageController) }
+    val policyRepository = remember(app) { SitePermissionPolicyRepository(app) }
+    val policy by policyRepository.policy.collectAsState(initial = SitePermissionPolicy())
     val scope = rememberCoroutineScope()
     var groups by remember { mutableStateOf<List<SitePermissionGroup>?>(null) }
     var loadFailed by remember { mutableStateOf(false) }
@@ -143,6 +151,7 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
                 when (val current = page) {
                     SiteSettingsPage.Root -> SiteSettingsRoot(
                         groups = groups,
+                        policy = policy,
                         loadFailed = loadFailed,
                         onRetry = { reloadKey++ },
                         onAllSites = { page = SiteSettingsPage.AllSites },
@@ -157,8 +166,14 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
                     is SiteSettingsPage.Category -> SiteSettingsCategoryContent(
                         category = current.category,
                         groups = groups,
+                        policy = policy,
                         loadFailed = loadFailed,
                         onRetry = { reloadKey++ },
+                        onPolicyChange = { enabled ->
+                            scope.launch {
+                                policyRepository.set(current.category.policyType(), enabled)
+                            }
+                        },
                         onHost = { page = SiteSettingsPage.Host(it, current) },
                     )
                     is SiteSettingsPage.Host -> SiteSettingsHost(
@@ -227,6 +242,7 @@ private fun SiteSettingsToolbar(title: String, onBack: () -> Unit) {
 @Composable
 private fun SiteSettingsRoot(
     groups: List<SitePermissionGroup>?,
+    policy: SitePermissionPolicy,
     loadFailed: Boolean,
     onRetry: () -> Unit,
     onAllSites: () -> Unit,
@@ -261,43 +277,50 @@ private fun SiteSettingsRoot(
             SiteSettingRow(
                 Icons.Filled.LocationOn,
                 stringResource(R.string.site_settings_category_geolocation),
-                stringResource(R.string.site_settings_default_ask),
+                categoryDefaultSubtitle(SiteSettingsCategory.Geolocation, policy),
                 onClick = { onCategory(SiteSettingsCategory.Geolocation) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Videocam,
                 stringResource(R.string.site_settings_category_camera),
-                stringResource(R.string.site_settings_media_prompt_each_time),
+                categoryDefaultSubtitle(SiteSettingsCategory.Camera, policy),
                 onClick = { onCategory(SiteSettingsCategory.Camera) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Mic,
                 stringResource(R.string.site_settings_category_microphone),
-                stringResource(R.string.site_settings_media_prompt_each_time),
+                categoryDefaultSubtitle(SiteSettingsCategory.Microphone, policy),
                 onClick = { onCategory(SiteSettingsCategory.Microphone) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Notifications,
                 stringResource(R.string.site_settings_category_notifications),
-                stringResource(R.string.site_settings_default_blocked),
+                categoryDefaultSubtitle(SiteSettingsCategory.Notifications, policy),
                 onClick = { onCategory(SiteSettingsCategory.Notifications) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Lock,
                 stringResource(R.string.site_settings_category_drm),
-                stringResource(R.string.site_settings_default_ask),
+                categoryDefaultSubtitle(SiteSettingsCategory.Drm, policy),
                 onClick = { onCategory(SiteSettingsCategory.Drm) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Storage,
                 stringResource(R.string.site_settings_category_storage_access),
-                stringResource(R.string.site_settings_default_ask),
+                categoryDefaultSubtitle(SiteSettingsCategory.StorageAccess, policy),
                 onClick = { onCategory(SiteSettingsCategory.StorageAccess) },
+            )
+            SiteSettingsDivider()
+            SiteSettingRow(
+                AppIcons.Globe,
+                stringResource(R.string.site_settings_category_xr),
+                categoryDefaultSubtitle(SiteSettingsCategory.Xr, policy),
+                onClick = { onCategory(SiteSettingsCategory.Xr) },
             )
         }
 
@@ -306,21 +329,21 @@ private fun SiteSettingsRoot(
             SiteSettingRow(
                 Icons.Filled.PlayArrow,
                 stringResource(R.string.site_settings_category_autoplay),
-                stringResource(R.string.site_settings_autoplay_policy),
+                categoryDefaultSubtitle(SiteSettingsCategory.Autoplay, policy),
                 onClick = { onCategory(SiteSettingsCategory.Autoplay) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Storage,
                 stringResource(R.string.site_settings_category_persistent_storage),
-                stringResource(R.string.site_settings_default_blocked),
+                categoryDefaultSubtitle(SiteSettingsCategory.PersistentStorage, policy),
                 onClick = { onCategory(SiteSettingsCategory.PersistentStorage) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Devices,
                 stringResource(R.string.site_settings_category_local_access),
-                stringResource(R.string.site_settings_default_blocked),
+                categoryDefaultSubtitle(SiteSettingsCategory.LocalAccess, policy),
                 onClick = { onCategory(SiteSettingsCategory.LocalAccess) },
             )
         }
@@ -344,14 +367,17 @@ private fun SiteSettingsRoot(
 private fun SiteSettingsCategoryContent(
     category: SiteSettingsCategory,
     groups: List<SitePermissionGroup>?,
+    policy: SitePermissionPolicy,
     loadFailed: Boolean,
     onRetry: () -> Unit,
+    onPolicyChange: (Boolean) -> Unit,
     onHost: (String) -> Unit,
 ) {
     val matchingGroups = groups?.mapNotNull { group ->
         val permissions = group.permissions.filter { category.matches(it.kind) }
         if (permissions.isEmpty()) null else SitePermissionGroup(group.host, permissions)
     }.orEmpty()
+    val enabled = policy.enabled(category.policyType())
 
     Column(
         Modifier
@@ -361,28 +387,49 @@ private fun SiteSettingsCategoryContent(
             .padding(bottom = 24.dp),
     ) {
         Text(
-            stringResource(R.string.site_settings_default_behavior, categoryDefaultSubtitle(category)),
-            Modifier.padding(start = 4.dp, bottom = 8.dp),
-            style = MaterialTheme.typography.bodyMedium,
+            stringResource(R.string.site_settings_default_behavior_title),
+            Modifier.padding(start = 4.dp, bottom = 8.dp).semantics { heading() },
+            style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        SettingsGroup {
+            SitePolicyChoiceRow(
+                selected = enabled,
+                text = stringResource(
+                    if (category == SiteSettingsCategory.Autoplay) {
+                        R.string.site_settings_allow_autoplay_audible
+                    } else {
+                        R.string.site_settings_allow_requests
+                    },
+                ),
+                onClick = { onPolicyChange(true) },
+            )
+            SiteSettingsDivider()
+            SitePolicyChoiceRow(
+                selected = !enabled,
+                text = stringResource(
+                    if (category == SiteSettingsCategory.Autoplay) {
+                        R.string.site_settings_block_autoplay_audible
+                    } else {
+                        R.string.site_settings_block_requests
+                    },
+                ),
+                onClick = { onPolicyChange(false) },
+            )
+        }
 
         if (category.isSessionMediaPermission()) {
             Text(
                 stringResource(R.string.site_settings_media_permissions_note),
-                Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                Modifier.padding(horizontal = 4.dp, vertical = 16.dp),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             return@Column
         }
 
-        Text(
-            stringResource(R.string.site_settings_category_exceptions_note),
-            Modifier.padding(start = 4.dp, bottom = 10.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        SiteSettingsSectionLabel(stringResource(R.string.site_settings_category_exceptions_note))
 
         when {
             groups == null -> Box(
@@ -424,6 +471,26 @@ private fun SiteSettingsCategoryContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SitePolicyChoiceRow(
+    selected: Boolean,
+    text: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .heightIn(min = 64.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Spacer(Modifier.width(12.dp))
+        Text(text, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -646,12 +713,26 @@ private fun SiteSettingsCategory.matches(kind: SitePermissionKind): Boolean = wh
     SiteSettingsCategory.Autoplay -> kind == SitePermissionKind.AutoplayAudible ||
         kind == SitePermissionKind.AutoplayInaudible
     SiteSettingsCategory.PersistentStorage -> kind == SitePermissionKind.PersistentStorage
+    SiteSettingsCategory.Xr -> kind == SitePermissionKind.Xr
     SiteSettingsCategory.LocalAccess -> kind == SitePermissionKind.LocalDevice ||
         kind == SitePermissionKind.LocalNetwork
 }
 
 private fun SiteSettingsCategory.isSessionMediaPermission(): Boolean =
     this == SiteSettingsCategory.Camera || this == SiteSettingsCategory.Microphone
+
+private fun SiteSettingsCategory.policyType(): SitePermissionPolicyType = when (this) {
+    SiteSettingsCategory.Geolocation -> SitePermissionPolicyType.GEOLOCATION
+    SiteSettingsCategory.Camera -> SitePermissionPolicyType.CAMERA
+    SiteSettingsCategory.Microphone -> SitePermissionPolicyType.MICROPHONE
+    SiteSettingsCategory.Notifications -> SitePermissionPolicyType.NOTIFICATIONS
+    SiteSettingsCategory.Drm -> SitePermissionPolicyType.DRM
+    SiteSettingsCategory.StorageAccess -> SitePermissionPolicyType.STORAGE_ACCESS
+    SiteSettingsCategory.Autoplay -> SitePermissionPolicyType.AUTOPLAY_AUDIBLE
+    SiteSettingsCategory.PersistentStorage -> SitePermissionPolicyType.PERSISTENT_STORAGE
+    SiteSettingsCategory.Xr -> SitePermissionPolicyType.XR
+    SiteSettingsCategory.LocalAccess -> SitePermissionPolicyType.LOCAL_ACCESS
+}
 
 @Composable
 private fun categoryTitle(category: SiteSettingsCategory): String = stringResource(
@@ -664,27 +745,37 @@ private fun categoryTitle(category: SiteSettingsCategory): String = stringResour
         SiteSettingsCategory.StorageAccess -> R.string.site_settings_category_storage_access
         SiteSettingsCategory.Autoplay -> R.string.site_settings_category_autoplay
         SiteSettingsCategory.PersistentStorage -> R.string.site_settings_category_persistent_storage
+        SiteSettingsCategory.Xr -> R.string.site_settings_category_xr
         SiteSettingsCategory.LocalAccess -> R.string.site_settings_category_local_access
     },
 )
 
 @Composable
-private fun categoryDefaultSubtitle(category: SiteSettingsCategory): String = stringResource(
-    when (category) {
-        SiteSettingsCategory.Geolocation,
-        SiteSettingsCategory.Drm,
-        SiteSettingsCategory.StorageAccess,
-        -> R.string.site_settings_default_ask
-        SiteSettingsCategory.Camera,
-        SiteSettingsCategory.Microphone,
-        -> R.string.site_settings_media_prompt_each_time
-        SiteSettingsCategory.Notifications,
-        SiteSettingsCategory.PersistentStorage,
-        SiteSettingsCategory.LocalAccess,
-        -> R.string.site_settings_default_blocked
-        SiteSettingsCategory.Autoplay -> R.string.site_settings_autoplay_policy
-    },
-)
+private fun categoryDefaultSubtitle(
+    category: SiteSettingsCategory,
+    policy: SitePermissionPolicy,
+): String {
+    if (category == SiteSettingsCategory.Autoplay) {
+        return stringResource(
+            if (policy.autoplayAudibleAllowed) {
+                R.string.site_settings_autoplay_policy_allowed
+            } else {
+                R.string.site_settings_autoplay_policy
+            },
+        )
+    }
+    return stringResource(
+        if (policy.enabled(category.policyType())) {
+            if (category.isSessionMediaPermission()) {
+                R.string.site_settings_media_prompt_each_time
+            } else {
+                R.string.site_settings_default_ask
+            }
+        } else {
+            R.string.site_settings_default_blocked
+        },
+    )
+}
 
 private fun categoryIcon(category: SiteSettingsCategory): ImageVector = when (category) {
     SiteSettingsCategory.Geolocation -> Icons.Filled.LocationOn
@@ -695,6 +786,7 @@ private fun categoryIcon(category: SiteSettingsCategory): ImageVector = when (ca
     SiteSettingsCategory.StorageAccess -> Icons.Filled.Storage
     SiteSettingsCategory.Autoplay -> Icons.Filled.PlayArrow
     SiteSettingsCategory.PersistentStorage -> Icons.Filled.Storage
+    SiteSettingsCategory.Xr -> AppIcons.Globe
     SiteSettingsCategory.LocalAccess -> Icons.Filled.Devices
 }
 
