@@ -19,6 +19,7 @@ import org.mozilla.geckoview.GeckoSession
 internal enum class PermissionAction {
     ALLOW,
     DENY,
+    DEFAULT_DENY,
     PROMPT_GEOLOCATION,
     PROMPT_NOTIFICATIONS,
     PROMPT_PERSISTENT_STORAGE,
@@ -35,23 +36,23 @@ internal fun contentPermissionAction(
 ): PermissionAction = when (permission) {
     GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE -> PermissionAction.ALLOW
     GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE ->
-        if (policy.autoplayAudibleAllowed) PermissionAction.ALLOW else PermissionAction.DENY
+        if (policy.autoplayAudibleAllowed) PermissionAction.ALLOW else PermissionAction.DEFAULT_DENY
     GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION ->
-        if (policy.geolocationCanAsk) PermissionAction.PROMPT_GEOLOCATION else PermissionAction.DENY
+        if (policy.geolocationCanAsk) PermissionAction.PROMPT_GEOLOCATION else PermissionAction.DEFAULT_DENY
     GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION ->
-        if (policy.notificationsCanAsk) PermissionAction.PROMPT_NOTIFICATIONS else PermissionAction.DENY
+        if (policy.notificationsCanAsk) PermissionAction.PROMPT_NOTIFICATIONS else PermissionAction.DEFAULT_DENY
     GeckoSession.PermissionDelegate.PERMISSION_PERSISTENT_STORAGE ->
-        if (policy.persistentStorageCanAsk) PermissionAction.PROMPT_PERSISTENT_STORAGE else PermissionAction.DENY
+        if (policy.persistentStorageCanAsk) PermissionAction.PROMPT_PERSISTENT_STORAGE else PermissionAction.DEFAULT_DENY
     GeckoSession.PermissionDelegate.PERMISSION_XR ->
-        if (policy.xrCanAsk) PermissionAction.PROMPT_XR else PermissionAction.DENY
+        if (policy.xrCanAsk) PermissionAction.PROMPT_XR else PermissionAction.DEFAULT_DENY
     GeckoSession.PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS ->
-        if (policy.drmCanAsk) PermissionAction.PROMPT_DRM else PermissionAction.DENY
+        if (policy.drmCanAsk) PermissionAction.PROMPT_DRM else PermissionAction.DEFAULT_DENY
     GeckoSession.PermissionDelegate.PERMISSION_STORAGE_ACCESS ->
-        if (policy.storageAccessCanAsk) PermissionAction.PROMPT_STORAGE_ACCESS else PermissionAction.DENY
+        if (policy.storageAccessCanAsk) PermissionAction.PROMPT_STORAGE_ACCESS else PermissionAction.DEFAULT_DENY
     GeckoSession.PermissionDelegate.PERMISSION_LOCAL_DEVICE_ACCESS ->
-        if (policy.localAccessCanAsk) PermissionAction.PROMPT_LOCAL_DEVICE else PermissionAction.DENY
+        if (policy.localAccessCanAsk) PermissionAction.PROMPT_LOCAL_DEVICE else PermissionAction.DEFAULT_DENY
     GeckoSession.PermissionDelegate.PERMISSION_LOCAL_NETWORK_ACCESS ->
-        if (policy.localAccessCanAsk) PermissionAction.PROMPT_LOCAL_NETWORK else PermissionAction.DENY
+        if (policy.localAccessCanAsk) PermissionAction.PROMPT_LOCAL_NETWORK else PermissionAction.DEFAULT_DENY
     else -> PermissionAction.DENY
 }
 
@@ -62,6 +63,7 @@ internal fun resolveContentPermissionValue(action: PermissionAction, existingVal
         GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
         else -> when (action) {
             PermissionAction.ALLOW -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+            PermissionAction.DEFAULT_DENY -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
             else -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
         }
     }
@@ -159,6 +161,7 @@ class GeckoPermissionController(
                 activity.getString(R.string.permission_local_network_message, host)
             PermissionAction.ALLOW,
             PermissionAction.DENY,
+            PermissionAction.DEFAULT_DENY,
             -> ""
         }
         activity.runOnUiThread {
