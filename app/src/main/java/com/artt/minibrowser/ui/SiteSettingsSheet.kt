@@ -22,8 +22,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Devices
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
@@ -64,10 +64,23 @@ import com.artt.minibrowser.browser.SiteSettingsController
 import com.artt.minibrowser.engine.BrowserApp
 import kotlinx.coroutines.launch
 
+private enum class SiteSettingsCategory {
+    Geolocation,
+    Camera,
+    Microphone,
+    Notifications,
+    Drm,
+    StorageAccess,
+    Autoplay,
+    PersistentStorage,
+    LocalAccess,
+}
+
 private sealed interface SiteSettingsPage {
     data object Root : SiteSettingsPage
     data object AllSites : SiteSettingsPage
-    data class Host(val host: String) : SiteSettingsPage
+    data class Category(val category: SiteSettingsCategory) : SiteSettingsPage
+    data class Host(val host: String, val returnTo: SiteSettingsPage) : SiteSettingsPage
 }
 
 /** Full-screen site settings: browser defaults first, per-site exceptions second. */
@@ -80,16 +93,17 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
     var loadFailed by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableStateOf(0) }
     var page by remember { mutableStateOf<SiteSettingsPage>(SiteSettingsPage.Root) }
-    var clearHost by remember { mutableStateOf<String?>(null) }
+    var clearRequest by remember { mutableStateOf<Pair<String, SiteSettingsPage>?>(null) }
 
     fun navigateBack() {
-        page = when (page) {
+        page = when (val current = page) {
             SiteSettingsPage.Root -> {
                 onDismiss()
                 SiteSettingsPage.Root
             }
             SiteSettingsPage.AllSites -> SiteSettingsPage.Root
-            is SiteSettingsPage.Host -> SiteSettingsPage.AllSites
+            is SiteSettingsPage.Category -> SiteSettingsPage.Root
+            is SiteSettingsPage.Host -> current.returnTo
         }
     }
 
@@ -120,6 +134,7 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
                     title = when (val current = page) {
                         SiteSettingsPage.Root -> stringResource(R.string.site_settings_title)
                         SiteSettingsPage.AllSites -> stringResource(R.string.site_settings_all_sites)
+                        is SiteSettingsPage.Category -> categoryTitle(current.category)
                         is SiteSettingsPage.Host -> current.host
                     },
                     onBack = ::navigateBack,
@@ -131,12 +146,20 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
                         loadFailed = loadFailed,
                         onRetry = { reloadKey++ },
                         onAllSites = { page = SiteSettingsPage.AllSites },
+                        onCategory = { page = SiteSettingsPage.Category(it) },
                     )
                     SiteSettingsPage.AllSites -> SiteSettingsAllSites(
                         groups = groups,
                         loadFailed = loadFailed,
                         onRetry = { reloadKey++ },
-                        onHost = { page = SiteSettingsPage.Host(it) },
+                        onHost = { page = SiteSettingsPage.Host(it, SiteSettingsPage.AllSites) },
+                    )
+                    is SiteSettingsPage.Category -> SiteSettingsCategoryContent(
+                        category = current.category,
+                        groups = groups,
+                        loadFailed = loadFailed,
+                        onRetry = { reloadKey++ },
+                        onHost = { page = SiteSettingsPage.Host(it, current) },
                     )
                     is SiteSettingsPage.Host -> SiteSettingsHost(
                         group = groups?.firstOrNull { it.host == current.host },
@@ -144,26 +167,28 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
                             controller.resetPermission(item)
                             reloadKey++
                         },
-                        onClearData = { clearHost = current.host },
+                        onClearData = { clearRequest = current.host to current.returnTo },
                     )
                 }
             }
         }
     }
 
-    clearHost?.let { host ->
+    clearRequest?.let { request ->
+        val host = request.first
+        val returnTo = request.second
         AlertDialog(
-            onDismissRequest = { clearHost = null },
+            onDismissRequest = { clearRequest = null },
             title = { Text(stringResource(R.string.site_settings_clear_data)) },
             text = { Text(stringResource(R.string.site_settings_clear_data_confirm, host)) },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        clearHost = null
+                        clearRequest = null
                         scope.launch {
                             controller.clearSiteData(host)
                             reloadKey++
-                            page = SiteSettingsPage.AllSites
+                            page = returnTo
                         }
                     },
                 ) {
@@ -171,7 +196,7 @@ internal fun SiteSettingsSheet(onDismiss: () -> Unit) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { clearHost = null }) {
+                TextButton(onClick = { clearRequest = null }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
@@ -205,6 +230,7 @@ private fun SiteSettingsRoot(
     loadFailed: Boolean,
     onRetry: () -> Unit,
     onAllSites: () -> Unit,
+    onCategory: (SiteSettingsCategory) -> Unit,
 ) {
     Column(
         Modifier
@@ -215,7 +241,7 @@ private fun SiteSettingsRoot(
     ) {
         SettingsGroup {
             SiteSettingRow(
-                icon = Icons.Filled.List,
+                icon = Icons.AutoMirrored.Filled.List,
                 title = stringResource(R.string.site_settings_all_sites),
                 subtitle = when {
                     loadFailed -> stringResource(R.string.site_settings_load_failed)
@@ -236,36 +262,42 @@ private fun SiteSettingsRoot(
                 Icons.Filled.LocationOn,
                 stringResource(R.string.site_settings_category_geolocation),
                 stringResource(R.string.site_settings_default_ask),
+                onClick = { onCategory(SiteSettingsCategory.Geolocation) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Videocam,
                 stringResource(R.string.site_settings_category_camera),
                 stringResource(R.string.site_settings_media_prompt_each_time),
+                onClick = { onCategory(SiteSettingsCategory.Camera) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Mic,
                 stringResource(R.string.site_settings_category_microphone),
                 stringResource(R.string.site_settings_media_prompt_each_time),
+                onClick = { onCategory(SiteSettingsCategory.Microphone) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Notifications,
                 stringResource(R.string.site_settings_category_notifications),
                 stringResource(R.string.site_settings_default_blocked),
+                onClick = { onCategory(SiteSettingsCategory.Notifications) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Lock,
                 stringResource(R.string.site_settings_category_drm),
                 stringResource(R.string.site_settings_default_ask),
+                onClick = { onCategory(SiteSettingsCategory.Drm) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Storage,
                 stringResource(R.string.site_settings_category_storage_access),
                 stringResource(R.string.site_settings_default_ask),
+                onClick = { onCategory(SiteSettingsCategory.StorageAccess) },
             )
         }
 
@@ -275,18 +307,21 @@ private fun SiteSettingsRoot(
                 Icons.Filled.PlayArrow,
                 stringResource(R.string.site_settings_category_autoplay),
                 stringResource(R.string.site_settings_autoplay_policy),
+                onClick = { onCategory(SiteSettingsCategory.Autoplay) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Storage,
                 stringResource(R.string.site_settings_category_persistent_storage),
                 stringResource(R.string.site_settings_default_blocked),
+                onClick = { onCategory(SiteSettingsCategory.PersistentStorage) },
             )
             SiteSettingsDivider()
             SiteSettingRow(
                 Icons.Filled.Devices,
                 stringResource(R.string.site_settings_category_local_access),
                 stringResource(R.string.site_settings_default_blocked),
+                onClick = { onCategory(SiteSettingsCategory.LocalAccess) },
             )
         }
 
@@ -300,6 +335,93 @@ private fun SiteSettingsRoot(
         if (loadFailed) {
             TextButton(onClick = onRetry, modifier = Modifier.align(Alignment.End)) {
                 Text(stringResource(R.string.action_retry))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SiteSettingsCategoryContent(
+    category: SiteSettingsCategory,
+    groups: List<SitePermissionGroup>?,
+    loadFailed: Boolean,
+    onRetry: () -> Unit,
+    onHost: (String) -> Unit,
+) {
+    val matchingGroups = groups?.mapNotNull { group ->
+        val permissions = group.permissions.filter { category.matches(it.kind) }
+        if (permissions.isEmpty()) null else SitePermissionGroup(group.host, permissions)
+    }.orEmpty()
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 24.dp),
+    ) {
+        Text(
+            stringResource(R.string.site_settings_default_behavior, categoryDefaultSubtitle(category)),
+            Modifier.padding(start = 4.dp, bottom = 8.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (category.isSessionMediaPermission()) {
+            Text(
+                stringResource(R.string.site_settings_media_permissions_note),
+                Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@Column
+        }
+
+        Text(
+            stringResource(R.string.site_settings_category_exceptions_note),
+            Modifier.padding(start = 4.dp, bottom = 10.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        when {
+            groups == null -> Box(
+                Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+            loadFailed -> {
+                Text(
+                    stringResource(R.string.site_settings_load_failed),
+                    Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onRetry, modifier = Modifier.align(Alignment.End)) {
+                    Text(stringResource(R.string.action_retry))
+                }
+            }
+            matchingGroups.isEmpty() -> Text(
+                stringResource(R.string.site_settings_category_exceptions_empty),
+                Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> SettingsGroup {
+                matchingGroups.forEachIndexed { index, group ->
+                    SiteSettingRow(
+                        icon = categoryIcon(category),
+                        title = group.host,
+                        subtitle = pluralStringResource(
+                            R.plurals.site_settings_saved_setting_count,
+                            group.permissions.size,
+                            group.permissions.size,
+                        ),
+                        onClick = { onHost(group.host) },
+                    )
+                    if (index != matchingGroups.lastIndex) SiteSettingsDivider()
+                }
             }
         }
     }
@@ -511,6 +633,69 @@ private fun MessageContent(
             TextButton(onClick = onAction) { Text(action) }
         }
     }
+}
+
+private fun SiteSettingsCategory.matches(kind: SitePermissionKind): Boolean = when (this) {
+    SiteSettingsCategory.Geolocation -> kind == SitePermissionKind.Geolocation
+    SiteSettingsCategory.Camera,
+    SiteSettingsCategory.Microphone,
+    -> false
+    SiteSettingsCategory.Notifications -> kind == SitePermissionKind.Notifications
+    SiteSettingsCategory.Drm -> kind == SitePermissionKind.Drm
+    SiteSettingsCategory.StorageAccess -> kind == SitePermissionKind.StorageAccess
+    SiteSettingsCategory.Autoplay -> kind == SitePermissionKind.AutoplayAudible ||
+        kind == SitePermissionKind.AutoplayInaudible
+    SiteSettingsCategory.PersistentStorage -> kind == SitePermissionKind.PersistentStorage
+    SiteSettingsCategory.LocalAccess -> kind == SitePermissionKind.LocalDevice ||
+        kind == SitePermissionKind.LocalNetwork
+}
+
+private fun SiteSettingsCategory.isSessionMediaPermission(): Boolean =
+    this == SiteSettingsCategory.Camera || this == SiteSettingsCategory.Microphone
+
+@Composable
+private fun categoryTitle(category: SiteSettingsCategory): String = stringResource(
+    when (category) {
+        SiteSettingsCategory.Geolocation -> R.string.site_settings_category_geolocation
+        SiteSettingsCategory.Camera -> R.string.site_settings_category_camera
+        SiteSettingsCategory.Microphone -> R.string.site_settings_category_microphone
+        SiteSettingsCategory.Notifications -> R.string.site_settings_category_notifications
+        SiteSettingsCategory.Drm -> R.string.site_settings_category_drm
+        SiteSettingsCategory.StorageAccess -> R.string.site_settings_category_storage_access
+        SiteSettingsCategory.Autoplay -> R.string.site_settings_category_autoplay
+        SiteSettingsCategory.PersistentStorage -> R.string.site_settings_category_persistent_storage
+        SiteSettingsCategory.LocalAccess -> R.string.site_settings_category_local_access
+    },
+)
+
+@Composable
+private fun categoryDefaultSubtitle(category: SiteSettingsCategory): String = stringResource(
+    when (category) {
+        SiteSettingsCategory.Geolocation,
+        SiteSettingsCategory.Drm,
+        SiteSettingsCategory.StorageAccess,
+        -> R.string.site_settings_default_ask
+        SiteSettingsCategory.Camera,
+        SiteSettingsCategory.Microphone,
+        -> R.string.site_settings_media_prompt_each_time
+        SiteSettingsCategory.Notifications,
+        SiteSettingsCategory.PersistentStorage,
+        SiteSettingsCategory.LocalAccess,
+        -> R.string.site_settings_default_blocked
+        SiteSettingsCategory.Autoplay -> R.string.site_settings_autoplay_policy
+    },
+)
+
+private fun categoryIcon(category: SiteSettingsCategory): ImageVector = when (category) {
+    SiteSettingsCategory.Geolocation -> Icons.Filled.LocationOn
+    SiteSettingsCategory.Camera -> Icons.Filled.Videocam
+    SiteSettingsCategory.Microphone -> Icons.Filled.Mic
+    SiteSettingsCategory.Notifications -> Icons.Filled.Notifications
+    SiteSettingsCategory.Drm -> Icons.Filled.Lock
+    SiteSettingsCategory.StorageAccess -> Icons.Filled.Storage
+    SiteSettingsCategory.Autoplay -> Icons.Filled.PlayArrow
+    SiteSettingsCategory.PersistentStorage -> Icons.Filled.Storage
+    SiteSettingsCategory.LocalAccess -> Icons.Filled.Devices
 }
 
 private fun SitePermissionGroup.visibleSettingCount(): Int = permissions
