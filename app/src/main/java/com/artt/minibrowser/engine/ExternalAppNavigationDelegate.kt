@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import com.artt.minibrowser.net.webUriHost
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -37,6 +38,23 @@ internal fun installExternalAppNavigationDelegate(session: GeckoSession, activit
     session.navigationDelegate = ExternalAppNavigationDelegate(activity, current)
 }
 
+/**
+ * Only explicit, non-redirecting cross-site clicks are candidates for Android App Link handoff.
+ * This keeps same-site buttons/forms and redirect chains entirely inside Gecko while still allowing
+ * links such as a site -> t.me to open the verified native app.
+ */
+internal fun shouldTryExternalWebAppLink(
+    targetUri: String,
+    triggerUri: String?,
+    hasUserGesture: Boolean,
+    isRedirect: Boolean,
+): Boolean {
+    if (!hasUserGesture || isRedirect || !isAllowedWebUri(targetUri)) return false
+    val targetHost = webUriHost(targetUri)?.lowercase() ?: return false
+    val triggerHost = triggerUri?.let(::webUriHost)?.lowercase() ?: return false
+    return targetHost != triggerHost
+}
+
 private class ExternalAppNavigationDelegate(
     private val activity: Activity,
     private val delegate: GeckoSession.NavigationDelegate,
@@ -45,14 +63,18 @@ private class ExternalAppNavigationDelegate(
         session: GeckoSession,
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
-        if (request.hasUserGesture) {
-            val uri = request.uri
-            val launched = when {
-                isAllowedWebUri(uri) -> launchWebAppLink(activity, uri)
-                else -> launchCustomAppLink(activity, uri)
-            }
-            if (launched) return GeckoResult.fromValue(AllowOrDeny.DENY)
+        val uri = request.uri
+        val launched = when {
+            shouldTryExternalWebAppLink(
+                targetUri = uri,
+                triggerUri = request.triggerUri,
+                hasUserGesture = request.hasUserGesture,
+                isRedirect = request.isRedirect,
+            ) -> launchWebAppLink(activity, uri)
+            request.hasUserGesture && !isAllowedWebUri(uri) -> launchCustomAppLink(activity, uri)
+            else -> false
         }
+        if (launched) return GeckoResult.fromValue(AllowOrDeny.DENY)
         return delegate.onLoadRequest(session, request)
     }
 }
