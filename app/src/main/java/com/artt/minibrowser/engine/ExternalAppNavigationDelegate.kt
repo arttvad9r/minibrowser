@@ -6,14 +6,11 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import com.artt.minibrowser.net.webUriHost
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
 private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*$")
-private val TELEGRAM_WEB_HOSTS = setOf("t.me", "telegram.me", "telegram.dog")
 private val BLOCKED_EXTERNAL_SCHEMES = setOf(
     "http",
     "https",
@@ -30,8 +27,9 @@ private val BLOCKED_EXTERNAL_SCHEMES = setOf(
 
 /**
  * Wraps TabManager's navigation delegate instead of replacing its browser-state handling.
- * Ordinary HTTP(S) navigation stays entirely in Gecko. The only web App Link special-case kept
- * here is Telegram, because the browser explicitly supports handing t.me links to Telegram.
+ * A normal web click is first checked against Android's URL resolution. Gecko is denied only after
+ * Android has identified a concrete non-browser handler, or when its resolver has multiple
+ * specialized non-browser handlers to offer. Ordinary web links therefore remain Gecko navigation.
  */
 internal fun installExternalAppNavigationDelegate(session: GeckoSession, activity: Activity) {
     val current = session.navigationDelegate ?: return
@@ -40,22 +38,24 @@ internal fun installExternalAppNavigationDelegate(session: GeckoSession, activit
 }
 
 /**
- * Do not probe arbitrary cross-site links through Android intents: doing that can consume a normal
- * web click before Gecko gets to navigate. Limit HTTP(S) handoff to Telegram hosts, and only for an
- * explicit non-redirecting user click arriving from outside Telegram. tg:// is handled separately.
+ * Only a direct user web navigation is eligible for a non-invasive Android resolver check.
+ * Redirects and script-driven navigation stay entirely in Gecko. This function does not mean that
+ * the navigation will leave Gecko: launchSpecializedWebHandler still has to find a non-browser app.
  */
 internal fun shouldTryExternalWebAppLink(
     targetUri: String,
-    triggerUri: String?,
     hasUserGesture: Boolean,
     isRedirect: Boolean,
-): Boolean {
-    if (!hasUserGesture || isRedirect || !isAllowedWebUri(targetUri)) return false
-    val targetHost = webUriHost(targetUri)?.lowercase() ?: return false
-    if (targetHost !in TELEGRAM_WEB_HOSTS) return false
-    val triggerHost = triggerUri?.let(::webUriHost)?.lowercase() ?: return false
-    return triggerHost !in TELEGRAM_WEB_HOSTS
-}
+): Boolean = hasUserGesture && !isRedirect && isAllowedWebUri(targetUri)
+
+/** Pure filtering helper kept testable so browsers can never count as specialized handlers. */
+internal fun specializedHandlerPackages(
+    targetPackages: List<String>,
+    genericBrowserPackages: Set<String>,
+    selfPackage: String,
+): List<String> = targetPackages
+    .filter { it != selfPackage && it !in genericBrowserPackages }
+    .distinct()
 
 private class ExternalAppNavigationDelegate(
     private val activity: Activity,
@@ -69,10 +69,9 @@ private class ExternalAppNavigationDelegate(
         val launched = when {
             shouldTryExternalWebAppLink(
                 targetUri = uri,
-                triggerUri = request.triggerUri,
                 hasUserGesture = request.hasUserGesture,
                 isRedirect = request.isRedirect,
-            ) -> launchWebAppLink(activity, uri)
+            ) -> launchSpecializedWebHandler(activity, uri)
             request.hasUserGesture && !isAllowedWebUri(uri) -> launchCustomAppLink(activity, uri)
             else -> false
         }
@@ -82,51 +81,60 @@ private class ExternalAppNavigationDelegate(
 }
 
 /**
- * Android 11+ exposes exactly the browser behavior needed here: REQUIRE_NON_BROWSER succeeds only
- * when a non-browser activity can handle the URL. If only browsers are available, Gecko continues
- * the navigation normally.
+ * Opens HTTP(S) outside the browser only when Android resolution exposes a specialized handler.
+ *
+ * The important distinction from the earlier implementation is that we do not call startActivity
+ * speculatively for every cross-site link. We query first. If Android resolves the URL to the user's
+ * browser, Gecko continues normally. If Android resolves it to a verified/preferred native app, we
+ * launch that exact component. If Android presents a resolver, only non-browser candidates are put
+ * in the chooser. This covers YouTube, maps, stores and bank/payment App Links without making normal
+ * links disappear when no native app owns them.
  */
-private fun launchWebAppLink(activity: Activity, value: String): Boolean {
-    val uri = Uri.parse(value)
-    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+private fun launchSpecializedWebHandler(activity: Activity, value: String): Boolean {
+    val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
+    val webIntent = Intent(Intent.ACTION_VIEW, uri).apply {
         addCategory(Intent.CATEGORY_BROWSABLE)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        intent.addFlags(Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER)
-        return startActivitySafely(activity, intent)
-    }
-
-    return launchLegacySpecializedWebHandler(activity, intent)
-}
-
-/** Android 8-10 equivalent: remove generic browser handlers and launch only URL-specific apps. */
-private fun launchLegacySpecializedWebHandler(activity: Activity, webIntent: Intent): Boolean {
     val packageManager = activity.packageManager
-    val genericBrowserPackages = buildSet {
-        addAll(queryPackages(packageManager, genericWebIntent("https://example.com/")))
-        addAll(queryPackages(packageManager, genericWebIntent("http://example.com/")))
-        addAll(
-            queryPackages(
-                packageManager,
-                Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER),
-            ),
-        )
-        add(activity.packageName)
-    }
-
-    val candidates = packageManager
+    val browserPackages = genericBrowserPackages(packageManager) + activity.packageName
+    val targetComponents = packageManager
         .queryIntentActivities(webIntent, PackageManager.MATCH_DEFAULT_ONLY)
         .mapNotNull { info ->
             val activityInfo = info.activityInfo ?: return@mapNotNull null
-            if (activityInfo.packageName in genericBrowserPackages) return@mapNotNull null
             ComponentName(activityInfo.packageName, activityInfo.name)
         }
         .distinct()
 
-    if (candidates.isEmpty()) return false
-    val explicitIntents = candidates.map { component ->
+    val specializedPackages = specializedHandlerPackages(
+        targetPackages = targetComponents.map { it.packageName },
+        genericBrowserPackages = browserPackages,
+        selfPackage = activity.packageName,
+    ).toSet()
+    val specializedComponents = targetComponents.filter { it.packageName in specializedPackages }
+    if (specializedComponents.isEmpty()) return false
+
+    // Respect Android's verified/default App Link decision when it resolves to a concrete app.
+    val resolvedComponent = packageManager
+        .resolveActivity(webIntent, PackageManager.MATCH_DEFAULT_ONLY)
+        ?.activityInfo
+        ?.let { ComponentName(it.packageName, it.name) }
+
+    if (resolvedComponent != null) {
+        if (resolvedComponent.packageName == activity.packageName ||
+            resolvedComponent.packageName in browserPackages
+        ) {
+            // Android chose a browser (for example an unverified web link on Android 12+).
+            return false
+        }
+        if (resolvedComponent in specializedComponents) {
+            return startActivitySafely(activity, Intent(webIntent).setComponent(resolvedComponent))
+        }
+    }
+
+    // A system resolver/default chooser is not returned by queryIntentActivities. In that case,
+    // offer only the specialized native apps and never another browser or Minibrowser itself.
+    val explicitIntents = specializedComponents.map { component ->
         Intent(webIntent).setComponent(component)
     }
     val launchIntent = if (explicitIntents.size == 1) {
@@ -139,6 +147,17 @@ private fun launchLegacySpecializedWebHandler(activity: Activity, webIntent: Int
     return startActivitySafely(activity, launchIntent)
 }
 
+private fun genericBrowserPackages(packageManager: PackageManager): Set<String> = buildSet {
+    addAll(queryPackages(packageManager, genericWebIntent("https://example.com/")))
+    addAll(queryPackages(packageManager, genericWebIntent("http://example.com/")))
+    addAll(
+        queryPackages(
+            packageManager,
+            Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER),
+        ),
+    )
+}
+
 private fun genericWebIntent(value: String): Intent =
     Intent(Intent.ACTION_VIEW, Uri.parse(value)).addCategory(Intent.CATEGORY_BROWSABLE)
 
@@ -148,8 +167,9 @@ private fun queryPackages(packageManager: PackageManager, intent: Intent): Set<S
         .mapNotNullTo(linkedSetOf()) { it.activityInfo?.packageName }
 
 /**
- * Handles explicit app schemes such as tg:// only after a real user gesture. Internal/browser
- * schemes are never handed to Android. intent:// keeps the existing sanitized parser/fallback path.
+ * Handles explicit app schemes such as tg:// and bank-specific schemes only after a real user
+ * gesture. Internal/browser schemes are never handed to Android. intent:// keeps the existing
+ * sanitized parser/fallback path.
  */
 private fun launchCustomAppLink(activity: Activity, value: String): Boolean {
     val intent = if (value.startsWith("intent:", ignoreCase = true)) {
