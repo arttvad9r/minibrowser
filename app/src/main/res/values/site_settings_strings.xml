@@ -3,7 +3,7 @@
     <string name="site_settings_permissions_section">Разрешения</string>
     <string name="site_settings_content_section">Контент</string>
     <string name="site_settings_loading">Загрузка…</string>
-    <string name="site_settings_global_policy_note">Это правила Minibrowser по умолчанию. Индивидуальные решения сайтов находятся в разделе «Все сайты».</string>
+    <string name="site_settings_global_policy_note">Нажмите категорию, чтобы посмотреть сохранённые исключения сайтов. Поведение по умолчанию указано под названием категории.</string>
 
     <string name="site_settings_category_geolocation">Геоданные</string>
     <string name="site_settings_category_camera">Камера</string>
@@ -19,6 +19,10 @@
     <string name="site_settings_default_blocked">Запрещено</string>
     <string name="site_settings_media_prompt_each_time">Спрашивать при каждом запросе</string>
     <string name="site_settings_autoplay_policy">Со звуком — запрещено · без звука — разрешено</string>
+    <string name="site_settings_default_behavior">По умолчанию: %1$s</string>
+    <string name="site_settings_category_exceptions_note">Сохранённые исключения сайтов для этой категории.</string>
+    <string name="site_settings_category_exceptions_empty">Сохранённых исключений для этой категории пока нет.</string>
+    <string name="site_settings_media_permissions_note">Minibrowser спрашивает при каждом запросе. Решение для камеры и микрофона сейчас не сохраняется как постоянное исключение сайта.</string>
 
     <string name="site_settings_all_sites_empty">Сайтов с индивидуальными настройками пока нет.</string>
     <string name="site_settings_host_description">Сохранённые решения для этого сайта. «Сбросить» вернёт конкретное разрешение к поведению Minibrowser по умолчанию.</string>
