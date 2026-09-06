@@ -29,6 +29,9 @@ import androidx.compose.ui.unit.dp
 import com.artt.minibrowser.R
 import java.io.File
 
+internal fun shouldCreateTabBeforeOverviewDismiss(tabCount: Int, newTabRequested: Boolean): Boolean =
+    tabCount == 0 && !newTabRequested
+
 /** Adds bulk actions without making the tab overview itself more visually dense. */
 @Composable
 internal fun BrowserTabSwitcher(
@@ -54,7 +57,7 @@ internal fun BrowserTabSwitcher(
         // A zero-tab overview is valid while it is visible. Once the user leaves it, restore the
         // browser invariant that the page chrome always belongs to a real tab. Avoid a second tab
         // when dismissal follows the overview's own "+" animation.
-        if (tabs.isEmpty() && !newTabRequested) {
+        if (shouldCreateTabBeforeOverviewDismiss(tabs.size, newTabRequested)) {
             onNew()
         }
         newTabRequested = false
