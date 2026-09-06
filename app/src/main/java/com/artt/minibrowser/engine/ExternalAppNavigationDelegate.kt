@@ -29,9 +29,8 @@ private val BLOCKED_EXTERNAL_SCHEMES = setOf(
 
 /**
  * Wraps TabManager's navigation delegate instead of replacing its browser-state handling.
- * A normal web click is first checked against Android's URL resolution. Gecko is denied only after
- * Android has identified a concrete non-browser handler, or when its resolver has multiple
- * specialized non-browser handlers to offer. Ordinary web links therefore remain Gecko navigation.
+ * Web App Links are only an optional side handoff: Gecko still receives the click even when a
+ * native app was started. This makes a failed/short-lived Android handoff unable to swallow a tap.
  */
 internal fun installExternalAppNavigationDelegate(session: GeckoSession, activity: Activity) {
     val current = session.navigationDelegate ?: return
@@ -63,6 +62,14 @@ internal fun specializedHandlerPackages(
     .filter { it != selfPackage && it !in genericBrowserPackages }
     .distinct()
 
+/**
+ * HTTP(S) handoff is intentionally non-consuming: Gecko continues the same tap underneath the
+ * native app. Only a successfully launched non-web/custom scheme is denied to Gecko, which cannot
+ * load that scheme itself. This is the guard against the lost-tap regression seen with t.me links.
+ */
+internal fun shouldDenyGeckoAfterExternalLaunch(targetUri: String, launched: Boolean): Boolean =
+    launched && !isAllowedWebUri(targetUri)
+
 private class ExternalAppNavigationDelegate(
     private val activity: Activity,
     private val delegate: GeckoSession.NavigationDelegate,
@@ -93,13 +100,20 @@ private class ExternalAppNavigationDelegate(
                 isRedirect = request.isRedirect,
                 redirectFromRecentUserGesture = redirectFromRecentUserGesture,
             ) -> launchSpecializedWebHandler(activity, uri)
+
             userInitiatedNavigation && !isAllowedWebUri(uri) -> launchCustomAppLink(activity, uri)
             else -> false
         }
+
         if (launched) {
+            // Do not let redirects launch a second app after a successful handoff.
             userNavigationChainUntilMs = 0L
-            return GeckoResult.fromValue(AllowOrDeny.DENY)
+            if (shouldDenyGeckoAfterExternalLaunch(uri, launched = true)) {
+                return GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
         }
+
+        // Web navigation always reaches the original Gecko delegate, even after a native handoff.
         return delegate.onLoadRequest(session, request)
     }
 }
@@ -107,12 +121,10 @@ private class ExternalAppNavigationDelegate(
 /**
  * Opens HTTP(S) outside the browser only when Android resolution exposes a specialized handler.
  *
- * The important distinction from the earlier implementation is that we do not call startActivity
- * speculatively for every cross-site link. We query first. If Android resolves the URL to the user's
- * browser, Gecko continues normally. If Android resolves it to a verified/preferred native app, we
- * launch that exact component. If Android presents a resolver, only non-browser candidates are put
- * in the chooser. This covers YouTube, maps, stores and bank/payment App Links without making normal
- * links disappear when no native app owns them.
+ * We query before launching. If Android exposes only browsers, Gecko simply continues. If a
+ * verified/preferred native app owns the URL, launch that component. If several specialized apps
+ * are available, show a chooser containing only those apps. Gecko still follows the web request in
+ * the background, so a failed or immediately-returning Activity cannot make the original tap inert.
  */
 private fun launchSpecializedWebHandler(activity: Activity, value: String): Boolean {
     val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
@@ -156,8 +168,6 @@ private fun launchSpecializedWebHandler(activity: Activity, value: String): Bool
         }
     }
 
-    // A system resolver/default chooser is not returned by queryIntentActivities. In that case,
-    // offer only the specialized native apps and never another browser or Minibrowser itself.
     val explicitIntents = specializedComponents.map { component ->
         Intent(webIntent).setComponent(component)
     }
