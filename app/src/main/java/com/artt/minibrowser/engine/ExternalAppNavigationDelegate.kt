@@ -6,6 +6,8 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -29,8 +31,10 @@ private val BLOCKED_EXTERNAL_SCHEMES = setOf(
 
 /**
  * Wraps TabManager's navigation delegate instead of replacing its browser-state handling.
- * Web App Links are only an optional side handoff: Gecko still receives the click even when a
- * native app was started. This makes a failed/short-lived Android handoff unable to swallow a tap.
+ *
+ * HTTP(S) is never launched synchronously from onLoadRequest. Gecko gets its ALLOW decision first;
+ * only after that callback returns do we inspect Android App Links on the next main-loop turn. This
+ * avoids backgrounding the Activity before Gecko has consumed the original tap.
  */
 internal fun installExternalAppNavigationDelegate(session: GeckoSession, activity: Activity) {
     val current = session.navigationDelegate ?: return
@@ -63,9 +67,8 @@ internal fun specializedHandlerPackages(
     .distinct()
 
 /**
- * HTTP(S) handoff is intentionally non-consuming: Gecko continues the same tap underneath the
- * native app. Only a successfully launched non-web/custom scheme is denied to Gecko, which cannot
- * load that scheme itself. This is the guard against the lost-tap regression seen with t.me links.
+ * HTTP(S) handoff is intentionally non-consuming. Only a successfully launched non-web/custom
+ * scheme is denied to Gecko, which cannot load that scheme itself.
  */
 internal fun shouldDenyGeckoAfterExternalLaunch(targetUri: String, launched: Boolean): Boolean =
     launched && !isAllowedWebUri(targetUri)
@@ -74,7 +77,10 @@ private class ExternalAppNavigationDelegate(
     private val activity: Activity,
     private val delegate: GeckoSession.NavigationDelegate,
 ) : GeckoSession.NavigationDelegate by delegate {
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var userNavigationChainUntilMs = 0L
+    private var navigationGeneration = 0L
+    private var externallyLaunchedGeneration = -1L
 
     override fun onLoadRequest(
         session: GeckoSession,
@@ -84,6 +90,9 @@ private class ExternalAppNavigationDelegate(
         val now = SystemClock.elapsedRealtime()
 
         if (!request.isRedirect) {
+            // Every new top-level request invalidates any delayed handoff left from the previous tap.
+            navigationGeneration++
+            externallyLaunchedGeneration = -1L
             userNavigationChainUntilMs = if (request.hasUserGesture && isAllowedWebUri(uri)) {
                 now + USER_NAVIGATION_CHAIN_WINDOW_MS
             } else {
@@ -93,38 +102,58 @@ private class ExternalAppNavigationDelegate(
 
         val redirectFromRecentUserGesture = request.isRedirect && now <= userNavigationChainUntilMs
         val userInitiatedNavigation = request.hasUserGesture || redirectFromRecentUserGesture
-        val launched = when {
+
+        if (
             shouldTryExternalWebAppLink(
                 targetUri = uri,
                 hasUserGesture = request.hasUserGesture,
                 isRedirect = request.isRedirect,
                 redirectFromRecentUserGesture = redirectFromRecentUserGesture,
-            ) -> launchSpecializedWebHandler(activity, uri)
-
-            userInitiatedNavigation && !isAllowedWebUri(uri) -> launchCustomAppLink(activity, uri)
-            else -> false
+            )
+        ) {
+            scheduleSpecializedWebHandoff(uri, navigationGeneration)
+            // Critical ordering: return Gecko's own decision now. Do not call PackageManager or
+            // startActivity until the callback has unwound and Gecko has accepted the tap.
+            return delegate.onLoadRequest(session, request)
         }
 
-        if (launched) {
-            // Do not let redirects launch a second app after a successful handoff.
-            userNavigationChainUntilMs = 0L
-            if (shouldDenyGeckoAfterExternalLaunch(uri, launched = true)) {
-                return GeckoResult.fromValue(AllowOrDeny.DENY)
+        if (userInitiatedNavigation && !isAllowedWebUri(uri)) {
+            val launched = launchCustomAppLink(activity, uri)
+            if (launched) {
+                userNavigationChainUntilMs = 0L
+                externallyLaunchedGeneration = navigationGeneration
+                if (shouldDenyGeckoAfterExternalLaunch(uri, launched = true)) {
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                }
             }
         }
 
-        // Web navigation always reaches the original Gecko delegate, even after a native handoff.
         return delegate.onLoadRequest(session, request)
+    }
+
+    private fun scheduleSpecializedWebHandoff(uri: String, generation: Long) {
+        mainHandler.post {
+            if (generation != navigationGeneration) return@post
+            if (generation == externallyLaunchedGeneration) return@post
+            if (activity.isFinishing || activity.isDestroyed) return@post
+
+            if (launchSpecializedWebHandler(activity, uri)) {
+                // Once one URL in the click/redirect chain opened a native app, suppress later
+                // redirects from launching a second Activity for the same user gesture.
+                externallyLaunchedGeneration = generation
+                userNavigationChainUntilMs = 0L
+            }
+        }
     }
 }
 
 /**
  * Opens HTTP(S) outside the browser only when Android resolution exposes a specialized handler.
  *
- * We query before launching. If Android exposes only browsers, Gecko simply continues. If a
- * verified/preferred native app owns the URL, launch that component. If several specialized apps
- * are available, show a chooser containing only those apps. Gecko still follows the web request in
- * the background, so a failed or immediately-returning Activity cannot make the original tap inert.
+ * This function is invoked asynchronously after Gecko has already been allowed to process the tap.
+ * If Android exposes only browsers, nothing happens and the web navigation continues normally. If a
+ * verified/preferred native app owns the URL, that app is launched. If several specialized apps are
+ * available, the chooser contains only those apps.
  */
 private fun launchSpecializedWebHandler(activity: Activity, value: String): Boolean {
     val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
