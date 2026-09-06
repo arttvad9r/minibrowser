@@ -34,12 +34,21 @@ class ExternalAppNavigationPolicyTest {
     }
 
     @Test
-    fun redirectChainsStayInGecko() {
+    fun redirectMayCheckNativeHandlerOnlyWhenChainStartedWithUserGesture() {
+        assertTrue(
+            shouldTryExternalWebAppLink(
+                targetUri = "https://bank.example/pay",
+                hasUserGesture = false,
+                isRedirect = true,
+                redirectFromRecentUserGesture = true,
+            ),
+        )
         assertFalse(
             shouldTryExternalWebAppLink(
-                targetUri = "https://youtu.be/example",
-                hasUserGesture = true,
+                targetUri = "https://bank.example/pay",
+                hasUserGesture = false,
                 isRedirect = true,
+                redirectFromRecentUserGesture = false,
             ),
         )
     }
