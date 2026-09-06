@@ -1,9 +1,6 @@
 package com.artt.minibrowser.browser
 
-import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
 import androidx.activity.ComponentActivity
 import com.artt.minibrowser.R
 import com.artt.minibrowser.engine.createSafeExternalIntent
@@ -23,11 +20,8 @@ internal class BrowserIntentController(
 
         val external = createSafeExternalIntent(value)
         val launched = external != null &&
-            external.resolveActivity(activity.packageManager) != null &&
             runCatching {
-                activity.startActivity(
-                    Intent.createChooser(external, activity.getString(R.string.external_chooser_title)),
-                )
+                activity.startActivity(external)
                 true
             }.getOrDefault(false)
         if (launched || activity.isFinishing || activity.isDestroyed) return
@@ -35,28 +29,16 @@ internal class BrowserIntentController(
         safeExternalFallbackUrl(value)?.let(loadFallback)
     }
 
-    fun canOpenInExternalApp(value: String?): Boolean {
-        val intent = webViewIntent(value) ?: return false
-        return activity.packageManager
-            .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
-            .any { it.activityInfo?.packageName != activity.packageName }
-    }
+    /**
+     * Kept temporarily for the existing menu contract. Generic HTTP(S) URLs must never expose an
+     * "external app" action because Android would legitimately route them to another browser.
+     * User-clicked App Links are handled automatically by ExternalAppNavigationDelegate instead.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun canOpenInExternalApp(value: String?): Boolean = false
 
-    fun openInExternalApp(value: String?) {
-        if (activity.isFinishing || activity.isDestroyed) return
-        val intent = webViewIntent(value) ?: return
-        if (!canOpenInExternalApp(value)) return
-
-        runCatching {
-            val chooser = Intent.createChooser(intent, activity.getString(R.string.external_chooser_title)).apply {
-                putExtra(
-                    Intent.EXTRA_EXCLUDE_COMPONENTS,
-                    arrayOf(ComponentName(activity, activity::class.java)),
-                )
-            }
-            activity.startActivity(chooser)
-        }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun openInExternalApp(value: String?) = Unit
 
     fun shareUrl(value: String?) {
         val url = shareableBrowserUrl(value) ?: return
@@ -73,10 +55,5 @@ internal class BrowserIntentController(
                 ),
             )
         }
-    }
-
-    private fun webViewIntent(value: String?): Intent? {
-        val url = shareableBrowserUrl(value) ?: return null
-        return Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
     }
 }
