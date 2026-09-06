@@ -1,0 +1,41 @@
+<resources>
+    <string name="site_settings_all_sites">Все сайты</string>
+    <string name="site_settings_permissions_section">Разрешения</string>
+    <string name="site_settings_content_section">Контент</string>
+    <string name="site_settings_loading">Загрузка…</string>
+    <string name="site_settings_global_policy_note">Это правила Minibrowser по умолчанию. Индивидуальные решения сайтов находятся в разделе «Все сайты».</string>
+
+    <string name="site_settings_category_geolocation">Геоданные</string>
+    <string name="site_settings_category_camera">Камера</string>
+    <string name="site_settings_category_microphone">Микрофон</string>
+    <string name="site_settings_category_notifications">Уведомления</string>
+    <string name="site_settings_category_drm">Защищённый контент</string>
+    <string name="site_settings_category_storage_access">Сторонние cookie и хранилище</string>
+    <string name="site_settings_category_autoplay">Автовоспроизведение</string>
+    <string name="site_settings_category_persistent_storage">Постоянное хранилище</string>
+    <string name="site_settings_category_local_access">Локальные устройства и сеть</string>
+
+    <string name="site_settings_default_ask">Сначала спрашивать</string>
+    <string name="site_settings_default_blocked">Запрещено</string>
+    <string name="site_settings_media_prompt_each_time">Спрашивать при каждом запросе</string>
+    <string name="site_settings_autoplay_policy">Со звуком — запрещено · без звука — разрешено</string>
+
+    <string name="site_settings_all_sites_empty">Сайтов с индивидуальными настройками пока нет.</string>
+    <string name="site_settings_host_description">Сохранённые решения для этого сайта. «Сбросить» вернёт конкретное разрешение к поведению Minibrowser по умолчанию.</string>
+    <string name="site_settings_no_saved_settings">Сохранённых решений для этого сайта больше нет.</string>
+    <string name="site_permission_autoplay_audible">Автовоспроизведение со звуком</string>
+    <string name="site_permission_autoplay_inaudible">Автовоспроизведение без звука</string>
+
+    <plurals name="site_settings_saved_sites_count">
+        <item quantity="one">%d сайт с индивидуальными настройками</item>
+        <item quantity="few">%d сайта с индивидуальными настройками</item>
+        <item quantity="many">%d сайтов с индивидуальными настройками</item>
+        <item quantity="other">%d сайта с индивидуальными настройками</item>
+    </plurals>
+    <plurals name="site_settings_saved_setting_count">
+        <item quantity="one">%d сохранённая настройка</item>
+        <item quantity="few">%d сохранённые настройки</item>
+        <item quantity="many">%d сохранённых настроек</item>
+        <item quantity="other">%d сохранённой настройки</item>
+    </plurals>
+</resources>
