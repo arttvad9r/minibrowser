@@ -1,5 +1,6 @@
 package com.artt.minibrowser
 
+import com.artt.minibrowser.engine.shouldDenyGeckoAfterExternalLaunch
 import com.artt.minibrowser.engine.shouldTryExternalWebAppLink
 import com.artt.minibrowser.engine.specializedHandlerPackages
 import kotlin.test.Test
@@ -71,6 +72,34 @@ class ExternalAppNavigationPolicyTest {
                 targetUri = "tg://resolve?domain=example",
                 hasUserGesture = true,
                 isRedirect = false,
+            ),
+        )
+    }
+
+    @Test
+    fun successfulWebHandoffNeverConsumesOriginalGeckoTap() {
+        assertFalse(
+            shouldDenyGeckoAfterExternalLaunch(
+                targetUri = "https://t.me/example",
+                launched = true,
+            ),
+        )
+        assertFalse(
+            shouldDenyGeckoAfterExternalLaunch(
+                targetUri = "https://youtu.be/example",
+                launched = true,
+            ),
+        )
+        assertTrue(
+            shouldDenyGeckoAfterExternalLaunch(
+                targetUri = "tg://resolve?domain=example",
+                launched = true,
+            ),
+        )
+        assertFalse(
+            shouldDenyGeckoAfterExternalLaunch(
+                targetUri = "tg://resolve?domain=example",
+                launched = false,
             ),
         )
     }
