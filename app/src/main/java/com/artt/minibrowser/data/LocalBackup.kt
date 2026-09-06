@@ -22,6 +22,16 @@ private data class BackupSettings(
     val adblockEnabled: Boolean,
     val votEnabled: Boolean,
     val translateTarget: String,
+    val geolocationCanAsk: Boolean = true,
+    val cameraCanAsk: Boolean = true,
+    val microphoneCanAsk: Boolean = true,
+    val notificationsCanAsk: Boolean = false,
+    val drmCanAsk: Boolean = true,
+    val storageAccessCanAsk: Boolean = true,
+    val autoplayAudibleAllowed: Boolean = false,
+    val persistentStorageCanAsk: Boolean = false,
+    val xrCanAsk: Boolean = false,
+    val localAccessCanAsk: Boolean = false,
 )
 
 @Serializable
@@ -56,6 +66,7 @@ private data class LocalBackupDocument(
 internal class LocalBackupController(context: Context) {
     private val appContext = context.applicationContext
     private val settings = SettingsRepository(appContext)
+    private val sitePermissions = SitePermissionPolicyRepository(appContext)
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
@@ -65,6 +76,7 @@ internal class LocalBackupController(context: Context) {
         runCatching {
             val dao = DbHolder.db.dao()
             val prefs = settings.snapshot()
+            val sitePolicy = sitePermissions.snapshot()
             val document = LocalBackupDocument(
                 exportedAt = System.currentTimeMillis(),
                 settings = BackupSettings(
@@ -73,6 +85,16 @@ internal class LocalBackupController(context: Context) {
                     adblockEnabled = prefs.adblockEnabled,
                     votEnabled = prefs.votEnabled,
                     translateTarget = prefs.translateTarget,
+                    geolocationCanAsk = sitePolicy.geolocationCanAsk,
+                    cameraCanAsk = sitePolicy.cameraCanAsk,
+                    microphoneCanAsk = sitePolicy.microphoneCanAsk,
+                    notificationsCanAsk = sitePolicy.notificationsCanAsk,
+                    drmCanAsk = sitePolicy.drmCanAsk,
+                    storageAccessCanAsk = sitePolicy.storageAccessCanAsk,
+                    autoplayAudibleAllowed = sitePolicy.autoplayAudibleAllowed,
+                    persistentStorageCanAsk = sitePolicy.persistentStorageCanAsk,
+                    xrCanAsk = sitePolicy.xrCanAsk,
+                    localAccessCanAsk = sitePolicy.localAccessCanAsk,
                 ),
                 bookmarks = webBookmarks(dao.bookmarks()).map { bookmark ->
                     BackupBookmark(
@@ -141,12 +163,25 @@ internal class LocalBackupController(context: Context) {
                     document.settings.translateTarget,
                 ) ?: "ru",
             )
+            val restoredSitePolicy = SitePermissionPolicy(
+                geolocationCanAsk = document.settings.geolocationCanAsk,
+                cameraCanAsk = document.settings.cameraCanAsk,
+                microphoneCanAsk = document.settings.microphoneCanAsk,
+                notificationsCanAsk = document.settings.notificationsCanAsk,
+                drmCanAsk = document.settings.drmCanAsk,
+                storageAccessCanAsk = document.settings.storageAccessCanAsk,
+                autoplayAudibleAllowed = document.settings.autoplayAudibleAllowed,
+                persistentStorageCanAsk = document.settings.persistentStorageCanAsk,
+                xrCanAsk = document.settings.xrCanAsk,
+                localAccessCanAsk = document.settings.localAccessCanAsk,
+            )
 
             DbHolder.db.dao().replaceUserData(
                 history = restoredHistory.values.sortedByDescending { it.visitedAt },
                 bookmarks = restoredBookmarks,
             )
             settings.replace(restoredPrefs)
+            sitePermissions.replace(restoredSitePolicy)
             restoredPrefs
         }
     }
