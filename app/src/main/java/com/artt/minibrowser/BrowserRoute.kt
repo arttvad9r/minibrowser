@@ -586,6 +586,6 @@ private fun SearchEngine.toSettingsUiState(): SettingsSearchEngineUiState = when
 private fun SettingsSearchEngineUiState.toSearchEngine(): SearchEngine = when (this) {
     SettingsSearchEngineUiState.Google -> SearchEngine.GOOGLE
     SettingsSearchEngineUiState.DuckDuckGo -> SearchEngine.DUCKDUCKGO
-    SettingsSearchEngineUiState.YANDEX -> SearchEngine.YANDEX
+    SettingsSearchEngineUiState.Yandex -> SearchEngine.YANDEX
     SettingsSearchEngineUiState.Bing -> SearchEngine.BING
 }
