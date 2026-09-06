@@ -76,11 +76,12 @@ private class ExternalAppNavigationDelegate(
         val uri = request.uri
         val now = SystemClock.elapsedRealtime()
 
-        if (request.hasUserGesture && !request.isRedirect) {
-            userNavigationChainUntilMs = now + USER_NAVIGATION_CHAIN_WINDOW_MS
-        } else if (!request.isRedirect && !request.hasUserGesture) {
-            // A new autonomous/direct load is not part of the previous clicked navigation chain.
-            userNavigationChainUntilMs = 0L
+        if (!request.isRedirect) {
+            userNavigationChainUntilMs = if (request.hasUserGesture && isAllowedWebUri(uri)) {
+                now + USER_NAVIGATION_CHAIN_WINDOW_MS
+            } else {
+                0L
+            }
         }
 
         val redirectFromRecentUserGesture = request.isRedirect && now <= userNavigationChainUntilMs
