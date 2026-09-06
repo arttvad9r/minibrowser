@@ -8,6 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.sitePermissionPolicyDataStore by preferencesDataStore("site_permission_policy")
@@ -87,6 +88,8 @@ internal class SitePermissionPolicyRepository(context: Context) {
                 localAccessCanAsk = stored[K.localAccess] ?: false,
             )
         }
+
+    suspend fun snapshot(): SitePermissionPolicy = policy.first()
 
     suspend fun set(type: SitePermissionPolicyType, enabled: Boolean) {
         context.sitePermissionPolicyDataStore.edit { stored ->
