@@ -322,6 +322,16 @@ internal fun BrowserRoute(
         }
     }
 
+    // Browser snackbars must not float over unrelated destinations such as Settings or Bookmarks.
+    // Finalize any pending single-tab undo when leaving the browser surface and dismiss the host.
+    LaunchedEffect(screen) {
+        if (screen != BrowserScreen.Browser) {
+            pendingClosedTab?.let { closed -> tabPreviewStore.remove(closed.id) }
+            pendingClosedTab = null
+            snackbarHostState.currentSnackbarData?.dismiss()
+        }
+    }
+
     fun closeTabs(ids: List<Long>) {
         pendingClosedTab?.let { tabPreviewStore.remove(it.id) }
         pendingClosedTab = null
@@ -399,13 +409,11 @@ internal fun BrowserRoute(
                 transitionSpec = {
                     val forward = isForwardBrowserRouteTransition(initialState, targetState)
                     when {
-                        initialState == BrowserScreen.Browser && targetState != BrowserScreen.Browser ->
-                            chromiumSharedXAxisEnter(forward = true)
-                                .togetherWith(ExitTransition.None)
-
-                        initialState != BrowserScreen.Browser && targetState == BrowserScreen.Browser ->
-                            EnterTransition.None
-                                .togetherWith(chromiumSharedXAxisExit(forward = false))
+                        // GeckoView is a heavy native surface. Cross-fading it with Compose routes
+                        // produced visible old-page frames on real devices, so route boundaries are
+                        // atomic. Shared-axis motion is retained between Compose-only destinations.
+                        initialState == BrowserScreen.Browser || targetState == BrowserScreen.Browser ->
+                            EnterTransition.None.togetherWith(ExitTransition.None)
 
                         forward ->
                             chromiumSharedXAxisEnter(forward = true)
@@ -527,12 +535,14 @@ internal fun BrowserRoute(
                 }
             }
 
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
-            )
+            if (screen == BrowserScreen.Browser) {
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+                )
+            }
         }
     }
 }
@@ -576,6 +586,6 @@ private fun SearchEngine.toSettingsUiState(): SettingsSearchEngineUiState = when
 private fun SettingsSearchEngineUiState.toSearchEngine(): SearchEngine = when (this) {
     SettingsSearchEngineUiState.Google -> SearchEngine.GOOGLE
     SettingsSearchEngineUiState.DuckDuckGo -> SearchEngine.DUCKDUCKGO
-    SettingsSearchEngineUiState.Yandex -> SearchEngine.YANDEX
+    SettingsSearchEngineUiState.YANDEX -> SearchEngine.YANDEX
     SettingsSearchEngineUiState.Bing -> SearchEngine.BING
 }
