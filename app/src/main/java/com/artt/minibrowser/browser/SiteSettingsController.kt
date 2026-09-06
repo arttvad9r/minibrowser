@@ -13,7 +13,8 @@ internal enum class SitePermissionKind {
     Notifications,
     PersistentStorage,
     Xr,
-    Autoplay,
+    AutoplayAudible,
+    AutoplayInaudible,
     Drm,
     Tracking,
     StorageAccess,
@@ -47,7 +48,7 @@ internal class SiteSettingsController(
                 val host = webUriHost(permission.uri) ?: return@mapNotNull null
                 host to SitePermissionItem(
                     permission = permission,
-                    kind = permissionKind(permission.permission),
+                    kind = sitePermissionKind(permission.permission),
                     allowed = permission.value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW,
                 )
             }
@@ -75,14 +76,13 @@ internal class SiteSettingsController(
     }
 }
 
-private fun permissionKind(permission: Int): SitePermissionKind = when (permission) {
+internal fun sitePermissionKind(permission: Int): SitePermissionKind = when (permission) {
     GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION -> SitePermissionKind.Geolocation
     GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION -> SitePermissionKind.Notifications
     GeckoSession.PermissionDelegate.PERMISSION_PERSISTENT_STORAGE -> SitePermissionKind.PersistentStorage
     GeckoSession.PermissionDelegate.PERMISSION_XR -> SitePermissionKind.Xr
-    GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE,
-    GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE,
-    -> SitePermissionKind.Autoplay
+    GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE -> SitePermissionKind.AutoplayAudible
+    GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE -> SitePermissionKind.AutoplayInaudible
     GeckoSession.PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS -> SitePermissionKind.Drm
     GeckoSession.PermissionDelegate.PERMISSION_TRACKING -> SitePermissionKind.Tracking
     GeckoSession.PermissionDelegate.PERMISSION_STORAGE_ACCESS -> SitePermissionKind.StorageAccess
