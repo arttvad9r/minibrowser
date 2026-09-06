@@ -13,6 +13,7 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
 private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*$")
+private val TELEGRAM_WEB_HOSTS = setOf("t.me", "telegram.me", "telegram.dog")
 private val BLOCKED_EXTERNAL_SCHEMES = setOf(
     "http",
     "https",
@@ -29,8 +30,8 @@ private val BLOCKED_EXTERNAL_SCHEMES = setOf(
 
 /**
  * Wraps TabManager's navigation delegate instead of replacing its browser-state handling.
- * User-clicked web App Links may leave Gecko only when Android can route them to a non-browser
- * application. Ordinary HTTP(S) links therefore stay in Minibrowser.
+ * Ordinary HTTP(S) navigation stays entirely in Gecko. The only web App Link special-case kept
+ * here is Telegram, because the browser explicitly supports handing t.me links to Telegram.
  */
 internal fun installExternalAppNavigationDelegate(session: GeckoSession, activity: Activity) {
     val current = session.navigationDelegate ?: return
@@ -39,9 +40,9 @@ internal fun installExternalAppNavigationDelegate(session: GeckoSession, activit
 }
 
 /**
- * Only explicit, non-redirecting cross-site clicks are candidates for Android App Link handoff.
- * This keeps same-site buttons/forms and redirect chains entirely inside Gecko while still allowing
- * links such as a site -> t.me to open the verified native app.
+ * Do not probe arbitrary cross-site links through Android intents: doing that can consume a normal
+ * web click before Gecko gets to navigate. Limit HTTP(S) handoff to Telegram hosts, and only for an
+ * explicit non-redirecting user click arriving from outside Telegram. tg:// is handled separately.
  */
 internal fun shouldTryExternalWebAppLink(
     targetUri: String,
@@ -51,8 +52,9 @@ internal fun shouldTryExternalWebAppLink(
 ): Boolean {
     if (!hasUserGesture || isRedirect || !isAllowedWebUri(targetUri)) return false
     val targetHost = webUriHost(targetUri)?.lowercase() ?: return false
+    if (targetHost !in TELEGRAM_WEB_HOSTS) return false
     val triggerHost = triggerUri?.let(::webUriHost)?.lowercase() ?: return false
-    return targetHost != triggerHost
+    return triggerHost !in TELEGRAM_WEB_HOSTS
 }
 
 private class ExternalAppNavigationDelegate(
