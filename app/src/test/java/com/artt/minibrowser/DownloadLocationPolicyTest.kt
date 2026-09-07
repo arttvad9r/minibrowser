@@ -11,6 +11,7 @@ class DownloadLocationPolicyTest {
         assertTrue(isSupportedDownloadLocation("content://media/external/downloads/42"))
         assertTrue(isSupportedDownloadLocation("content://media/external_primary/downloads/42"))
         assertTrue(isSupportedDownloadLocation("file:///storage/emulated/0/Download/report.pdf"))
+        assertTrue(isSupportedDownloadLocation("file:///storage/1234-5678/Download/reports/report.pdf"))
 
         assertFalse(isSupportedDownloadLocation("content://media/external/images/media/42"))
         assertFalse(isSupportedDownloadLocation("content://media/external/downloads/not-an-id"))
@@ -21,6 +22,10 @@ class DownloadLocationPolicyTest {
         assertFalse(isSupportedDownloadLocation("javascript:alert(1)"))
         assertFalse(isSupportedDownloadLocation("content:/missing-authority"))
         assertFalse(isSupportedDownloadLocation("file:"))
+        assertFalse(isSupportedDownloadLocation("file:///data/user/0/com.artt.minibrowser/files/private.txt"))
+        assertFalse(isSupportedDownloadLocation("file://example.com/Download/report.pdf"))
+        assertFalse(isSupportedDownloadLocation("file:///storage/emulated/0/Download/../secret.txt"))
+        assertFalse(isSupportedDownloadLocation("file:///storage/emulated/0/Download/report.pdf?share=1"))
         assertFalse(isSupportedDownloadLocation("not a uri"))
     }
 }
