@@ -31,7 +31,7 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install Android SDK
-        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Unit tests and screenshot verification
         run: ./gradlew :app:testDebugUnitTest :app:verifyRoborazziDebug --stacktrace
@@ -58,7 +58,7 @@ jobs:
           test -n "$apk"
           test -s "$bundle"
 
-          "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$apk"
 
           native_tmp="$(mktemp -d)"
           trap 'rm -rf "$native_tmp"' EXIT
@@ -118,7 +118,7 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install compile SDK
-        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Enable KVM
         run: |
@@ -155,7 +155,7 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install compile SDK
-        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Build startup smoke APKs
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace || ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
@@ -195,7 +195,7 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install compile SDK
-        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Build startup smoke APKs
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace || ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
@@ -205,7 +205,7 @@ jobs:
           set -euo pipefail
           apk="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
           test -n "$apk"
-          "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$apk"
 
           native_tmp="$(mktemp -d)"
           trap 'rm -rf "$native_tmp"' EXIT
@@ -274,7 +274,7 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install compile SDK
-        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
+        run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Build startup smoke APKs
         run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace || ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
@@ -284,7 +284,7 @@ jobs:
           set -euo pipefail
           apk="$(find app/build/outputs/apk/debug -type f -name '*.apk' -print -quit)"
           test -n "$apk"
-          "$ANDROID_SDK_ROOT/build-tools/35.0.0/zipalign" -c -P 16 -v 4 "$apk"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign" -c -P 16 -v 4 "$apk"
 
           native_tmp="$(mktemp -d)"
           trap 'rm -rf "$native_tmp"' EXIT
