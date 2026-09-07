@@ -22,7 +22,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.withContext
 
 /**
  * Static content shell for an internal browser destination.
@@ -59,13 +61,15 @@ fun BrowserMotionScreen(
                 onBack()
             } catch (cancelled: CancellationException) {
                 predictiveBackActive = false
-                predictiveBackProgress.animateTo(
-                    targetValue = 0f,
-                    animationSpec = tween(
-                        durationMillis = MotionTokens.GestureSettle,
-                        easing = MotionEasing.Standard,
-                    ),
-                )
+                withContext(NonCancellable) {
+                    predictiveBackProgress.animateTo(
+                        targetValue = 0f,
+                        animationSpec = tween(
+                            durationMillis = MotionTokens.GestureSettle,
+                            easing = MotionEasing.Standard,
+                        ),
+                    )
+                }
                 throw cancelled
             }
         }
