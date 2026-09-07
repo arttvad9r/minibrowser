@@ -733,6 +733,7 @@ class TabManager(
             }
         }
 
+        val externalAppRequestHandler = (context as? Activity)?.let(::ExternalAppRequestHandler)
         tab.session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLocationChange(
                 session: GeckoSession,
@@ -754,6 +755,9 @@ class TabManager(
                         "MinibrowserNavigation",
                         "load uri=${navigationDebugLabel(request.uri)} target=${request.target} trigger=${navigationDebugLabel(request.triggerUri)} userGesture=${request.hasUserGesture} redirect=${request.isRedirect}",
                     )
+                }
+                if (externalAppRequestHandler?.onLoadRequest(request) == ExternalAppRequestDecision.Deny) {
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
                 if (isAllowedWebUri(request.uri) || request.uri == "about:blank") {
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
