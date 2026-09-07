@@ -46,7 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -688,7 +688,7 @@ private fun MenuSheet(
                     )
                     if (canOpenExternal) {
                         CompactMenuRow(
-                            Icons.Filled.OpenInNew,
+                            Icons.AutoMirrored.Filled.OpenInNew,
                             stringResource(R.string.open_in_external_app),
                             onClick = { dismissThen(onOpenExternal) },
                         )
