@@ -2,10 +2,9 @@ package com.artt.minibrowser.data
 
 import android.os.Looper
 import android.os.Trace
+import android.util.Log
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import com.artt.minibrowser.net.sanitizeWebUriUserInfoInText
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -14,6 +13,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
 
 @Serializable
 data class PersistedTab(
@@ -35,6 +36,7 @@ data class PersistedBrowserState(
 )
 
 internal const val TAB_STORE_LOAD_TRACE = "TabStore.loadState"
+private const val TAB_STORE_IO_THREAD = "minibrowser-tab-store"
 
 /** android.os.Trace is a no-op measurement aid; JVM unit tests use Android stubs that may throw. */
 private inline fun <T> tracedTabStoreLoad(block: () -> T): T {
@@ -49,19 +51,8 @@ private inline fun <T> tracedTabStoreLoad(block: () -> T): T {
     }
 }
 
-/**
- * Preserve synchronous ordering semantics for lifecycle barriers while ensuring the filesystem work
- * itself never executes on Android's main looper. JVM unit-test Android stubs may throw from Looper;
- * in that environment there is no Android UI thread, so execute inline.
- */
-private fun <T> tabStoreIo(block: () -> T): T {
-    val onAndroidMain = runCatching { Looper.myLooper() == Looper.getMainLooper() }.getOrDefault(false)
-    return if (onAndroidMain) {
-        runBlocking(Dispatchers.IO) { block() }
-    } else {
-        block()
-    }
-}
+private fun isAndroidMainThread(): Boolean =
+    runCatching { Looper.myLooper() == Looper.getMainLooper() }.getOrDefault(false)
 
 private fun sanitizePersistedSessionUrl(value: String?): String? = when {
     value == null -> null
@@ -115,8 +106,18 @@ object TabStore {
     private val newestRevisionByTarget = mutableMapOf<String, Long>()
     private val allocatedRevisionByTarget = mutableMapOf<String, Long>()
     private val preloadedStateByTarget = mutableMapOf<String, PersistedBrowserState>()
+    private val ioExecutor by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        Executors.newSingleThreadExecutor { task ->
+            Thread(task, TAB_STORE_IO_THREAD).apply { isDaemon = true }
+        }
+    }
 
     private fun targetKey(dir: File): String = File(dir, FILE_NAME).absolutePath
+
+    private fun <T> orderedIo(block: () -> T): T {
+        if (Thread.currentThread().name == TAB_STORE_IO_THREAD) return block()
+        return ioExecutor.submit(Callable(block)).get()
+    }
 
     fun save(dir: File, urls: List<String>) {
         saveState(dir, PersistedBrowserState(
@@ -140,11 +141,10 @@ object TabStore {
     }
 
     /**
-     * Process-local writes are serialized because lifecycle shutdown can flush while the IO
-     * persistence loop is still finishing its previous write. The live JSON is never truncated;
-     * a synced temp file is published with atomic move when supported and replace-move otherwise.
+     * Process-local disk operations are serialized on one dedicated executor. This makes lifecycle
+     * ordering deterministic across Activity recreation while keeping filesystem work off main.
      */
-    fun saveState(dir: File, state: PersistedBrowserState) = tabStoreIo {
+    fun saveState(dir: File, state: PersistedBrowserState) = orderedIo {
         synchronized(writeLock) {
             writeStateLocked(dir, state)
         }
@@ -152,25 +152,60 @@ object TabStore {
 
     /**
      * Writes a snapshot only if it is not older than the newest snapshot already published for
-     * this store in the current process. This is the clear/shutdown barrier: a persist coroutine
-     * that captured old tabs before a destructive action cannot restore them after the newer empty
-     * snapshot has been committed.
+     * this store in the current process. On Android main this becomes an ordered non-blocking final
+     * write: the revision barrier is reserved synchronously, then the filesystem operation is queued.
      */
-    fun saveStateVersioned(dir: File, state: PersistedBrowserState, revision: Long): Boolean =
-        tabStoreIo {
-            synchronized(writeLock) {
-                val key = targetKey(dir)
-                allocatedRevisionByTarget[key] = maxOf(allocatedRevisionByTarget[key] ?: 0L, revision)
-                val newest = newestRevisionByTarget[key]
-                if (newest != null && revision < newest) {
-                    false
-                } else {
-                    writeStateLocked(dir, state)
-                    newestRevisionByTarget[key] = revision
-                    true
+    fun saveStateVersioned(dir: File, state: PersistedBrowserState, revision: Long): Boolean {
+        if (isAndroidMainThread()) return enqueueStateVersioned(dir, state, revision)
+        return orderedIo { saveStateVersionedLocked(dir, state, revision, reserveFirst = true) }
+    }
+
+    /** Visible to unit tests so shutdown ordering can be verified without an Android Looper. */
+    internal fun enqueueStateVersioned(
+        dir: File,
+        state: PersistedBrowserState,
+        revision: Long,
+    ): Boolean {
+        val key = targetKey(dir)
+        synchronized(writeLock) {
+            allocatedRevisionByTarget[key] = maxOf(allocatedRevisionByTarget[key] ?: 0L, revision)
+            val newest = newestRevisionByTarget[key]
+            if (newest != null && revision < newest) return false
+            // Reserve the barrier before returning to main. Older async writes are rejected even if
+            // they race with the queued disk operation below.
+            newestRevisionByTarget[key] = revision
+            preloadedStateByTarget.remove(key)
+        }
+        ioExecutor.execute {
+            runCatching {
+                synchronized(writeLock) {
+                    saveStateVersionedLocked(dir, state, revision, reserveFirst = false)
                 }
+            }.onFailure {
+                Log.e("MinibrowserTabs", "Failed to persist queued tab metadata", it)
             }
         }
+        return true
+    }
+
+    private fun saveStateVersionedLocked(
+        dir: File,
+        state: PersistedBrowserState,
+        revision: Long,
+        reserveFirst: Boolean,
+    ): Boolean {
+        val key = targetKey(dir)
+        if (reserveFirst) {
+            allocatedRevisionByTarget[key] = maxOf(allocatedRevisionByTarget[key] ?: 0L, revision)
+            val newest = newestRevisionByTarget[key]
+            if (newest != null && revision < newest) return false
+        } else if ((newestRevisionByTarget[key] ?: revision) > revision) {
+            return false
+        }
+        writeStateLocked(dir, state)
+        newestRevisionByTarget[key] = maxOf(newestRevisionByTarget[key] ?: revision, revision)
+        return true
+    }
 
     private fun writeStateLocked(dir: File, state: PersistedBrowserState) {
         dir.mkdirs()
@@ -204,12 +239,12 @@ object TabStore {
     fun load(dir: File): List<String> = loadState(dir).tabs.map { it.url }
 
     /**
-     * Reads and validates the tab state on the caller's thread, then makes that exact snapshot a
-     * one-shot handoff for the next synchronous [loadState]. MainActivity calls this on
-     * Dispatchers.IO before constructing TabManager, so TabManager.restore() performs no disk IO on
-     * the main thread. Any intervening write invalidates the handoff in [writeStateLocked].
+     * Reads and validates the tab state through the same ordered IO executor as final persistence,
+     * then makes that exact snapshot a one-shot handoff for the next synchronous [loadState].
+     * MainActivity invokes this before constructing TabManager, so restore performs no disk IO on
+     * main and Activity recreation cannot overtake the previous manager's queued final snapshot.
      */
-    internal fun preloadStateForNextRestore(dir: File): PersistedBrowserState = tabStoreIo {
+    internal fun preloadStateForNextRestore(dir: File): PersistedBrowserState = orderedIo {
         tracedTabStoreLoad {
             synchronized(writeLock) {
                 val state = readStateLocked(dir)
@@ -223,7 +258,7 @@ object TabStore {
         synchronized(writeLock) {
             preloadedStateByTarget.remove(targetKey(dir))?.let { return it }
         }
-        return tabStoreIo {
+        return orderedIo {
             tracedTabStoreLoad {
                 synchronized(writeLock) {
                     readStateLocked(dir)
