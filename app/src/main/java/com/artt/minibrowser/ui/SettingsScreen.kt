@@ -341,12 +341,12 @@ internal fun SettingsScreen(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .semantics(mergeDescendants = true) { }
                             .toggleable(
                                 value = withBookmarks,
                                 role = Role.Checkbox,
                                 onValueChange = { withBookmarks = it },
-                            ),
+                            )
+                            .semantics(mergeDescendants = true) { },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(
