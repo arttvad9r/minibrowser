@@ -3,6 +3,36 @@ package com.artt.minibrowser.data
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+
+internal const val HISTORY_EVENT_QUEUE_CAPACITY = 512
+
+/**
+ * Finite, FIFO queue for non-suspending Gecko callbacks.
+ *
+ * History visits are user data: dropping an old/new event or allocating one coroutine per overflow
+ * would either corrupt semantics or merely move the unbounded-memory problem elsewhere. Normal
+ * callbacks use the non-blocking fast path. Only after [capacity] outstanding writes does the
+ * producer apply lossless backpressure until the single IO consumer frees one slot.
+ */
+internal class LosslessBoundedQueue<T>(capacity: Int) {
+    private val channel = Channel<T>(capacity)
+
+    init {
+        require(capacity > 0) { "capacity must be positive" }
+    }
+
+    fun offer(value: T) {
+        if (channel.trySend(value).isSuccess) return
+        runBlocking { channel.send(value) }
+    }
+
+    suspend fun send(value: T) {
+        channel.send(value)
+    }
+
+    suspend fun receive(): T = channel.receive()
+}
 
 // Пишет и очищает историю последовательно через application-scope DbHolder (см. Db.kt).
 // Один consumer сохраняет порядок Gecko callbacks и clear: queued visit/title всегда
@@ -15,11 +45,12 @@ object HistorySink {
     }
 
     private val repo by lazy { HistoryRepository(DbHolder.db.dao()) }
-    private val events = Channel<Event>(Channel.UNLIMITED)
+    private val events = LosslessBoundedQueue<Event>(HISTORY_EVENT_QUEUE_CAPACITY)
 
     init {
         DbHolder.scope.launch {
-            for (event in events) {
+            while (true) {
+                val event = events.receive()
                 try {
                     when (event) {
                         is Event.Visit -> repo.record(event.url, event.title)
@@ -38,11 +69,11 @@ object HistorySink {
     }
 
     fun record(url: String, title: String?) {
-        events.trySend(Event.Visit(url, title?.takeIf { it.isNotBlank() }))
+        events.offer(Event.Visit(url, title?.takeIf { it.isNotBlank() }))
     }
 
     fun updateTitle(url: String, title: String?) {
-        events.trySend(Event.Title(url, title))
+        events.offer(Event.Title(url, title))
     }
 
     suspend fun clear() {
