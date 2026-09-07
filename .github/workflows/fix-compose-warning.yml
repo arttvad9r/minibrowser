@@ -1,0 +1,40 @@
+name: Apply Compose Icon Cleanup
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+      - name: Apply exact cleanup and remove this workflow
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/com/artt/minibrowser/ui/BrowserChrome.kt')
+          source = path.read_text()
+          old_import = 'import androidx.compose.material.icons.filled.OpenInNew'
+          new_import = 'import androidx.compose.material.icons.automirrored.filled.OpenInNew'
+          old_usage = 'Icons.Filled.OpenInNew'
+          new_usage = 'Icons.AutoMirrored.Filled.OpenInNew'
+          assert source.count(old_import) == 1, 'unexpected OpenInNew import count'
+          assert source.count(old_usage) == 1, 'unexpected OpenInNew usage count'
+          source = source.replace(old_import, new_import).replace(old_usage, new_usage)
+          path.write_text(source)
+          PY
+          git rm .github/workflows/fix-compose-warning.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/artt/minibrowser/ui/BrowserChrome.kt
+          git commit -m "fix: use auto-mirrored external-open icon"
+          git push origin "HEAD:${{ github.head_ref }}"
