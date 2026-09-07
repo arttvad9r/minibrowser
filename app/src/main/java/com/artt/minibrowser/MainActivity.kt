@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.artt.minibrowser.browser.BrowserActivityRequestController
@@ -135,6 +136,12 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
             filePicker = activityRequests::pickFiles,
         )
         BrowserTabLifecycleController(this, tabManager)
+        val lifecycleState = lifecycle.currentState
+        val browserVisible = lifecycleState.isAtLeast(Lifecycle.State.RESUMED) || isInPictureInPictureMode
+        tabManager.setAppVisible(browserVisible)
+        if (!browserVisible && !lifecycleState.isAtLeast(Lifecycle.State.STARTED)) {
+            tabManager.trimForBackground()
+        }
         installBrowserBackFallback()
         val handledShortcut = handleShortcut(launchIntent)
 
