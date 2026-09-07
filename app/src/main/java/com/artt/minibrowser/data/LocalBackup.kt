@@ -6,6 +6,7 @@ import com.artt.minibrowser.engine.SearchEngine
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -194,15 +195,17 @@ internal class LocalBackupController(context: Context) {
                 sitePermissions.replace(restoredSitePolicy)
             } catch (failure: Throwable) {
                 val rollbackFailures = mutableListOf<Throwable>()
-                runCatching {
-                    dao.replaceUserData(previousHistory, previousBookmarks)
-                }.exceptionOrNull()?.let(rollbackFailures::add)
-                runCatching {
-                    settings.replace(previousPrefs)
-                }.exceptionOrNull()?.let(rollbackFailures::add)
-                runCatching {
-                    sitePermissions.replace(previousSitePolicy)
-                }.exceptionOrNull()?.let(rollbackFailures::add)
+                withContext(NonCancellable) {
+                    runCatching {
+                        dao.replaceUserData(previousHistory, previousBookmarks)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                    runCatching {
+                        settings.replace(previousPrefs)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                    runCatching {
+                        sitePermissions.replace(previousSitePolicy)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                }
                 rollbackFailures.forEach(failure::addSuppressed)
                 throw failure
             }
