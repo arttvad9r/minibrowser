@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
@@ -109,6 +110,7 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
             filePicker = activityRequests::pickFiles,
         )
         BrowserTabLifecycleController(this, tabManager)
+        installBrowserBackFallback()
         val handledShortcut = handleShortcut(intent)
 
         setContent {
@@ -139,6 +141,54 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
                 ),
             )
         }
+    }
+
+    private fun installBrowserBackFallback() {
+        // Register before Compose. Any screen/overlay BackHandler composed later keeps priority;
+        // this callback only handles the browser-level fallback when none of those consume Back.
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    val ui = browserViewModel.state.value
+                    val current = tabManager.current()
+
+                    when {
+                        ui.showSwitcher -> browserViewModel.showSwitcher(false)
+                        ui.showSiteInfo -> browserViewModel.showSiteInfo(false)
+                        ui.showFind -> {
+                            current?.session?.finder?.clear()
+                            browserViewModel.showFind(false)
+                        }
+                        current?.fullscreen == true -> current.session.exitFullScreen()
+                        ui.screen != BrowserScreen.Browser -> browserViewModel.screen(BrowserScreen.Browser)
+                        current?.canGoBack == true -> current.session.goBack()
+                        current != null && closeCurrentTabForSystemBack(current.id) -> Unit
+                        else -> passThroughToSystem()
+                    }
+                }
+
+                private fun passThroughToSystem() {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                    isEnabled = true
+                }
+            },
+        )
+    }
+
+    private fun closeCurrentTabForSystemBack(currentId: Long): Boolean {
+        val tabs = tabManager.tabs.value
+        if (tabs.size <= 1) return false
+        val index = tabs.indexOfFirst { it.id == currentId }
+        if (index < 0) return false
+
+        // A target=_blank/new-window navigation has no Gecko back history. Android Back should
+        // return to the tab the user was browsing instead of dropping the whole Activity to Home.
+        val returnTabId = tabs.getOrNull(index - 1)?.id ?: tabs.getOrNull(index + 1)?.id ?: return false
+        if (tabManager.closeTab(currentId) == null) return false
+        tabManager.select(returnTabId)
+        return true
     }
 
     override fun openBackgroundTab(uri: String, private: Boolean) {
