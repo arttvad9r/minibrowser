@@ -1,8 +1,11 @@
 package com.artt.minibrowser.data
 
+import android.os.Looper
 import android.os.Trace
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import com.artt.minibrowser.net.sanitizeWebUriUserInfoInText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -43,6 +46,20 @@ private inline fun <T> tracedTabStoreLoad(block: () -> T): T {
         block()
     } finally {
         if (started) runCatching { Trace.endSection() }
+    }
+}
+
+/**
+ * Preserve synchronous ordering semantics for lifecycle barriers while ensuring the filesystem work
+ * itself never executes on Android's main looper. JVM unit-test Android stubs may throw from Looper;
+ * in that environment there is no Android UI thread, so execute inline.
+ */
+private fun <T> tabStoreIo(block: () -> T): T {
+    val onAndroidMain = runCatching { Looper.myLooper() == Looper.getMainLooper() }.getOrDefault(false)
+    return if (onAndroidMain) {
+        runBlocking(Dispatchers.IO) { block() }
+    } else {
+        block()
     }
 }
 
@@ -127,8 +144,10 @@ object TabStore {
      * persistence loop is still finishing its previous write. The live JSON is never truncated;
      * a synced temp file is published with atomic move when supported and replace-move otherwise.
      */
-    fun saveState(dir: File, state: PersistedBrowserState) = synchronized(writeLock) {
-        writeStateLocked(dir, state)
+    fun saveState(dir: File, state: PersistedBrowserState) = tabStoreIo {
+        synchronized(writeLock) {
+            writeStateLocked(dir, state)
+        }
     }
 
     /**
@@ -138,16 +157,18 @@ object TabStore {
      * snapshot has been committed.
      */
     fun saveStateVersioned(dir: File, state: PersistedBrowserState, revision: Long): Boolean =
-        synchronized(writeLock) {
-            val key = targetKey(dir)
-            allocatedRevisionByTarget[key] = maxOf(allocatedRevisionByTarget[key] ?: 0L, revision)
-            val newest = newestRevisionByTarget[key]
-            if (newest != null && revision < newest) {
-                false
-            } else {
-                writeStateLocked(dir, state)
-                newestRevisionByTarget[key] = revision
-                true
+        tabStoreIo {
+            synchronized(writeLock) {
+                val key = targetKey(dir)
+                allocatedRevisionByTarget[key] = maxOf(allocatedRevisionByTarget[key] ?: 0L, revision)
+                val newest = newestRevisionByTarget[key]
+                if (newest != null && revision < newest) {
+                    false
+                } else {
+                    writeStateLocked(dir, state)
+                    newestRevisionByTarget[key] = revision
+                    true
+                }
             }
         }
 
@@ -188,17 +209,26 @@ object TabStore {
      * Dispatchers.IO before constructing TabManager, so TabManager.restore() performs no disk IO on
      * the main thread. Any intervening write invalidates the handoff in [writeStateLocked].
      */
-    internal fun preloadStateForNextRestore(dir: File): PersistedBrowserState = tracedTabStoreLoad {
-        synchronized(writeLock) {
-            val state = readStateLocked(dir)
-            preloadedStateByTarget[targetKey(dir)] = state
-            state
+    internal fun preloadStateForNextRestore(dir: File): PersistedBrowserState = tabStoreIo {
+        tracedTabStoreLoad {
+            synchronized(writeLock) {
+                val state = readStateLocked(dir)
+                preloadedStateByTarget[targetKey(dir)] = state
+                state
+            }
         }
     }
 
-    fun loadState(dir: File): PersistedBrowserState = tracedTabStoreLoad {
+    fun loadState(dir: File): PersistedBrowserState {
         synchronized(writeLock) {
-            preloadedStateByTarget.remove(targetKey(dir)) ?: readStateLocked(dir)
+            preloadedStateByTarget.remove(targetKey(dir))?.let { return it }
+        }
+        return tabStoreIo {
+            tracedTabStoreLoad {
+                synchronized(writeLock) {
+                    readStateLocked(dir)
+                }
+            }
         }
     }
 
