@@ -1,0 +1,53 @@
+name: Generate Gradle Verification Metadata
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gradle-verification-metadata-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-37.1" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - name: Resolve build dependencies and write verification metadata
+        run: >-
+          ./gradlew --write-verification-metadata sha256
+          :app:testDebugUnitTest
+          :app:verifyRoborazziDebug
+          :app:lintDebug
+          :app:assembleDebug
+          :app:assembleDebugAndroidTest
+          :app:assembleRelease
+          :app:bundleRelease
+          :benchmark:assembleBenchmark
+          :benchmark:assembleProfile
+          -PminibrowserAbi=x86_64
+          --stacktrace
+      - name: Require generated metadata
+        run: test -s gradle/verification-metadata.xml
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gradle-verification-metadata
+          path: gradle/verification-metadata.xml
+          if-no-files-found: error
+          retention-days: 1
