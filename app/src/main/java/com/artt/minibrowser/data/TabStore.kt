@@ -157,7 +157,11 @@ object TabStore {
      */
     fun saveStateVersioned(dir: File, state: PersistedBrowserState, revision: Long): Boolean {
         if (isAndroidMainThread()) return enqueueStateVersioned(dir, state, revision)
-        return orderedIo { saveStateVersionedLocked(dir, state, revision, reserveFirst = true) }
+        return orderedIo {
+            synchronized(writeLock) {
+                saveStateVersionedLocked(dir, state, revision, reserveFirst = true)
+            }
+        }
     }
 
     /** Visible to unit tests so shutdown ordering can be verified without an Android Looper. */
