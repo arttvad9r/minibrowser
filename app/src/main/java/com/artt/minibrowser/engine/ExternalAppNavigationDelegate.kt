@@ -147,6 +147,91 @@ private class ExternalAppNavigationDelegate(
     }
 }
 
+internal enum class ExternalAppRequestDecision { Pass, Deny }
+
+/**
+ * App-link handling that runs inside TabManager's own NavigationDelegate.
+ *
+ * This deliberately does not replace or wrap GeckoSession.navigationDelegate. Regular HTTP(S)
+ * clicks stay on TabManager's original code path; this helper only schedules native-app handoff
+ * after Gecko has been allowed to consume the click, or consumes a custom scheme that Gecko cannot
+ * render. A short user-gesture window also covers tg:// / bank-scheme navigations triggered by an
+ * immediate script or redirect after the original web tap.
+ */
+internal class ExternalAppRequestHandler(
+    private val activity: Activity,
+) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var userNavigationChainUntilMs = 0L
+    private var navigationGeneration = 0L
+    private var externallyLaunchedGeneration = -1L
+
+    fun onLoadRequest(request: GeckoSession.NavigationDelegate.LoadRequest): ExternalAppRequestDecision {
+        val uri = request.uri
+        val now = SystemClock.elapsedRealtime()
+        val hadRecentUserGesture = now <= userNavigationChainUntilMs
+        val webUri = isAllowedWebUri(uri)
+
+        if (!request.isRedirect) {
+            val continuesCustomSchemeFromRecentGesture =
+                !request.hasUserGesture && !webUri && hadRecentUserGesture
+            if (!continuesCustomSchemeFromRecentGesture) {
+                navigationGeneration++
+                externallyLaunchedGeneration = -1L
+                userNavigationChainUntilMs = if (request.hasUserGesture && webUri) {
+                    now + USER_NAVIGATION_CHAIN_WINDOW_MS
+                } else {
+                    0L
+                }
+            }
+        }
+
+        val redirectFromRecentUserGesture = request.isRedirect && now <= userNavigationChainUntilMs
+        val customSchemeFromRecentUserGesture =
+            !request.isRedirect && !request.hasUserGesture && !webUri && now <= userNavigationChainUntilMs
+        val userInitiatedNavigation =
+            request.hasUserGesture || redirectFromRecentUserGesture || customSchemeFromRecentUserGesture
+
+        if (
+            shouldTryExternalWebAppLink(
+                targetUri = uri,
+                hasUserGesture = request.hasUserGesture,
+                isRedirect = request.isRedirect,
+                redirectFromRecentUserGesture = redirectFromRecentUserGesture,
+            )
+        ) {
+            scheduleSpecializedWebHandoff(uri, navigationGeneration)
+            return ExternalAppRequestDecision.Pass
+        }
+
+        if (userInitiatedNavigation && !webUri) {
+            val launched = launchCustomAppLink(activity, uri)
+            if (launched) {
+                userNavigationChainUntilMs = 0L
+                externallyLaunchedGeneration = navigationGeneration
+                if (shouldDenyGeckoAfterExternalLaunch(uri, launched = true)) {
+                    return ExternalAppRequestDecision.Deny
+                }
+            }
+        }
+
+        return ExternalAppRequestDecision.Pass
+    }
+
+    private fun scheduleSpecializedWebHandoff(uri: String, generation: Long) {
+        mainHandler.post {
+            if (generation != navigationGeneration) return@post
+            if (generation == externallyLaunchedGeneration) return@post
+            if (activity.isFinishing || activity.isDestroyed) return@post
+
+            if (launchSpecializedWebHandler(activity, uri)) {
+                externallyLaunchedGeneration = generation
+                userNavigationChainUntilMs = 0L
+            }
+        }
+    }
+}
+
 /**
  * Opens HTTP(S) outside the browser only when Android resolution exposes a specialized handler.
  *
