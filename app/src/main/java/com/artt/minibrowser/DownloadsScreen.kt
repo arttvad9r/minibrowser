@@ -84,7 +84,7 @@ private fun openDownload(context: Context, item: BrowserDownload) {
             val path = stored.path ?: error("Missing file path")
             val file = File(path)
             if (!file.isFile) error("Downloaded file is missing")
-            FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         } else {
             stored
         }
