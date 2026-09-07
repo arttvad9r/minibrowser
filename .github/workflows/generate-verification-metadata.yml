@@ -6,10 +6,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: gradle-verification-metadata-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   generate:
     runs-on: ubuntu-latest
