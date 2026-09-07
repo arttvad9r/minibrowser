@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="new_tab"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/new_tab_title">
+        <intent
+            android:action="com.artt.minibrowser.action.NEW_TAB"
+            android:targetPackage="com.artt.minibrowser"
+            android:targetClass="com.artt.minibrowser.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="new_private_tab"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/private_tab_title">
+        <intent
+            android:action="com.artt.minibrowser.action.NEW_PRIVATE_TAB"
+            android:targetPackage="com.artt.minibrowser"
+            android:targetClass="com.artt.minibrowser.MainActivity" />
+    </shortcut>
+</shortcuts>

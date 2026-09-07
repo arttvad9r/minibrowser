@@ -1,6 +1,5 @@
 <resources>
     <string name="action_sign_in">Войти</string>
-    <string name="action_share">Поделиться</string>
 
     <string name="prompt_auth_username_hint">Имя пользователя</string>
     <string name="prompt_auth_password_hint">Пароль</string>

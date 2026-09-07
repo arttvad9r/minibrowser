@@ -85,6 +85,8 @@ import com.artt.minibrowser.ui.TabPreviewStore
 import com.artt.minibrowser.ui.chromiumSharedXAxisEnter
 import com.artt.minibrowser.ui.chromiumSharedXAxisExit
 import java.io.File
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * Screen-level browser route. It collects state from browser ViewModels and translates user
@@ -104,6 +106,7 @@ internal fun BrowserRoute(
     browserWindow: BrowserWindowController,
     browserIntents: BrowserIntentController,
     externalNavigation: NavigationController,
+    backgroundTabOpened: Flow<Long>,
     tabPreviewStore: TabPreviewStore,
     iconsDir: File,
 ) {
@@ -185,6 +188,9 @@ internal fun BrowserRoute(
         canGoForward = currentTab?.canGoForward == true,
         desktop = currentTab?.desktop == true,
     )
+    val canOpenExternal = remember(currentTab?.url) {
+        browserIntents.canOpenInExternalApp(currentTab?.url)
+    }
     val settingsScreenState = SettingsScreenUiState(
         searchEngine = prefs.searchEngine.toSettingsUiState(),
         theme = prefs.theme,
@@ -222,6 +228,7 @@ internal fun BrowserRoute(
         showStart = showStart,
         inFullscreen = inFullscreen,
         loadError = currentTab?.loadError.toUiState(),
+        canOpenExternal = canOpenExternal,
         browserContentHiddenByRoute = browserContentHiddenByRoute,
     )
     val pageActions = BrowserPageActions(
@@ -272,6 +279,7 @@ internal fun BrowserRoute(
         onToggleDesktop = {
             currentTab?.let(::toggleDesktopMode)
         },
+        onOpenExternal = { browserIntents.openInExternalApp(currentTab?.url) },
     )
 
     val settingsPaneTitle = stringResource(R.string.settings_title)
@@ -280,6 +288,8 @@ internal fun BrowserRoute(
     val bookmarksPaneTitle = stringResource(R.string.bookmarks_title)
     val tabClosedMessage = stringResource(R.string.tab_closed_message)
     val undoLabel = stringResource(R.string.action_undo)
+    val backgroundTabMessage = stringResource(R.string.tab_opened_in_background)
+    val switchToTabLabel = stringResource(R.string.action_switch_to_tab)
 
     LaunchedEffect(pendingClosedTab) {
         val closed = pendingClosedTab ?: return@LaunchedEffect
@@ -296,6 +306,38 @@ internal fun BrowserRoute(
             tabPreviewStore.remove(closed.id)
         }
         pendingClosedTab = null
+    }
+
+    LaunchedEffect(backgroundTabOpened) {
+        backgroundTabOpened.collectLatest { id ->
+            val result = snackbarHostState.showSnackbar(
+                message = backgroundTabMessage,
+                actionLabel = switchToTabLabel,
+                withDismissAction = true,
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                tabManager.select(id)
+            }
+        }
+    }
+
+    // Browser snackbars must not float over unrelated destinations such as Settings or Bookmarks.
+    // Finalize any pending single-tab undo when leaving the browser surface and dismiss the host.
+    LaunchedEffect(screen) {
+        if (screen != BrowserScreen.Browser) {
+            pendingClosedTab?.let { closed -> tabPreviewStore.remove(closed.id) }
+            pendingClosedTab = null
+            snackbarHostState.currentSnackbarData?.dismiss()
+        }
+    }
+
+    fun closeTabs(ids: List<Long>) {
+        pendingClosedTab?.let { tabPreviewStore.remove(it.id) }
+        pendingClosedTab = null
+        ids.forEach { id ->
+            tabManager.closeTab(id)?.let { closed -> tabPreviewStore.remove(closed.id) }
+        }
     }
 
     MinibrowserTheme(darkTheme = darkTheme) {
@@ -367,13 +409,11 @@ internal fun BrowserRoute(
                 transitionSpec = {
                     val forward = isForwardBrowserRouteTransition(initialState, targetState)
                     when {
-                        initialState == BrowserScreen.Browser && targetState != BrowserScreen.Browser ->
-                            chromiumSharedXAxisEnter(forward = true)
-                                .togetherWith(ExitTransition.None)
-
-                        initialState != BrowserScreen.Browser && targetState == BrowserScreen.Browser ->
-                            EnterTransition.None
-                                .togetherWith(chromiumSharedXAxisExit(forward = false))
+                        // GeckoView is a heavy native surface. Cross-fading it with Compose routes
+                        // produced visible old-page frames on real devices, so route boundaries are
+                        // atomic. Shared-axis motion is retained between Compose-only destinations.
+                        initialState == BrowserScreen.Browser || targetState == BrowserScreen.Browser ->
+                            EnterTransition.None.togetherWith(ExitTransition.None)
 
                         forward ->
                             chromiumSharedXAxisEnter(forward = true)
@@ -483,6 +523,8 @@ internal fun BrowserRoute(
                         }
                         pendingClosedTab = tabManager.closeTab(id)
                     },
+                    onCloseAll = { closeTabs(tabs.map { it.id }) },
+                    onClosePrivate = { closeTabs(tabs.filter { it.isPrivate }.map { it.id }) },
                     onNew = { tabManager.newTab(null) },
                     onDismiss = { browserViewModel.showSwitcher(false) },
                 )
@@ -493,12 +535,14 @@ internal fun BrowserRoute(
                 }
             }
 
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
-            )
+            if (screen == BrowserScreen.Browser) {
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+                )
+            }
         }
     }
 }

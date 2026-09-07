@@ -12,6 +12,7 @@ import com.artt.minibrowser.engine.normalizeTranslationTarget
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -50,6 +51,20 @@ class SettingsRepository(context: Context) {
                 translateTarget = normalizeTranslationTarget(p[K.translate]) ?: "ru",
             )
         }
+
+    suspend fun snapshot(): Prefs = prefs.first()
+
+    suspend fun replace(prefs: Prefs) {
+        val safeTheme = normalizeThemePreference(prefs.theme)
+        val safeLanguage = normalizeTranslationTarget(prefs.translateTarget) ?: "ru"
+        context.dataStore.edit { stored ->
+            stored[K.engine] = prefs.searchEngine.name
+            stored[K.theme] = safeTheme
+            stored[K.adblock] = prefs.adblockEnabled
+            stored[K.vot] = prefs.votEnabled
+            stored[K.translate] = safeLanguage
+        }
+    }
 
     suspend fun setSearchEngine(e: SearchEngine) = context.dataStore.edit { it[K.engine] = e.name }
     suspend fun setTheme(t: Int) = context.dataStore.edit { it[K.theme] = normalizeThemePreference(t) }

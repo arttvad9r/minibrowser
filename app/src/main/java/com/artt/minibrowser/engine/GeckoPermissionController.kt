@@ -6,24 +6,53 @@ import android.app.AlertDialog
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import com.artt.minibrowser.R
+import com.artt.minibrowser.data.SitePermissionPolicy
+import com.artt.minibrowser.data.SitePermissionPolicyRepository
 import com.artt.minibrowser.net.webUriHost
+import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
 internal enum class PermissionAction {
     ALLOW,
     DENY,
+    DEFAULT_DENY,
     PROMPT_GEOLOCATION,
+    PROMPT_NOTIFICATIONS,
+    PROMPT_PERSISTENT_STORAGE,
+    PROMPT_XR,
     PROMPT_DRM,
     PROMPT_STORAGE_ACCESS,
+    PROMPT_LOCAL_DEVICE,
+    PROMPT_LOCAL_NETWORK,
 }
 
-internal fun contentPermissionAction(permission: Int): PermissionAction = when (permission) {
+internal fun contentPermissionAction(
+    permission: Int,
+    policy: SitePermissionPolicy = SitePermissionPolicy(),
+): PermissionAction = when (permission) {
     GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE -> PermissionAction.ALLOW
-    GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION -> PermissionAction.PROMPT_GEOLOCATION
-    GeckoSession.PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS -> PermissionAction.PROMPT_DRM
-    GeckoSession.PermissionDelegate.PERMISSION_STORAGE_ACCESS -> PermissionAction.PROMPT_STORAGE_ACCESS
+    GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE ->
+        if (policy.autoplayAudibleAllowed) PermissionAction.ALLOW else PermissionAction.DEFAULT_DENY
+    GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION ->
+        if (policy.geolocationCanAsk) PermissionAction.PROMPT_GEOLOCATION else PermissionAction.DEFAULT_DENY
+    GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION ->
+        if (policy.notificationsCanAsk) PermissionAction.PROMPT_NOTIFICATIONS else PermissionAction.DEFAULT_DENY
+    GeckoSession.PermissionDelegate.PERMISSION_PERSISTENT_STORAGE ->
+        if (policy.persistentStorageCanAsk) PermissionAction.PROMPT_PERSISTENT_STORAGE else PermissionAction.DEFAULT_DENY
+    GeckoSession.PermissionDelegate.PERMISSION_XR ->
+        if (policy.xrCanAsk) PermissionAction.PROMPT_XR else PermissionAction.DEFAULT_DENY
+    GeckoSession.PermissionDelegate.PERMISSION_MEDIA_KEY_SYSTEM_ACCESS ->
+        if (policy.drmCanAsk) PermissionAction.PROMPT_DRM else PermissionAction.DEFAULT_DENY
+    GeckoSession.PermissionDelegate.PERMISSION_STORAGE_ACCESS ->
+        if (policy.storageAccessCanAsk) PermissionAction.PROMPT_STORAGE_ACCESS else PermissionAction.DEFAULT_DENY
+    GeckoSession.PermissionDelegate.PERMISSION_LOCAL_DEVICE_ACCESS ->
+        if (policy.localAccessCanAsk) PermissionAction.PROMPT_LOCAL_DEVICE else PermissionAction.DEFAULT_DENY
+    GeckoSession.PermissionDelegate.PERMISSION_LOCAL_NETWORK_ACCESS ->
+        if (policy.localAccessCanAsk) PermissionAction.PROMPT_LOCAL_NETWORK else PermissionAction.DEFAULT_DENY
     else -> PermissionAction.DENY
 }
 
@@ -34,6 +63,7 @@ internal fun resolveContentPermissionValue(action: PermissionAction, existingVal
         GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
         else -> when (action) {
             PermissionAction.ALLOW -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+            PermissionAction.DEFAULT_DENY -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
             else -> GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
         }
     }
@@ -46,6 +76,19 @@ class GeckoPermissionController(
     private val requestPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)?,
     private val isSessionCurrent: (GeckoSession) -> Boolean,
 ) : GeckoSession.PermissionDelegate {
+    @Volatile
+    private var sitePolicy = SitePermissionPolicy()
+
+    init {
+        val owner = activity as? LifecycleOwner
+        if (owner != null) {
+            val repository = SitePermissionPolicyRepository(activity)
+            owner.lifecycleScope.launch {
+                repository.policy.collect { sitePolicy = it }
+            }
+        }
+    }
+
     override fun onAndroidPermissionsRequest(
         session: GeckoSession,
         permissions: Array<String>?,
@@ -82,7 +125,7 @@ class GeckoPermissionController(
         session: GeckoSession,
         perm: GeckoSession.PermissionDelegate.ContentPermission,
     ): GeckoResult<Int> {
-        val action = contentPermissionAction(perm.permission)
+        val action = contentPermissionAction(perm.permission, sitePolicy)
         val resolvedValue = resolveContentPermissionValue(action, perm.value)
         if (resolvedValue != GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT) {
             return GeckoResult.fromValue(resolvedValue)
@@ -96,6 +139,12 @@ class GeckoPermissionController(
         val message = when (action) {
             PermissionAction.PROMPT_GEOLOCATION ->
                 activity.getString(R.string.permission_geolocation_message, host)
+            PermissionAction.PROMPT_NOTIFICATIONS ->
+                activity.getString(R.string.permission_notifications_message, host)
+            PermissionAction.PROMPT_PERSISTENT_STORAGE ->
+                activity.getString(R.string.permission_persistent_storage_message, host)
+            PermissionAction.PROMPT_XR ->
+                activity.getString(R.string.permission_xr_message, host)
             PermissionAction.PROMPT_DRM ->
                 activity.getString(R.string.permission_drm_message, host)
             PermissionAction.PROMPT_STORAGE_ACCESS -> {
@@ -106,7 +155,14 @@ class GeckoPermissionController(
                     activity.getString(R.string.permission_storage_access_generic)
                 }
             }
-            PermissionAction.ALLOW, PermissionAction.DENY -> ""
+            PermissionAction.PROMPT_LOCAL_DEVICE ->
+                activity.getString(R.string.permission_local_device_message, host)
+            PermissionAction.PROMPT_LOCAL_NETWORK ->
+                activity.getString(R.string.permission_local_network_message, host)
+            PermissionAction.ALLOW,
+            PermissionAction.DENY,
+            PermissionAction.DEFAULT_DENY,
+            -> ""
         }
         activity.runOnUiThread {
             var completed = false
@@ -172,7 +228,12 @@ class GeckoPermissionController(
             it.source != GeckoSession.PermissionDelegate.MediaSource.SOURCE_CAMERA &&
                 it.source != GeckoSession.PermissionDelegate.MediaSource.SOURCE_MICROPHONE
         }
-        if (unsupported || (camera == null && microphone == null)) {
+        if (
+            unsupported ||
+            (camera == null && microphone == null) ||
+            (camera != null && !sitePolicy.cameraCanAsk) ||
+            (microphone != null && !sitePolicy.microphoneCanAsk)
+        ) {
             callback.reject()
             return
         }

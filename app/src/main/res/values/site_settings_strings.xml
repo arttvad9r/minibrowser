@@ -1,0 +1,58 @@
+<resources>
+    <string name="site_settings_all_sites">Все сайты</string>
+    <string name="site_settings_permissions_section">Разрешения</string>
+    <string name="site_settings_content_section">Контент</string>
+    <string name="site_settings_loading">Загрузка…</string>
+    <string name="site_settings_global_policy_note">Нажмите категорию, чтобы изменить правило по умолчанию и посмотреть исключения отдельных сайтов.</string>
+
+    <string name="site_settings_category_geolocation">Геоданные</string>
+    <string name="site_settings_category_camera">Камера</string>
+    <string name="site_settings_category_microphone">Микрофон</string>
+    <string name="site_settings_category_notifications">Уведомления</string>
+    <string name="site_settings_category_drm">Защищённый контент</string>
+    <string name="site_settings_category_storage_access">Сторонние cookie и хранилище</string>
+    <string name="site_settings_category_autoplay">Автовоспроизведение</string>
+    <string name="site_settings_category_persistent_storage">Постоянное хранилище</string>
+    <string name="site_settings_category_xr">Виртуальная реальность</string>
+    <string name="site_settings_category_local_access">Локальные устройства и сеть</string>
+
+    <string name="site_settings_default_ask">Сначала спрашивать</string>
+    <string name="site_settings_default_blocked">Запрещено</string>
+    <string name="site_settings_media_prompt_each_time">Спрашивать при каждом запросе</string>
+    <string name="site_settings_autoplay_policy">Со звуком — запрещено · без звука — разрешено</string>
+    <string name="site_settings_autoplay_policy_allowed">Со звуком — разрешено · без звука — разрешено</string>
+    <string name="site_settings_default_behavior">По умолчанию: %1$s</string>
+    <string name="site_settings_default_behavior_title">Поведение по умолчанию</string>
+    <string name="site_settings_allow_requests">Сайты могут запрашивать разрешение</string>
+    <string name="site_settings_block_requests">Запретить сайтам доступ</string>
+    <string name="site_settings_allow_autoplay_audible">Разрешать автовоспроизведение со звуком</string>
+    <string name="site_settings_block_autoplay_audible">Запрещать автовоспроизведение со звуком</string>
+    <string name="site_settings_category_exceptions_note">Исключения сайтов</string>
+    <string name="site_settings_category_exceptions_empty">Сохранённых исключений для этой категории пока нет.</string>
+    <string name="site_settings_media_permissions_note">Для камеры и микрофона Minibrowser пока не сохраняет отдельные решения по сайтам. Глобальное правило выше определяет, может ли сайт вообще показать запрос.</string>
+
+    <string name="permission_notifications_message">%1$s хочет показывать уведомления.</string>
+    <string name="permission_persistent_storage_message">%1$s хочет использовать постоянное хранилище.</string>
+    <string name="permission_xr_message">%1$s хочет использовать возможности виртуальной реальности.</string>
+    <string name="permission_local_device_message">%1$s хочет получить доступ к устройству в локальной среде.</string>
+    <string name="permission_local_network_message">%1$s хочет получить доступ к локальной сети.</string>
+
+    <string name="site_settings_all_sites_empty">Сайтов с индивидуальными настройками пока нет.</string>
+    <string name="site_settings_host_description">Сохранённые решения для этого сайта. «Сбросить» вернёт конкретное разрешение к поведению Minibrowser по умолчанию.</string>
+    <string name="site_settings_no_saved_settings">Сохранённых решений для этого сайта больше нет.</string>
+    <string name="site_permission_autoplay_audible">Автовоспроизведение со звуком</string>
+    <string name="site_permission_autoplay_inaudible">Автовоспроизведение без звука</string>
+
+    <plurals name="site_settings_saved_sites_count">
+        <item quantity="one">%d сайт с индивидуальными настройками</item>
+        <item quantity="few">%d сайта с индивидуальными настройками</item>
+        <item quantity="many">%d сайтов с индивидуальными настройками</item>
+        <item quantity="other">%d сайта с индивидуальными настройками</item>
+    </plurals>
+    <plurals name="site_settings_saved_setting_count">
+        <item quantity="one">%d сохранённая настройка</item>
+        <item quantity="few">%d сохранённые настройки</item>
+        <item quantity="many">%d сохранённых настроек</item>
+        <item quantity="other">%d сохранённой настройки</item>
+    </plurals>
+</resources>

@@ -20,17 +20,25 @@ internal class BrowserIntentController(
 
         val external = createSafeExternalIntent(value)
         val launched = external != null &&
-            external.resolveActivity(activity.packageManager) != null &&
             runCatching {
-                activity.startActivity(
-                    Intent.createChooser(external, activity.getString(R.string.external_chooser_title)),
-                )
+                activity.startActivity(external)
                 true
             }.getOrDefault(false)
         if (launched || activity.isFinishing || activity.isDestroyed) return
 
         safeExternalFallbackUrl(value)?.let(loadFallback)
     }
+
+    /**
+     * Kept temporarily for the existing menu contract. Generic HTTP(S) URLs must never expose an
+     * "external app" action because Android would legitimately route them to another browser.
+     * User-clicked App Links are handled automatically by ExternalAppNavigationDelegate instead.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun canOpenInExternalApp(value: String?): Boolean = false
+
+    @Suppress("UNUSED_PARAMETER")
+    fun openInExternalApp(value: String?) = Unit
 
     fun shareUrl(value: String?) {
         val url = shareableBrowserUrl(value) ?: return
