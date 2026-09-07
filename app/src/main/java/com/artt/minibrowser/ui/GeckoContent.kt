@@ -13,7 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
 import com.artt.minibrowser.engine.Tab
-import com.artt.minibrowser.engine.installExternalAppNavigationDelegate
 import org.mozilla.geckoview.BasicSelectionActionDelegate
 import org.mozilla.geckoview.GeckoView
 
@@ -71,16 +70,13 @@ internal fun GeckoContent(
                 if (view.session !== session) {
                     view.releaseSession()
                     session?.let { nextSession ->
-                        view.context.findActivity()?.let { activity ->
-                            // Gecko does not install a text-selection action mode for embedders by
-                            // default. The built-in delegate supplies Select all / Copy / Cut / Paste /
-                            // Process text using Android's standard contextual toolbar.
-                            if (nextSession.selectionActionDelegate == null) {
+                        // Gecko does not install a text-selection action mode for embedders by
+                        // default. The built-in delegate supplies Select all / Copy / Cut / Paste /
+                        // Process text using Android's standard contextual toolbar.
+                        if (nextSession.selectionActionDelegate == null) {
+                            view.context.findActivity()?.let { activity ->
                                 nextSession.setSelectionActionDelegate(BasicSelectionActionDelegate(activity))
                             }
-                            // Preserve TabManager's navigation delegate, but intercept user-clicked
-                            // Android App Links and explicit app schemes before Gecko renders them.
-                            installExternalAppNavigationDelegate(nextSession, activity)
                         }
                         view.setSession(nextSession)
                     }
