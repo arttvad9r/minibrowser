@@ -47,22 +47,33 @@ internal fun BrowserTabSwitcher(
     onDismiss: () -> Unit,
 ) {
     var newTabRequested by remember { mutableStateOf(false) }
+    var frozenTabsDuringExit by remember {
+        mutableStateOf<List<BrowserTabItemUiState>?>(null)
+    }
 
     fun createNewTab() {
+        // Creating the real tab updates TabManager immediately, while the overview is still running
+        // its exit/new-tab animation. Keep the visible overview snapshot stable so its counter/card
+        // list does not briefly jump 0 -> 1 (or N -> N+1) before disappearing.
+        frozenTabsDuringExit = tabs
         newTabRequested = true
         onNew()
     }
 
     fun dismissOverview() {
         // A zero-tab overview is valid while it is visible. Once the user leaves it, restore the
-        // browser invariant that the page chrome always belongs to a real tab. Avoid a second tab
-        // when dismissal follows the overview's own "+" animation.
+        // browser invariant that the page chrome always belongs to a real tab. Freeze the visible
+        // zero-tab state first: otherwise the synthetic blank tab can flash "1 вкладка" for a frame
+        // before the overview disappears. Avoid a second tab when dismissal follows the "+" action.
         if (shouldCreateTabBeforeOverviewDismiss(tabs.size, newTabRequested)) {
+            frozenTabsDuringExit = tabs
             onNew()
         }
         newTabRequested = false
         onDismiss()
     }
+
+    val overviewTabs = frozenTabsDuringExit ?: tabs
 
     Box(
         Modifier
@@ -72,7 +83,7 @@ internal fun BrowserTabSwitcher(
             .background(MaterialTheme.colorScheme.background),
     ) {
         BrowserTabSwitcher(
-            tabs = tabs,
+            tabs = overviewTabs,
             currentId = currentId,
             iconsDir = iconsDir,
             previewStore = previewStore,
@@ -92,7 +103,7 @@ internal fun BrowserTabSwitcher(
         ) {
             IconButton(
                 onClick = { expanded = true },
-                enabled = tabs.isNotEmpty(),
+                enabled = overviewTabs.isNotEmpty(),
                 modifier = Modifier.semantics { contentDescription = actionsDescription },
             ) {
                 Icon(Icons.Filled.MoreVert, contentDescription = null)
@@ -101,7 +112,7 @@ internal fun BrowserTabSwitcher(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
             ) {
-                if (tabs.any { it.isPrivate }) {
+                if (overviewTabs.any { it.isPrivate }) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.close_private_tabs)) },
                         onClick = {
