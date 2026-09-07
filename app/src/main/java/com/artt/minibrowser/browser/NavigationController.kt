@@ -1,6 +1,7 @@
 package com.artt.minibrowser.browser
 
 import com.artt.minibrowser.engine.isAllowedWebUri
+import java.util.ArrayDeque
 
 /**
  * The launch Intent belongs to the Activity instance. On recreation the browser session is restored
@@ -14,19 +15,18 @@ internal fun initialExternalNavigationUri(
 
 class NavigationController {
     private var handler: ((String) -> Unit)? = null
-    private var pending: String? = null
+    private val pending = ArrayDeque<String>()
 
     fun setHandler(value: (String) -> Unit) {
         handler = value
-        pending?.let {
-            pending = null
-            value(it)
+        while (pending.isNotEmpty()) {
+            value(pending.removeFirst())
         }
     }
 
     fun accept(uri: String?) {
         val value = uri ?: return
         if (!isAllowedWebUri(value)) return
-        handler?.invoke(value) ?: run { pending = value }
+        handler?.invoke(value) ?: pending.addLast(value)
     }
 }
