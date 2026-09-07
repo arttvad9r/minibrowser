@@ -6,6 +6,8 @@ import com.artt.minibrowser.data.TabStore
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class TabStorePreloadTest {
     @Test
@@ -36,6 +38,25 @@ class TabStorePreloadTest {
         TabStore.saveState(dir, second)
 
         assertEquals(second, TabStore.loadState(dir))
+        dir.deleteRecursively()
+    }
+
+    @Test
+    fun queuedFinalSnapshotCompletesBeforeFollowingPreload() {
+        val dir = File(System.getProperty("java.io.tmpdir"), "tabs-preload-final-${System.nanoTime()}")
+        val old = PersistedBrowserState(1, listOf(PersistedTab(1, "https://old.example", "Old")))
+        val final = PersistedBrowserState(2, listOf(PersistedTab(2, "https://final.example", "Final")))
+        val oldRevision = TabStore.nextRevision(dir)
+        assertTrue(TabStore.saveStateVersioned(dir, old, oldRevision))
+
+        val finalRevision = TabStore.nextRevision(dir)
+        assertTrue(TabStore.enqueueStateVersioned(dir, final, finalRevision))
+        // preloadStateForNextRestore is submitted to the same single-thread IO executor after the
+        // queued final write, so recreation cannot overtake Activity shutdown persistence.
+        assertEquals(final, TabStore.preloadStateForNextRestore(dir))
+        assertEquals(final, TabStore.loadState(dir))
+        assertFalse(TabStore.saveStateVersioned(dir, old, oldRevision))
+        assertEquals(final, TabStore.loadState(dir))
         dir.deleteRecursively()
     }
 }
