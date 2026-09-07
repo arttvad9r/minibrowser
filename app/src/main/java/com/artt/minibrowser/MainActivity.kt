@@ -9,6 +9,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import com.artt.minibrowser.browser.BrowserActivityRequestController
 import com.artt.minibrowser.browser.BrowserDataClearer
 import com.artt.minibrowser.browser.BrowserDataViewModel
@@ -29,12 +30,17 @@ import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.data.SettingsRepository
+import com.artt.minibrowser.data.TabStore
 import com.artt.minibrowser.engine.BackgroundTabHost
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
 import java.io.File
+import java.util.ArrayDeque
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity(), BackgroundTabHost {
     private val browserApp by lazy { application as BrowserApp }
@@ -47,6 +53,7 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
     private val tabPreviewStore by lazy { browserApp.tabPreviewStore }
     private val pictureInPicture by lazy { BrowserPictureInPictureController(this) }
     private val backgroundTabOpened = MutableSharedFlow<Long>(extraBufferCapacity = 1)
+    private val pendingIntents = ArrayDeque<Intent>()
     private lateinit var tabManager: TabManager
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
@@ -94,24 +101,42 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (!handleShortcut(intent)) {
-            externalNavigation.accept(intent.data?.toString())
+        if (!::tabManager.isInitialized) {
+            pendingIntents.addLast(intent)
+            return
         }
+        handleIncomingIntent(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // TabStore may parse, sanitize and atomically rewrite legacy/corrupt metadata. Do that work
+        // on IO before TabManager is constructed; its synchronous restore() then consumes the
+        // one-shot in-memory handoff instead of touching disk on the Activity main thread.
+        val launchIntent = intent
+        val tabsDir = File(filesDir, "tabs")
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                TabStore.preloadStateForNextRestore(tabsDir)
+            }
+            if (isFinishing || isDestroyed || ::tabManager.isInitialized) return@launch
+            initializeBrowser(savedInstanceState, launchIntent, tabsDir)
+        }
+    }
+
+    private fun initializeBrowser(savedInstanceState: Bundle?, launchIntent: Intent?, tabsDir: File) {
         tabManager = TabManager(
             runtime,
-            File(filesDir, "tabs"),
+            tabsDir,
             this,
             permissionRequester = activityRequests::requestPermissions,
             filePicker = activityRequests::pickFiles,
         )
         BrowserTabLifecycleController(this, tabManager)
         installBrowserBackFallback()
-        val handledShortcut = handleShortcut(intent)
+        val handledShortcut = handleShortcut(launchIntent)
 
         setContent {
             BrowserPictureInPictureEffect(tabManager, pictureInPicture)
@@ -136,10 +161,19 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
         if (!handledShortcut) {
             externalNavigation.accept(
                 initialExternalNavigationUri(
-                    intentUri = intent?.data?.toString(),
+                    intentUri = launchIntent?.data?.toString(),
                     hasSavedInstanceState = savedInstanceState != null,
                 ),
             )
+        }
+        while (pendingIntents.isNotEmpty()) {
+            handleIncomingIntent(pendingIntents.removeFirst())
+        }
+    }
+
+    private fun handleIncomingIntent(intent: Intent) {
+        if (!handleShortcut(intent)) {
+            externalNavigation.accept(intent.data?.toString())
         }
     }
 
