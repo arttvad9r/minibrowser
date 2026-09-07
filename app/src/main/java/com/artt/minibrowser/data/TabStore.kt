@@ -97,6 +97,9 @@ object TabStore {
     private val writeLock = Any()
     private val newestRevisionByTarget = mutableMapOf<String, Long>()
     private val allocatedRevisionByTarget = mutableMapOf<String, Long>()
+    private val preloadedStateByTarget = mutableMapOf<String, PersistedBrowserState>()
+
+    private fun targetKey(dir: File): String = File(dir, FILE_NAME).absolutePath
 
     fun save(dir: File, urls: List<String>) {
         saveState(dir, PersistedBrowserState(
@@ -111,7 +114,7 @@ object TabStore {
      * snapshot.
      */
     internal fun nextRevision(dir: File): Long = synchronized(writeLock) {
-        val key = File(dir, FILE_NAME).absolutePath
+        val key = targetKey(dir)
         val latest = maxOf(
             newestRevisionByTarget[key] ?: 0L,
             allocatedRevisionByTarget[key] ?: 0L,
@@ -136,7 +139,7 @@ object TabStore {
      */
     fun saveStateVersioned(dir: File, state: PersistedBrowserState, revision: Long): Boolean =
         synchronized(writeLock) {
-            val key = File(dir, FILE_NAME).absolutePath
+            val key = targetKey(dir)
             allocatedRevisionByTarget[key] = maxOf(allocatedRevisionByTarget[key] ?: 0L, revision)
             val newest = newestRevisionByTarget[key]
             if (newest != null && revision < newest) {
@@ -168,6 +171,9 @@ object TabStore {
             }.recoverCatching {
                 Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }.getOrThrow()
+            // A state preloaded for an Activity must never survive a newer write from an older
+            // Activity instance during recreation. Falling back to disk is slower but correct.
+            preloadedStateByTarget.remove(target.absolutePath)
             File(dir, CORRUPT_FILE_NAME).delete()
         } finally {
             temp.delete()
@@ -176,31 +182,49 @@ object TabStore {
 
     fun load(dir: File): List<String> = loadState(dir).tabs.map { it.url }
 
+    /**
+     * Reads and validates the tab state on the caller's thread, then makes that exact snapshot a
+     * one-shot handoff for the next synchronous [loadState]. MainActivity calls this on
+     * Dispatchers.IO before constructing TabManager, so TabManager.restore() performs no disk IO on
+     * the main thread. Any intervening write invalidates the handoff in [writeStateLocked].
+     */
+    internal fun preloadStateForNextRestore(dir: File): PersistedBrowserState = tracedTabStoreLoad {
+        synchronized(writeLock) {
+            val state = readStateLocked(dir)
+            preloadedStateByTarget[targetKey(dir)] = state
+            state
+        }
+    }
+
     fun loadState(dir: File): PersistedBrowserState = tracedTabStoreLoad {
         synchronized(writeLock) {
-            val target = File(dir, FILE_NAME)
-            if (!target.isFile) return@synchronized PersistedBrowserState()
-            val text = target.readText()
-            var needsRewrite = false
-            val decoded = runCatching {
-                json.decodeFromString(PersistedBrowserState.serializer(), text)
-            }.getOrElse {
-                runCatching {
-                    val legacy = json.decodeFromString(ListSerializer(String.serializer()), text)
-                    needsRewrite = true
-                    PersistedBrowserState(
-                        tabs = legacy.mapIndexed { index, url -> PersistedTab(index.toLong() + 1, url) },
-                    )
-                }.getOrElse {
-                    quarantineCorruptFile(target, File(dir, CORRUPT_FILE_NAME))
-                    return@synchronized PersistedBrowserState()
-                }
-            }
-            val sanitized = sanitizePersistedBrowserState(decoded)
-            if (needsRewrite || sanitized != decoded) {
-                runCatching { writeStateLocked(dir, sanitized) }
-            }
-            sanitized
+            preloadedStateByTarget.remove(targetKey(dir)) ?: readStateLocked(dir)
         }
+    }
+
+    private fun readStateLocked(dir: File): PersistedBrowserState {
+        val target = File(dir, FILE_NAME)
+        if (!target.isFile) return PersistedBrowserState()
+        val text = target.readText()
+        var needsRewrite = false
+        val decoded = runCatching {
+            json.decodeFromString(PersistedBrowserState.serializer(), text)
+        }.getOrElse {
+            runCatching {
+                val legacy = json.decodeFromString(ListSerializer(String.serializer()), text)
+                needsRewrite = true
+                PersistedBrowserState(
+                    tabs = legacy.mapIndexed { index, url -> PersistedTab(index.toLong() + 1, url) },
+                )
+            }.getOrElse {
+                quarantineCorruptFile(target, File(dir, CORRUPT_FILE_NAME))
+                return PersistedBrowserState()
+            }
+        }
+        val sanitized = sanitizePersistedBrowserState(decoded)
+        if (needsRewrite || sanitized != decoded) {
+            runCatching { writeStateLocked(dir, sanitized) }
+        }
+        return sanitized
     }
 }
