@@ -3,188 +3,227 @@ package com.artt.minibrowser.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.view.MotionEvent
-import android.view.ViewConfiguration
-import kotlin.math.abs
-import org.mozilla.geckoview.GeckoSession
+import androidx.core.view.NestedScrollingChild
+import androidx.core.view.NestedScrollingChildHelper
+import androidx.core.view.ViewCompat
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.PanZoomController
 
 /**
- * GeckoView child used by [BrowserSwipeRefreshLayout].
+ * GeckoView touch bridge modeled after Firefox Android's NestedGeckoView contract.
  *
- * The view mirrors Firefox's Gecko pull-to-refresh hand-off: ACTION_DOWN is first offered to Gecko
- * for detailed input classification while the parent is prevented from intercepting. If Gecko says
- * the touched content can overscroll from its top edge and the website did not consume the touch,
- * a downward pan may be yielded to [BrowserSwipeRefreshLayout]. Pull physics and animation stay in
- * AndroidX instead of being reimplemented here.
+ * The view owns Gecko/APZ input classification and only lets SwipeRefreshLayout intercept when
+ * the current gesture can overscroll from the top and the website did not consume the touch.
+ * It also participates in Android nested scrolling so parent interception behaves the same way as
+ * Firefox's GeckoEngineView -> NestedGeckoView hierarchy.
  */
-internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
-    private enum class GateState { BLOCKED, PENDING, ALLOWED, PARENT_OWNED }
-    private enum class InitialScrollDirection { NOT_YET, PULL_DOWN, PUSH_UP }
+@Suppress("ClickableViewAccessibility")
+internal class PullToRefreshGeckoView(context: Context) : GeckoView(context), NestedScrollingChild {
+    private val nestedChildHelper = NestedScrollingChildHelper(this)
+    private val scrollConsumed = IntArray(2)
+    private val scrollOffset = IntArray(2)
 
-    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+    private var lastY = 0
+    private var nestedOffsetY = 0
+    private var initialDownY = 0f
+    private var gestureCanReachParent = true
+    private var inputDetail = GeckoTouchDetail.initialForPullRefresh()
 
-    private var trackedSession: GeckoSession? = null
-    private var rootScrollY = 0
-    private var refreshGateEnabled = false
-    private var gateState = GateState.BLOCKED
-    private var initialScrollDirection = InitialScrollDirection.NOT_YET
-    private var gestureGeneration = 0L
-    private var downY = 0f
-
-    private val scrollDelegate = object : GeckoSession.ScrollDelegate {
-        override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
-            if (session === trackedSession) rootScrollY = scrollY
-        }
+    init {
+        isNestedScrollingEnabled = true
     }
 
-    fun trackScrollFor(session: GeckoSession?) {
-        if (trackedSession === session) return
-        trackedSession?.let { previous ->
-            if (previous.scrollDelegate === scrollDelegate) previous.scrollDelegate = null
-        }
-        trackedSession = session
-        rootScrollY = 0
-        session?.scrollDelegate = scrollDelegate
-        finishCurrentGesture()
+    fun canOverscrollTop(): Boolean = inputDetail.canOverscrollTop()
+
+    fun resetPullRefreshTouchState() {
+        inputDetail = GeckoTouchDetail.initialForPullRefresh()
+        gestureCanReachParent = true
+        nestedOffsetY = 0
+        stopNestedScroll()
+        parent?.requestDisallowInterceptTouchEvent(false)
     }
 
-    fun configurePullRefreshGate(enabled: Boolean) {
-        if (refreshGateEnabled == enabled) return
-        refreshGateEnabled = enabled
-        if (!enabled) finishCurrentGesture()
-    }
+    @Suppress("ComplexMethod")
+    override fun onTouchEvent(sourceEvent: MotionEvent): Boolean {
+        val event = MotionEvent.obtain(sourceEvent)
+        val action = sourceEvent.actionMasked
+        val eventY = event.y.toInt()
 
-    fun canStartBrowserPullRefresh(): Boolean =
-        refreshGateEnabled &&
-            rootScrollY <= 0 &&
-            (gateState == GateState.ALLOWED || gateState == GateState.PARENT_OWNED) &&
-            initialScrollDirection != InitialScrollDirection.PUSH_UP
-
-    fun clearPullRefreshGate() {
-        trackedSession?.let { previous ->
-            if (previous.scrollDelegate === scrollDelegate) previous.scrollDelegate = null
-        }
-        trackedSession = null
-        rootScrollY = 0
-        refreshGateEnabled = false
-        finishCurrentGesture()
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
+        when (action) {
             MotionEvent.ACTION_DOWN -> {
-                val generation = ++gestureGeneration
-                downY = event.y
-                initialScrollDirection = InitialScrollDirection.NOT_YET
-                gateState = GateState.BLOCKED
-
-                if (!refreshGateEnabled || rootScrollY > 0) {
-                    parent?.requestDisallowInterceptTouchEvent(false)
-                    return super.onTouchEvent(event)
-                }
-
-                // Firefox keeps the parent out until Gecko answers. This avoids the refresh
-                // container stealing the gesture before APZ/site touch handlers classify it.
-                gateState = GateState.PENDING
                 parent?.requestDisallowInterceptTouchEvent(true)
+                updateInputDetail(event)
 
-                // ACTION_DOWN must go through this result-producing API exactly once. Subsequent
-                // MOVE/UP events continue through normal GeckoView dispatch below.
-                onTouchEventForDetailResult(event).accept(
-                    { detail ->
-                        if (generation != gestureGeneration || gateState != GateState.PENDING) {
-                            return@accept
-                        }
+                nestedOffsetY = 0
+                lastY = eventY
+                initialDownY = event.y
 
-                        val allowed = detail != null && isBrowserPullRefreshEligible(
-                            pageEnabled = refreshGateEnabled,
-                            rootScrollY = rootScrollY,
-                            handledResult = detail.handledResult(),
-                            scrollableDirections = detail.scrollableDirections(),
-                            overscrollDirections = detail.overscrollDirections(),
-                        )
-                        gateState = if (allowed) GateState.ALLOWED else GateState.BLOCKED
-
-                        if (allowed && initialScrollDirection != InitialScrollDirection.PUSH_UP) {
-                            parent?.requestDisallowInterceptTouchEvent(false)
-                        } else {
-                            parent?.requestDisallowInterceptTouchEvent(true)
-                        }
-                    },
-                    {
-                        if (generation == gestureGeneration && gateState == GateState.PENDING) {
-                            gateState = GateState.BLOCKED
-                            parent?.requestDisallowInterceptTouchEvent(true)
-                        }
-                    },
-                )
+                event.recycle()
                 return true
             }
 
-            MotionEvent.ACTION_POINTER_DOWN -> {
-                ++gestureGeneration
-                gateState = GateState.BLOCKED
-                initialScrollDirection = InitialScrollDirection.PUSH_UP
-                parent?.requestDisallowInterceptTouchEvent(true)
-                return super.onTouchEvent(event)
+            MotionEvent.ACTION_MOVE -> {
+                val browserIsPanning = !shouldPinOnScreen() && inputDetail.isHandledByBrowser()
+                var deltaY = lastY - eventY
+
+                if (browserIsPanning && dispatchNestedPreScroll(0, deltaY, scrollConsumed, scrollOffset)) {
+                    deltaY -= scrollConsumed[1]
+                    event.offsetLocation(0f, -scrollOffset[1].toFloat())
+                    nestedOffsetY += scrollOffset[1]
+                }
+
+                lastY = eventY - scrollOffset[1]
+
+                if (browserIsPanning && dispatchNestedScroll(0, scrollOffset[1], 0, deltaY, scrollOffset)) {
+                    lastY -= scrollOffset[1]
+                    event.offsetLocation(0f, scrollOffset[1].toFloat())
+                    nestedOffsetY += scrollOffset[1]
+                }
+
+                if (gestureCanReachParent && event.y != initialDownY) {
+                    updateInputDetail(event)
+                    event.recycle()
+                    return true
+                }
             }
 
-            MotionEvent.ACTION_MOVE -> {
-                if (initialScrollDirection == InitialScrollDirection.NOT_YET) {
-                    val deltaY = event.y - downY
-                    if (abs(deltaY) > touchSlop) {
-                        initialScrollDirection =
-                            if (deltaY > 0f) {
-                                InitialScrollDirection.PULL_DOWN
-                            } else {
-                                InitialScrollDirection.PUSH_UP
-                            }
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_CANCEL -> {
+                inputDetail = GeckoTouchDetail.initialForPullRefresh()
+                stopNestedScroll()
+                parent?.requestDisallowInterceptTouchEvent(false)
+                gestureCanReachParent = true
+            }
+        }
 
-                        when {
-                            initialScrollDirection == InitialScrollDirection.PULL_DOWN &&
-                                gateState == GateState.ALLOWED -> {
-                                parent?.requestDisallowInterceptTouchEvent(false)
-                            }
+        val handled = super.onTouchEvent(event)
+        event.recycle()
+        return handled
+    }
 
-                            else -> parent?.requestDisallowInterceptTouchEvent(true)
-                        }
+    @SuppressLint("WrongThread")
+    private fun updateInputDetail(event: MotionEvent) {
+        val action = event.actionMasked
+        val eventY = event.y
+
+        onTouchEventForDetailResult(event).accept { geckoDetail ->
+            if (!gestureCanReachParent) return@accept
+
+            inputDetail = inputDetail.updatedFrom(geckoDetail)
+
+            when (action) {
+                MotionEvent.ACTION_DOWN -> {
+                    gestureCanReachParent = inputDetail.canOverscrollTop()
+                    if (gestureCanReachParent && inputDetail.isUnhandled()) {
+                        parent?.requestDisallowInterceptTouchEvent(false)
                     }
                 }
-                return super.onTouchEvent(event)
-            }
 
-            MotionEvent.ACTION_UP -> {
-                val handled = super.onTouchEvent(event)
-                finishCurrentGesture()
-                return handled
-            }
+                MotionEvent.ACTION_MOVE -> {
+                    when {
+                        eventY > initialDownY -> {
+                            if (!inputDetail.isHandledByWebsite()) {
+                                parent?.requestDisallowInterceptTouchEvent(false)
+                            }
+                        }
 
-            MotionEvent.ACTION_CANCEL -> {
-                val handled = super.onTouchEvent(event)
+                        eventY < initialDownY -> {
+                            parent?.requestDisallowInterceptTouchEvent(true)
+                            gestureCanReachParent = false
+                        }
 
-                // SwipeRefreshLayout sends ACTION_CANCEL to GeckoView at the exact moment it
-                // intercepts an allowed downward drag. Do not close the gate here: the parent
-                // still polls canStartBrowserPullRefresh() while moving the spinner and again
-                // when the trigger threshold is released. Closing it made the hand-off cancel
-                // itself immediately, so no refresh indicator could ever become visible.
-                if (gateState == GateState.ALLOWED || gateState == GateState.PARENT_OWNED) {
-                    gateState = GateState.PARENT_OWNED
-                    parent?.requestDisallowInterceptTouchEvent(false)
-                } else {
-                    finishCurrentGesture()
+                        else -> parent?.requestDisallowInterceptTouchEvent(false)
+                    }
                 }
-                return handled
             }
 
-            else -> return super.onTouchEvent(event)
+            startNestedScroll(ViewCompat.SCROLL_AXIS_VERTICAL)
         }
     }
 
-    private fun finishCurrentGesture() {
-        ++gestureGeneration
-        gateState = GateState.BLOCKED
-        initialScrollDirection = InitialScrollDirection.NOT_YET
-        parent?.requestDisallowInterceptTouchEvent(false)
+    override fun setNestedScrollingEnabled(enabled: Boolean) {
+        nestedChildHelper.isNestedScrollingEnabled = enabled
+    }
+
+    override fun isNestedScrollingEnabled(): Boolean = nestedChildHelper.isNestedScrollingEnabled
+
+    override fun startNestedScroll(axes: Int): Boolean = nestedChildHelper.startNestedScroll(axes)
+
+    override fun stopNestedScroll() {
+        nestedChildHelper.stopNestedScroll()
+    }
+
+    override fun hasNestedScrollingParent(): Boolean = nestedChildHelper.hasNestedScrollingParent()
+
+    override fun dispatchNestedScroll(
+        dxConsumed: Int,
+        dyConsumed: Int,
+        dxUnconsumed: Int,
+        dyUnconsumed: Int,
+        offsetInWindow: IntArray?,
+    ): Boolean = nestedChildHelper.dispatchNestedScroll(
+        dxConsumed,
+        dyConsumed,
+        dxUnconsumed,
+        dyUnconsumed,
+        offsetInWindow,
+    )
+
+    override fun dispatchNestedPreScroll(
+        dx: Int,
+        dy: Int,
+        consumed: IntArray?,
+        offsetInWindow: IntArray?,
+    ): Boolean = nestedChildHelper.dispatchNestedPreScroll(dx, dy, consumed, offsetInWindow)
+
+    override fun dispatchNestedFling(velocityX: Float, velocityY: Float, consumed: Boolean): Boolean =
+        nestedChildHelper.dispatchNestedFling(velocityX, velocityY, consumed)
+
+    override fun dispatchNestedPreFling(velocityX: Float, velocityY: Float): Boolean =
+        nestedChildHelper.dispatchNestedPreFling(velocityX, velocityY)
+
+    private data class GeckoTouchDetail(
+        val handledResult: Int,
+        val scrollableDirections: Int,
+        val overscrollDirections: Int,
+    ) {
+        fun updatedFrom(detail: PanZoomController.InputResultDetail?): GeckoTouchDetail {
+            if (detail == null) return this
+
+            val nextHandled = when (detail.handledResult()) {
+                PanZoomController.INPUT_RESULT_UNHANDLED,
+                PanZoomController.INPUT_RESULT_HANDLED,
+                PanZoomController.INPUT_RESULT_HANDLED_CONTENT -> detail.handledResult()
+                else -> handledResult
+            }
+
+            return copy(
+                handledResult = nextHandled,
+                scrollableDirections = detail.scrollableDirections(),
+                overscrollDirections = detail.overscrollDirections(),
+            )
+        }
+
+        fun isUnhandled(): Boolean = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
+
+        fun isHandledByBrowser(): Boolean = handledResult == PanZoomController.INPUT_RESULT_HANDLED
+
+        fun isHandledByWebsite(): Boolean = handledResult == PanZoomController.INPUT_RESULT_HANDLED_CONTENT
+
+        fun canOverscrollTop(): Boolean =
+            handledResult != PanZoomController.INPUT_RESULT_HANDLED_CONTENT &&
+                scrollableDirections and PanZoomController.SCROLLABLE_FLAG_TOP == 0 &&
+                overscrollDirections and PanZoomController.OVERSCROLL_FLAG_VERTICAL != 0
+
+        companion object {
+            private const val INPUT_HANDLING_UNKNOWN = -1
+
+            fun initialForPullRefresh() = GeckoTouchDetail(
+                handledResult = INPUT_HANDLING_UNKNOWN,
+                scrollableDirections = 0,
+                overscrollDirections = PanZoomController.OVERSCROLL_FLAG_VERTICAL,
+            )
+        }
     }
 }

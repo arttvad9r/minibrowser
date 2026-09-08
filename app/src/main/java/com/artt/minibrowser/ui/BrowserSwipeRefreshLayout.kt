@@ -1,31 +1,23 @@
 package com.artt.minibrowser.ui
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
+import android.os.Build
+import android.view.HapticFeedbackConstants
 import android.view.ViewGroup
 import androidx.annotation.ColorInt
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 /**
- * Chrome-like pull-to-refresh shell around GeckoView.
+ * Firefox-style pull-to-refresh shell around GeckoView.
  *
- * AndroidX SwipeRefreshLayout provides the same core interaction model used by Chromium's modified
- * implementation: a 40 dp indicator, 64 dp trigger/rest target, 0.5 drag rate, nonlinear tension,
- * and native settle/retract animations. GeckoView remains the authority on whether touched web
- * content may yield the gesture to browser chrome.
+ * The gesture decision comes from the latest Gecko/APZ input result stored by
+ * [PullToRefreshGeckoView]. SwipeRefreshLayout owns the visual drag physics and spinner.
  */
 internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(context) {
     val geckoView = PullToRefreshGeckoView(context)
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val stopAfterLoad = Runnable { finishRefreshAnimation() }
-    private val hardStop = Runnable { finishRefreshAnimation() }
-
     private var pageSupportsRefresh = false
     private var pageLoading = false
-    private var refreshInFlight = false
-    private var sawLoadingAfterRefresh = false
     private var refreshAction: () -> Unit = {}
 
     init {
@@ -37,20 +29,20 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
             ),
         )
 
-        // Keep AndroidX's native spinner start/end geometry. The previous custom start offset
-        // changed SwipeRefreshLayout into custom-start mode and produced a visibly different
-        // slingshot path from Chrome/Firefox.
         setSize(DEFAULT)
-
         setOnChildScrollUpCallback { _, _ ->
-            !gestureEnabled() || !geckoView.canStartBrowserPullRefresh()
+            !pageSupportsRefresh || !geckoView.canOverscrollTop()
         }
         setOnRefreshListener {
-            if (!gestureEnabled() || !geckoView.canStartBrowserPullRefresh()) {
+            if (!pageSupportsRefresh) {
                 isRefreshing = false
                 return@setOnRefreshListener
             }
-            beginRefresh()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            }
+            refreshAction()
         }
     }
 
@@ -65,65 +57,26 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         this.pageLoading = pageLoading
         refreshAction = onRefresh
 
+        isEnabled = pageSupportsRefresh
         setColorSchemeColors(indicatorColor)
         setProgressBackgroundColorSchemeColor(indicatorBackgroundColor)
 
-        if (refreshInFlight) {
-            if (pageLoading) {
-                sawLoadingAfterRefresh = true
-                mainHandler.removeCallbacks(stopAfterLoad)
-            } else if (sawLoadingAfterRefresh) {
-                // Chromium keeps the completed refresh animation visible briefly instead of
-                // snapping it away exactly when the network load reports completion.
-                mainHandler.removeCallbacks(stopAfterLoad)
-                mainHandler.postDelayed(stopAfterLoad, STOP_REFRESH_ANIMATION_DELAY_MS)
-            }
+        // Firefox ends the refresh animation as soon as the observed tab stops loading.
+        if (!pageLoading || !pageSupportsRefresh) {
+            isRefreshing = false
         }
-
-        geckoView.configurePullRefreshGate(gestureEnabled())
     }
 
     fun resetForSessionChange() {
-        mainHandler.removeCallbacks(stopAfterLoad)
-        mainHandler.removeCallbacks(hardStop)
-        refreshInFlight = false
-        sawLoadingAfterRefresh = false
         isRefreshing = false
-        geckoView.configurePullRefreshGate(false)
+        pageLoading = false
+        geckoView.resetPullRefreshTouchState()
     }
 
     fun clearPullToRefresh() {
         resetForSessionChange()
         pageSupportsRefresh = false
-        pageLoading = false
         refreshAction = {}
-        geckoView.clearPullRefreshGate()
-    }
-
-    private fun beginRefresh() {
-        refreshInFlight = true
-        sawLoadingAfterRefresh = false
-        geckoView.configurePullRefreshGate(false)
-        mainHandler.removeCallbacks(stopAfterLoad)
-        mainHandler.removeCallbacks(hardStop)
-        mainHandler.postDelayed(hardStop, MAX_REFRESH_ANIMATION_DURATION_MS)
-        refreshAction()
-    }
-
-    private fun finishRefreshAnimation() {
-        mainHandler.removeCallbacks(stopAfterLoad)
-        mainHandler.removeCallbacks(hardStop)
-        refreshInFlight = false
-        sawLoadingAfterRefresh = false
-        isRefreshing = false
-        geckoView.configurePullRefreshGate(gestureEnabled())
-    }
-
-    private fun gestureEnabled(): Boolean =
-        pageSupportsRefresh && !pageLoading && !refreshInFlight
-
-    private companion object {
-        const val STOP_REFRESH_ANIMATION_DELAY_MS = 500L
-        const val MAX_REFRESH_ANIMATION_DURATION_MS = 7_500L
+        isEnabled = false
     }
 }

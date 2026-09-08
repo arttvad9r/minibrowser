@@ -59,7 +59,6 @@ internal fun GeckoContent(
             view.updateBrowserContentAccessibility(hiddenFromAccessibility)
             if (view.session !== session) {
                 container.resetForSessionChange()
-                view.trackScrollFor(null)
                 view.releaseSession()
                 session?.let { nextSession ->
                     // Gecko does not install a text-selection action mode for embedders by
@@ -71,7 +70,6 @@ internal fun GeckoContent(
                         }
                     }
                     view.setSession(nextSession)
-                    view.trackScrollFor(nextSession)
                 }
             }
             container.configurePullToRefresh(
