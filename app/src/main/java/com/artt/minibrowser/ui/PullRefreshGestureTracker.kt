@@ -7,6 +7,8 @@ import kotlin.math.abs
  *
  * Gecko decides whether the touched scroll container permits browser overscroll. This tracker only
  * turns an eligible, mostly-vertical downward drag into progress and a single refresh decision.
+ * Gesture direction is decided once it crosses touch slop: a pan that starts by scrolling content
+ * or moving sideways can never turn into pull-to-refresh midway through the same touch sequence.
  */
 internal class PullRefreshGestureTracker(
     private val touchSlopPx: Float,
@@ -21,6 +23,8 @@ internal class PullRefreshGestureTracker(
     private var startY = 0f
     private var pageEligible = false
     private var geckoEligible = false
+    private var directionAccepted = false
+    private var directionRejected = false
     private var progress = 0f
 
     fun onDown(x: Float, y: Float, pageEligible: Boolean) {
@@ -28,6 +32,8 @@ internal class PullRefreshGestureTracker(
         startY = y
         this.pageEligible = pageEligible
         geckoEligible = false
+        directionAccepted = false
+        directionRejected = false
         progress = 0f
     }
 
@@ -37,14 +43,29 @@ internal class PullRefreshGestureTracker(
     }
 
     fun onMove(x: Float, y: Float): Float {
-        if (!pageEligible || !geckoEligible) {
+        if (!pageEligible || directionRejected) {
             progress = 0f
             return 0f
         }
 
         val dx = abs(x - startX)
         val dy = y - startY
-        if (dy <= touchSlopPx || dy <= dx) {
+        if (!directionAccepted) {
+            val crossedSlop = maxOf(dx, abs(dy)) > touchSlopPx
+            if (!crossedSlop) {
+                progress = 0f
+                return 0f
+            }
+            if (dy > touchSlopPx && dy > dx) {
+                directionAccepted = true
+            } else {
+                directionRejected = true
+                progress = 0f
+                return 0f
+            }
+        }
+
+        if (!geckoEligible || dy <= touchSlopPx) {
             progress = 0f
             return 0f
         }
@@ -54,7 +75,7 @@ internal class PullRefreshGestureTracker(
     }
 
     fun finish(commit: Boolean): Boolean {
-        val shouldRefresh = commit && pageEligible && geckoEligible && progress >= 1f
+        val shouldRefresh = commit && pageEligible && geckoEligible && directionAccepted && progress >= 1f
         reset()
         return shouldRefresh
     }
@@ -66,6 +87,8 @@ internal class PullRefreshGestureTracker(
     private fun reset() {
         pageEligible = false
         geckoEligible = false
+        directionAccepted = false
+        directionRejected = false
         progress = 0f
     }
 }
