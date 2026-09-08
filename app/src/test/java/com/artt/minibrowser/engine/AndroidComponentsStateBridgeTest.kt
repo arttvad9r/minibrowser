@@ -38,7 +38,6 @@ class AndroidComponentsStateBridgeTest {
             canGoBack = true,
             canGoForward = false,
             fullscreen = false,
-            desktop = true,
         )
         val state = BrowserState(
             tabs = listOf(tab.toState()),
@@ -86,7 +85,6 @@ class AndroidComponentsStateBridgeTest {
         canGoBack: Boolean = false,
         canGoForward: Boolean = false,
         fullscreen: Boolean = false,
-        desktop: Boolean = false,
     ) = BrowserStoreTabSnapshot(
         id = id,
         url = url,
@@ -97,7 +95,6 @@ class AndroidComponentsStateBridgeTest {
         canGoBack = canGoBack,
         canGoForward = canGoForward,
         fullscreen = fullscreen,
-        desktop = desktop,
     )
 
     private fun BrowserStoreTabSnapshot.toState() = TabSessionState(
@@ -111,7 +108,6 @@ class AndroidComponentsStateBridgeTest {
             fullScreen = fullscreen,
             canGoBack = canGoBack,
             canGoForward = canGoForward,
-            desktopMode = desktop,
         ),
     )
 }
