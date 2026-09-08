@@ -21,8 +21,14 @@ class AndroidComponentsHistoryTrackingDelegateTest {
         delegate.onTitleChanged("https://example.test/page", "Example")
         delegate.onPreviewImageChange("https://example.test/page", "https://example.test/preview.png")
 
-        assertEquals(listOf("https://example.test/page" to null), backend.visits)
-        assertEquals(listOf("https://example.test/page" to "Example"), backend.titles)
+        assertEquals(
+            listOf<Pair<String, String?>>("https://example.test/page" to null),
+            backend.visits,
+        )
+        assertEquals(
+            listOf<Pair<String, String?>>("https://example.test/page" to "Example"),
+            backend.titles,
+        )
     }
 
     @Test
