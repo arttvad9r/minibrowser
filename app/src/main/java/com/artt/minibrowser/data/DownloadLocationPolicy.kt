@@ -3,12 +3,13 @@ package com.artt.minibrowser.data
 import java.net.URI
 
 private const val MEDIA_STORE_AUTHORITY = "media"
+private const val DOWNLOAD_DIRECTORY = "Download"
 
 internal fun isSupportedDownloadLocation(value: String): Boolean = runCatching {
     val uri = URI(value)
     when (uri.scheme?.lowercase()) {
         "content" -> isMediaStoreDownloadRow(uri)
-        "file" -> !uri.path.isNullOrBlank()
+        "file" -> isPublicDownloadFile(uri)
         else -> false
     }
 }.getOrDefault(false)
@@ -24,4 +25,16 @@ private fun isMediaStoreDownloadRow(uri: URI): Boolean {
         segments[0].isNotBlank() &&
         segments[1].equals("downloads", ignoreCase = true) &&
         segments[2].toLongOrNull()?.let { it >= 0L } == true
+}
+
+private fun isPublicDownloadFile(uri: URI): Boolean {
+    if (!uri.rawAuthority.isNullOrEmpty()) return false
+    if (uri.rawQuery != null || uri.rawFragment != null) return false
+    val segments = uri.path
+        ?.split('/')
+        ?.filter { it.isNotEmpty() }
+        .orEmpty()
+    if (segments.any { it == "." || it == ".." }) return false
+    val downloadIndex = segments.indexOfFirst { it.equals(DOWNLOAD_DIRECTORY, ignoreCase = true) }
+    return downloadIndex >= 0 && downloadIndex < segments.lastIndex
 }

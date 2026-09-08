@@ -13,7 +13,7 @@ import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
-private const val USER_NAVIGATION_CHAIN_WINDOW_MS = 10_000L
+private const val USER_NAVIGATION_CHAIN_WINDOW_MS = 3_000L
 private val URI_SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*$")
 private val BLOCKED_EXTERNAL_SCHEMES = setOf(
     "http",

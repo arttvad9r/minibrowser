@@ -23,7 +23,7 @@
 - `targetSdk`: 36
 - `compileSdk`: 37.1
 - Java/Kotlin target: 17
-- GeckoView: `154.0.20260814215756`
+- GeckoView: `154.0.20260824154132`
 - локальные APK по умолчанию собираются только для `arm64-v8a`;
 - CI переопределяет ABI на `x86_64` для emulator lanes;
 - release включают R8/minify и resource shrinking.
@@ -132,15 +132,15 @@ app/src/main/baselineProfiles/baseline-prof.txt
 app/src/main/baselineProfiles/startup-prof.txt
 ```
 
-## Текущий QA status
+## Последний подтверждённый physical QA
 
-`ui-polish-audit` / PR #5 прошёл полный automated + physical-device acceptance на tested code SHA `8dca897d610dfd0d4e53df4a7c3cddc326f84c32`.
+`ui-polish-audit` / PR #5 прошёл полный automated + physical-device acceptance на tested code SHA `8dca897d610dfd0d4e53df4a7c3cddc326f84c32`. Этот результат относится только к указанному SHA и не является сертификатом текущего `master` или более новых feature-веток.
 
 Physical device: OnePlus 13s (CPH2723), Android 16 / API 36 / arm64-v8a. Host tests, Roborazzi, lint и APK builds прошли; startup/recreation — 2/2 PASS; physical connected instrumentation — 69/69 PASS, 0 skipped, 0 failed; app-level crash/ANR не обнаружены.
 
 Ручной physical pass завершён для normal/private tabs, 10+ tabs и zero-tabs + Undo, rapid multi-close, HTTP/HTTPS, omnibox/IME, downloads, permissions, bundled extensions, bookmarks/history, find, desktop mode, share, external intents, light/dark theme, font scale 2x, TalkBack semantics, predictive back, rotation/background-foreground и internal empty/error states.
 
-Итог для tested code SHA: **READY FOR MERGE**.
+Итог только для tested code SHA `8dca897d610dfd0d4e53df4a7c3cddc326f84c32`: **READY FOR MERGE**.
 
 Android 17/API 37 остаётся отдельным неблокирующим preview diagnostic: системный `surfaceflinger` / `RegionSamplingThread` падает до завершения instrumentation, без зафиксированного app-level MiniBrowser `FATAL EXCEPTION`. 16 KB compatibility независимо подтверждена стабильной API 36 PS16K lane.
 

@@ -345,7 +345,8 @@ internal fun SettingsScreen(
                                 value = withBookmarks,
                                 role = Role.Checkbox,
                                 onValueChange = { withBookmarks = it },
-                            ),
+                            )
+                            .semantics(mergeDescendants = true) { },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(

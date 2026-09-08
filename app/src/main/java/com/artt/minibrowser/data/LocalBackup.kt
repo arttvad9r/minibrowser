@@ -6,6 +6,7 @@ import com.artt.minibrowser.engine.SearchEngine
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -112,9 +113,12 @@ internal class LocalBackupController(context: Context) {
                     )
                 },
             )
-            val encoded = json.encodeToString(document)
-            appContext.contentResolver.openOutputStream(uri, "w")?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
-                writer.write(encoded)
+            val encodedBytes = json.encodeToString(document).toByteArray(Charsets.UTF_8)
+            require(encodedBytes.size <= MAX_BACKUP_BYTES) {
+                "Backup data is too large"
+            }
+            appContext.contentResolver.openOutputStream(uri, "w")?.use { output ->
+                output.write(encodedBytes)
             } ?: error("Unable to open backup destination")
         }
     }
@@ -176,12 +180,35 @@ internal class LocalBackupController(context: Context) {
                 localAccessCanAsk = document.settings.localAccessCanAsk,
             )
 
-            DbHolder.db.dao().replaceUserData(
-                history = restoredHistory.values.sortedByDescending { it.visitedAt },
-                bookmarks = restoredBookmarks,
-            )
-            settings.replace(restoredPrefs)
-            sitePermissions.replace(restoredSitePolicy)
+            val dao = DbHolder.db.dao()
+            val previousHistory = dao.allHistory()
+            val previousBookmarks = dao.bookmarks()
+            val previousPrefs = settings.snapshot()
+            val previousSitePolicy = sitePermissions.snapshot()
+
+            try {
+                dao.replaceUserData(
+                    history = restoredHistory.values.sortedByDescending { it.visitedAt },
+                    bookmarks = restoredBookmarks,
+                )
+                settings.replace(restoredPrefs)
+                sitePermissions.replace(restoredSitePolicy)
+            } catch (failure: Throwable) {
+                val rollbackFailures = mutableListOf<Throwable>()
+                withContext(NonCancellable) {
+                    runCatching {
+                        dao.replaceUserData(previousHistory, previousBookmarks)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                    runCatching {
+                        settings.replace(previousPrefs)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                    runCatching {
+                        sitePermissions.replace(previousSitePolicy)
+                    }.exceptionOrNull()?.let(rollbackFailures::add)
+                }
+                rollbackFailures.forEach(failure::addSuppressed)
+                throw failure
+            }
             restoredPrefs
         }
     }
