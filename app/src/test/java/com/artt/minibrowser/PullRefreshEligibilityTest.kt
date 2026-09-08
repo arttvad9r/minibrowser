@@ -27,6 +27,11 @@ class PullRefreshEligibilityTest {
     }
 
     @Test
+    fun unhandledSimplePageAtTopIsEligible() {
+        assertTrue(eligible(handledResult = PanZoomController.INPUT_RESULT_UNHANDLED))
+    }
+
+    @Test
     fun disabledOrScrolledPageIsNotEligible() {
         assertFalse(eligible(pageEnabled = false))
         assertFalse(eligible(rootScrollY = 1))
@@ -49,9 +54,8 @@ class PullRefreshEligibilityTest {
     }
 
     @Test
-    fun contentHandledIgnoredAndUnhandledTouchesNeverStartBrowserRefresh() {
+    fun websiteHandledAndIgnoredTouchesNeverStartBrowserRefresh() {
         assertFalse(eligible(handledResult = PanZoomController.INPUT_RESULT_HANDLED_CONTENT))
         assertFalse(eligible(handledResult = PanZoomController.INPUT_RESULT_IGNORED))
-        assertFalse(eligible(handledResult = PanZoomController.INPUT_RESULT_UNHANDLED))
     }
 }

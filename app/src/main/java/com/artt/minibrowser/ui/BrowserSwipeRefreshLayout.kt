@@ -10,10 +10,10 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 /**
  * Chrome-like pull-to-refresh shell around GeckoView.
  *
- * AndroidX SwipeRefreshLayout intentionally keeps the same core interaction model used by
- * Chromium's modified implementation: 40 dp indicator, 64 dp trigger/rest target, 0.5 drag rate,
- * nonlinear tension, and the native 200/150 ms settle/retract animations. GeckoView remains the
- * authority on whether the touched web content may yield the gesture to browser chrome.
+ * AndroidX SwipeRefreshLayout provides the same core interaction model used by Chromium's modified
+ * implementation: a 40 dp indicator, 64 dp trigger/rest target, 0.5 drag rate, nonlinear tension,
+ * and native settle/retract animations. GeckoView remains the authority on whether touched web
+ * content may yield the gesture to browser chrome.
  */
 internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(context) {
     val geckoView = PullToRefreshGeckoView(context)
@@ -37,14 +37,10 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
             ),
         )
 
-        val density = resources.displayMetrics.density
-        val circleDiameter = (40f * density).toInt()
-        val triggerDistance = (64f * density).toInt()
-
+        // Keep AndroidX's native spinner start/end geometry. The previous custom start offset
+        // changed SwipeRefreshLayout into custom-start mode and produced a visibly different
+        // slingshot path from Chrome/Firefox.
         setSize(DEFAULT)
-        setProgressViewOffset(false, -circleDiameter, triggerDistance)
-        setDistanceToTriggerSync(triggerDistance)
-        setSlingshotDistance(triggerDistance)
 
         setOnChildScrollUpCallback { _, _ ->
             !gestureEnabled() || !geckoView.canStartBrowserPullRefresh()

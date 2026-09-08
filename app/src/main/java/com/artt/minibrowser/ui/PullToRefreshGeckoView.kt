@@ -11,13 +11,15 @@ import org.mozilla.geckoview.GeckoView
 /**
  * GeckoView child used by [BrowserSwipeRefreshLayout].
  *
- * It does not implement pull physics. It only asks Gecko whether the ACTION_DOWN belongs to a safe
- * browser overscroll gesture. While that asynchronous answer is pending, the parent is prevented
- * from intercepting. If meaningful movement begins before Gecko answers, this gesture remains page
- * owned; pull-to-refresh can only start at the beginning of a pan.
+ * The view mirrors Firefox's Gecko pull-to-refresh hand-off: ACTION_DOWN is first offered to Gecko
+ * for detailed input classification while the parent is prevented from intercepting. If Gecko says
+ * the touched content can overscroll from its top edge and the website did not consume the touch,
+ * a downward pan may be yielded to [BrowserSwipeRefreshLayout]. Pull physics and animation stay in
+ * AndroidX instead of being reimplemented here.
  */
 internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
     private enum class GateState { BLOCKED, PENDING, ALLOWED }
+    private enum class InitialScrollDirection { NOT_YET, PULL_DOWN, PUSH_UP }
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
@@ -25,8 +27,8 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
     private var rootScrollY = 0
     private var refreshGateEnabled = false
     private var gateState = GateState.BLOCKED
+    private var initialScrollDirection = InitialScrollDirection.NOT_YET
     private var gestureGeneration = 0L
-    private var downX = 0f
     private var downY = 0f
 
     private val scrollDelegate = object : GeckoSession.ScrollDelegate {
@@ -43,17 +45,20 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
         trackedSession = session
         rootScrollY = 0
         session?.scrollDelegate = scrollDelegate
-        blockCurrentGesture()
+        finishCurrentGesture()
     }
 
     fun configurePullRefreshGate(enabled: Boolean) {
         if (refreshGateEnabled == enabled) return
         refreshGateEnabled = enabled
-        if (!enabled) blockCurrentGesture()
+        if (!enabled) finishCurrentGesture()
     }
 
     fun canStartBrowserPullRefresh(): Boolean =
-        refreshGateEnabled && rootScrollY <= 0 && gateState == GateState.ALLOWED
+        refreshGateEnabled &&
+            rootScrollY <= 0 &&
+            gateState == GateState.ALLOWED &&
+            initialScrollDirection != InitialScrollDirection.PUSH_UP
 
     fun clearPullRefreshGate() {
         trackedSession?.let { previous ->
@@ -62,7 +67,7 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
         trackedSession = null
         rootScrollY = 0
         refreshGateEnabled = false
-        blockCurrentGesture()
+        finishCurrentGesture()
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -70,25 +75,28 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 val generation = ++gestureGeneration
-                downX = event.x
                 downY = event.y
+                initialScrollDirection = InitialScrollDirection.NOT_YET
                 gateState = GateState.BLOCKED
-                parent?.requestDisallowInterceptTouchEvent(false)
 
                 if (!refreshGateEnabled || rootScrollY > 0) {
+                    parent?.requestDisallowInterceptTouchEvent(false)
                     return super.onTouchEvent(event)
                 }
 
+                // Firefox keeps the parent out until Gecko answers. This avoids the refresh
+                // container stealing the gesture before APZ/site touch handlers classify it.
                 gateState = GateState.PENDING
                 parent?.requestDisallowInterceptTouchEvent(true)
 
-                // Dispatch ACTION_DOWN to Gecko exactly once and additionally request the input
-                // details needed by the browser-level gesture gate.
+                // ACTION_DOWN must go through this result-producing API exactly once. Subsequent
+                // MOVE/UP events continue through normal GeckoView dispatch below.
                 onTouchEventForDetailResult(event).accept(
                     { detail ->
                         if (generation != gestureGeneration || gateState != GateState.PENDING) {
                             return@accept
                         }
+
                         val allowed = detail != null && isBrowserPullRefreshEligible(
                             pageEnabled = refreshGateEnabled,
                             rootScrollY = rootScrollY,
@@ -97,12 +105,17 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
                             overscrollDirections = detail.overscrollDirections(),
                         )
                         gateState = if (allowed) GateState.ALLOWED else GateState.BLOCKED
-                        parent?.requestDisallowInterceptTouchEvent(false)
+
+                        if (allowed && initialScrollDirection != InitialScrollDirection.PUSH_UP) {
+                            parent?.requestDisallowInterceptTouchEvent(false)
+                        } else {
+                            parent?.requestDisallowInterceptTouchEvent(true)
+                        }
                     },
                     {
                         if (generation == gestureGeneration && gateState == GateState.PENDING) {
                             gateState = GateState.BLOCKED
-                            parent?.requestDisallowInterceptTouchEvent(false)
+                            parent?.requestDisallowInterceptTouchEvent(true)
                         }
                     },
                 )
@@ -110,33 +123,41 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
-                blockCurrentGesture()
+                ++gestureGeneration
+                gateState = GateState.BLOCKED
+                initialScrollDirection = InitialScrollDirection.PUSH_UP
+                parent?.requestDisallowInterceptTouchEvent(true)
                 return super.onTouchEvent(event)
             }
 
             MotionEvent.ACTION_MOVE -> {
-                if (gateState == GateState.PENDING) {
-                    val dx = abs(event.x - downX)
-                    val dy = abs(event.y - downY)
-                    if (maxOf(dx, dy) > touchSlop) {
-                        // Gecko answered too late for this pan. Do not let refresh join mid-gesture.
-                        blockCurrentGesture()
+                if (initialScrollDirection == InitialScrollDirection.NOT_YET) {
+                    val deltaY = event.y - downY
+                    if (abs(deltaY) > touchSlop) {
+                        initialScrollDirection =
+                            if (deltaY > 0f) {
+                                InitialScrollDirection.PULL_DOWN
+                            } else {
+                                InitialScrollDirection.PUSH_UP
+                            }
+
+                        when {
+                            initialScrollDirection == InitialScrollDirection.PULL_DOWN &&
+                                gateState == GateState.ALLOWED -> {
+                                parent?.requestDisallowInterceptTouchEvent(false)
+                            }
+
+                            else -> parent?.requestDisallowInterceptTouchEvent(true)
+                        }
                     }
                 }
                 return super.onTouchEvent(event)
             }
 
-            MotionEvent.ACTION_UP -> {
-                val handled = super.onTouchEvent(event)
-                blockCurrentGesture()
-                return handled
-            }
-
+            MotionEvent.ACTION_UP,
             MotionEvent.ACTION_CANCEL -> {
                 val handled = super.onTouchEvent(event)
-                if (gateState == GateState.PENDING) blockCurrentGesture()
-                // If ALLOWED, this CANCEL is normally generated because SwipeRefreshLayout has
-                // started intercepting. Keep the gate alive for the parent until that gesture ends.
+                finishCurrentGesture()
                 return handled
             }
 
@@ -144,9 +165,10 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
         }
     }
 
-    private fun blockCurrentGesture() {
+    private fun finishCurrentGesture() {
         ++gestureGeneration
         gateState = GateState.BLOCKED
+        initialScrollDirection = InitialScrollDirection.NOT_YET
         parent?.requestDisallowInterceptTouchEvent(false)
     }
 }
