@@ -91,6 +91,9 @@ dependencies {
     // EngineMiddleware's public API accepts concept-engine.Engine. browser-engine-gecko keeps that
     // dependency internal, so consumers wiring the middleware directly must expose it themselves.
     implementation("org.mozilla.components:concept-engine:154.0.1")
+    // Firefox 154.0.1 aligns Android Components/Nimbus with Glean 68.0.1. GeckoView Omni provides
+    // glean-native, while this artifact supplies the Kotlin/Java API referenced by Nimbus at R8 time.
+    implementation("org.mozilla.telemetry:glean:68.0.1")
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3.adaptive:adaptive:1.3.0")
