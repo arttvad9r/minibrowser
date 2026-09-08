@@ -1,0 +1,28 @@
+name: Probe Android Components 154.0.1
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch published POMs
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://maven.mozilla.org/maven2
+          curl --fail --silent --show-error --location \
+            "$base/org/mozilla/components/browser-engine-gecko/154.0.1/browser-engine-gecko-154.0.1.pom" \
+            -o browser-engine-gecko.pom
+          curl --fail --silent --show-error --location \
+            "$base/org/mozilla/components/browser-state/154.0.1/browser-state-154.0.1.pom" \
+            -o browser-state.pom
+          echo '=== browser-engine-gecko:154.0.1 Mozilla dependencies ==='
+          grep -A4 -B1 -E 'geckoview|appservices|service-nimbus' browser-engine-gecko.pom || true
+          echo '=== full browser-engine-gecko POM ==='
+          cat browser-engine-gecko.pom
