@@ -59,9 +59,10 @@ private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
 }
 
 /**
- * Produces the smallest BrowserStore action set needed to mirror the current MiniBrowser tab state.
- * Structural changes rebuild the tab list to preserve its exact order. Content changes are diffed
- * so Gecko progress callbacks do not cause unrelated BrowserStore updates.
+ * Produces granular BrowserStore actions that mirror MiniBrowser without rebuilding unaffected tabs.
+ * Structural changes remove, add and move only the tabs that actually changed, preserving existing
+ * BrowserStore sessions for ordinary reorders. Content changes are diffed by tab ID so structural
+ * updates do not cause unrelated content actions.
  */
 internal fun browserStoreSyncActions(
     state: BrowserState,
@@ -69,35 +70,77 @@ internal fun browserStoreSyncActions(
     selectedTabId: String?,
 ): List<BrowserAction> {
     val actions = mutableListOf<BrowserAction>()
-    val currentStructure = state.tabs.map { it.id to it.content.private }
-    val nextStructure = tabs.map { it.id to it.isPrivate }
-    val structureChanged = currentStructure != nextStructure
+    val currentById = state.tabs.associateBy { it.id }
+    val nextById = tabs.associateBy { it.id }
 
-    if (structureChanged) {
-        if (state.tabs.isNotEmpty()) {
-            actions += TabListAction.RemoveAllTabsAction(recoverable = false)
+    // Privacy is part of immutable tab creation state in this migration bridge. If it ever changes
+    // for an existing ID, recreate only that tab rather than rebuilding the complete BrowserStore.
+    val removedIds = state.tabs.mapNotNull { current ->
+        val next = nextById[current.id]
+        current.id.takeIf { next == null || next.isPrivate != current.content.private }
+    }
+    val removedIdSet = removedIds.toSet()
+    if (removedIds.isNotEmpty()) {
+        actions += TabListAction.RemoveTabsAction(removedIds)
+    }
+
+    val addedTabs = tabs.filter { next ->
+        val current = currentById[next.id]
+        current == null || current.content.private != next.isPrivate
+    }
+    val addedIdSet = addedTabs.mapTo(mutableSetOf()) { it.id }
+    if (addedTabs.isNotEmpty()) {
+        actions += TabListAction.AddMultipleTabsAction(
+            addedTabs.map { tab ->
+                createTab(
+                    url = tab.url,
+                    private = tab.isPrivate,
+                    id = tab.id,
+                    title = tab.title,
+                )
+            },
+        )
+    }
+
+    tabs.forEach { tab ->
+        if (tab.id in addedIdSet) {
+            actions += fullContentActions(tab)
+        } else {
+            currentById[tab.id]?.let { current ->
+                actions += changedContentActions(current.content, tab)
+            }
         }
-        if (tabs.isNotEmpty()) {
-            actions += TabListAction.AddMultipleTabsAction(
-                tabs.map { tab ->
-                    createTab(
-                        url = tab.url,
-                        private = tab.isPrivate,
-                        id = tab.id,
-                        title = tab.title,
-                    )
-                },
-            )
-            tabs.forEach { tab -> actions += fullContentActions(tab) }
-        }
-    } else {
-        tabs.forEachIndexed { index, tab ->
-            actions += changedContentActions(state.tabs[index].content, tab)
+    }
+
+    // RemoveTabs preserves relative order and AddMultipleTabs appends new tabs. Simulate that order,
+    // then use AC's MoveTabsAction to reach MiniBrowser's exact order without destroying sessions.
+    val simulatedOrder = state.tabs
+        .map { it.id }
+        .filterNot { it in removedIdSet }
+        .toMutableList()
+        .apply { addAll(addedTabs.map { it.id }) }
+
+    tabs.forEachIndexed { targetIndex, tab ->
+        if (simulatedOrder.getOrNull(targetIndex) != tab.id) {
+            val currentIndex = simulatedOrder.indexOf(tab.id)
+            if (currentIndex >= 0) {
+                val targetTabId = simulatedOrder[targetIndex]
+                actions += TabListAction.MoveTabsAction(
+                    tabIds = listOf(tab.id),
+                    targetTabId = targetTabId,
+                    placeAfter = false,
+                )
+                simulatedOrder.removeAt(currentIndex)
+                simulatedOrder.add(targetIndex, tab.id)
+            }
         }
     }
 
     val validSelectedId = selectedTabId?.takeIf { selected -> tabs.any { it.id == selected } }
-    if (validSelectedId != null && (structureChanged || state.selectedTabId != validSelectedId)) {
+    if (
+        validSelectedId != null &&
+        (state.selectedTabId != validSelectedId || validSelectedId in removedIdSet)
+    ) {
         actions += TabListAction.SelectTabAction(validSelectedId)
     }
 
