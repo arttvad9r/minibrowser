@@ -18,7 +18,7 @@ import org.mozilla.geckoview.GeckoView
  * AndroidX instead of being reimplemented here.
  */
 internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
-    private enum class GateState { BLOCKED, PENDING, ALLOWED }
+    private enum class GateState { BLOCKED, PENDING, ALLOWED, PARENT_OWNED }
     private enum class InitialScrollDirection { NOT_YET, PULL_DOWN, PUSH_UP }
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
@@ -57,7 +57,7 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
     fun canStartBrowserPullRefresh(): Boolean =
         refreshGateEnabled &&
             rootScrollY <= 0 &&
-            gateState == GateState.ALLOWED &&
+            (gateState == GateState.ALLOWED || gateState == GateState.PARENT_OWNED) &&
             initialScrollDirection != InitialScrollDirection.PUSH_UP
 
     fun clearPullRefreshGate() {
@@ -154,10 +154,26 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
                 return super.onTouchEvent(event)
             }
 
-            MotionEvent.ACTION_UP,
-            MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
                 val handled = super.onTouchEvent(event)
                 finishCurrentGesture()
+                return handled
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                val handled = super.onTouchEvent(event)
+
+                // SwipeRefreshLayout sends ACTION_CANCEL to GeckoView at the exact moment it
+                // intercepts an allowed downward drag. Do not close the gate here: the parent
+                // still polls canStartBrowserPullRefresh() while moving the spinner and again
+                // when the trigger threshold is released. Closing it made the hand-off cancel
+                // itself immediately, so no refresh indicator could ever become visible.
+                if (gateState == GateState.ALLOWED || gateState == GateState.PARENT_OWNED) {
+                    gateState = GateState.PARENT_OWNED
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                } else {
+                    finishCurrentGesture()
+                }
                 return handled
             }
 
