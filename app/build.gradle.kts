@@ -12,6 +12,19 @@ plugins {
 // for the x86_64 emulator instrumentation build. Never package two copies of Gecko into one APK.
 val minibrowserAbi = providers.gradleProperty("minibrowserAbi").orElse("arm64-v8a")
 
+// The published GeckoView Omni artifact does not carry the glean-native capability metadata that
+// Firefox adds to its local GeckoView project. Restore that metadata for consumers so Gradle can
+// recognize GeckoView and standalone glean-native as alternative providers of the same native API.
+dependencies.components {
+    withModule("org.mozilla.geckoview:geckoview-omni") {
+        allVariants {
+            withCapabilities {
+                addCapability("org.mozilla.telemetry", "glean-native", "68.0.1")
+            }
+        }
+    }
+}
+
 // GeckoView Omni already provides Glean's native capability. Match Firefox's dependency resolution
 // so org.mozilla.telemetry:glean supplies only the Kotlin/Java API instead of packaging a second
 // libxul.so from standalone glean-native.
