@@ -89,6 +89,10 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
                 onTouchEventForDetailResult(event).accept(
                     { detail ->
                         if (generation != gestureGeneration) return@accept
+                        if (detail == null) {
+                            gestureTracker.setGeckoEligible(false)
+                            return@accept
+                        }
                         val canScrollTowardTop =
                             detail.scrollableDirections() and PanZoomController.SCROLLABLE_FLAG_TOP != 0
                         val browserPullAllowed =
