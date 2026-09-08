@@ -83,8 +83,11 @@ roborazzi {
 }
 
 dependencies {
-    implementation("org.mozilla.geckoview:geckoview:154.0.20260824154132")
-    implementation("org.mozilla.components:browser-state:154.0")
+    // Android Components' Gecko engine uses the Omni variant. Keep the exact Gecko build ID that
+    // MiniBrowser already shipped; Omni adds the native Glean capability but does not change Gecko.
+    implementation("org.mozilla.geckoview:geckoview-omni:154.0.20260824154132")
+    implementation("org.mozilla.components:browser-state:154.0.1")
+    implementation("org.mozilla.components:browser-engine-gecko:154.0.1")
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3.adaptive:adaptive:1.3.0")
