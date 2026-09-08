@@ -1,5 +1,3 @@
-import org.gradle.api.artifacts.component.ModuleComponentIdentifier
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -11,35 +9,6 @@ plugins {
 // Every APK is single-ABI. Phone/local builds default to arm64; CI overrides this property only
 // for the x86_64 emulator instrumentation build. Never package two copies of Gecko into one APK.
 val minibrowserAbi = providers.gradleProperty("minibrowserAbi").orElse("arm64-v8a")
-
-// The published GeckoView Omni artifact does not carry the glean-native capability metadata that
-// Firefox adds to its local GeckoView project. Restore that metadata for consumers so Gradle can
-// recognize GeckoView and standalone glean-native as alternative providers of the same native API.
-dependencies.components {
-    withModule("org.mozilla.geckoview:geckoview-omni") {
-        allVariants {
-            withCapabilities {
-                addCapability("org.mozilla.telemetry", "glean-native", "68.0.1")
-            }
-        }
-    }
-}
-
-// GeckoView Omni already provides Glean's native capability. Match Firefox's dependency resolution
-// so org.mozilla.telemetry:glean supplies only the Kotlin/Java API instead of packaging a second
-// libxul.so from standalone glean-native.
-configurations.configureEach {
-    resolutionStrategy.capabilitiesResolution.withCapability("org.mozilla.telemetry:glean-native") {
-        val toBeSelected = candidates.firstOrNull { candidate ->
-            val id = candidate.id
-            id is ModuleComponentIdentifier && id.module.contains("geckoview")
-        }
-        if (toBeSelected != null) {
-            select(toBeSelected)
-        }
-        because("use GeckoView Glean instead of standalone Glean")
-    }
-}
 
 android {
     namespace = "com.artt.minibrowser"
@@ -115,16 +84,19 @@ roborazzi {
 
 dependencies {
     // Android Components' Gecko engine uses the Omni variant. Keep the exact Gecko build ID that
-    // MiniBrowser already shipped; Omni adds the native Glean capability but does not change Gecko.
+    // MiniBrowser already shipped; Omni supplies the native Glean implementation used by Firefox.
     implementation("org.mozilla.geckoview:geckoview-omni:154.0.20260824154132")
     implementation("org.mozilla.components:browser-state:154.0.1")
     implementation("org.mozilla.components:browser-engine-gecko:154.0.1")
     // EngineMiddleware's public API accepts concept-engine.Engine. browser-engine-gecko keeps that
     // dependency internal, so consumers wiring the middleware directly must expose it themselves.
     implementation("org.mozilla.components:concept-engine:154.0.1")
-    // Firefox 154.0.1 aligns Android Components/Nimbus with Glean 68.0.1. GeckoView Omni provides
-    // glean-native, while this artifact supplies the Kotlin/Java API referenced by Nimbus at R8 time.
-    implementation("org.mozilla.telemetry:glean:68.0.1")
+    // Firefox 154.0.1 aligns Android Components/Nimbus with Glean 68.0.1. We need its Kotlin/Java
+    // API for Nimbus/R8, but GeckoView Omni already contains the matching native Glean provider.
+    // Exclude only the redundant standalone native artifact to avoid packaging a second libxul.so.
+    implementation("org.mozilla.telemetry:glean:68.0.1") {
+        exclude(group = "org.mozilla.telemetry", module = "glean-native")
+    }
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3.adaptive:adaptive:1.3.0")
