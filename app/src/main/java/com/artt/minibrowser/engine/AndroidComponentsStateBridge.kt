@@ -21,6 +21,10 @@ import kotlin.math.roundToInt
  * Temporary migration snapshot used while raw GeckoSession remains the execution source of truth.
  * BrowserStore is intentionally shadow state at this stage; later Android Components features can
  * move one responsibility at a time without forcing a simultaneous TabManager rewrite.
+ *
+ * Desktop mode deliberately remains owned by TabManager for now. Android Components 154 exposes
+ * ContentState.desktopMode but no public BrowserAction that can update it. Rebuilding a tab only to
+ * mirror that bit would discard granular state and undermine the purpose of this bridge.
  */
 internal data class BrowserStoreTabSnapshot(
     val id: String,
@@ -32,7 +36,6 @@ internal data class BrowserStoreTabSnapshot(
     val canGoBack: Boolean,
     val canGoForward: Boolean,
     val fullscreen: Boolean,
-    val desktop: Boolean,
 )
 
 private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
@@ -52,7 +55,6 @@ private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
         canGoBack = canGoBack,
         canGoForward = canGoForward,
         fullscreen = fullscreen,
-        desktop = desktop,
     )
 }
 
@@ -108,7 +110,6 @@ private fun fullContentActions(tab: BrowserStoreTabSnapshot): List<BrowserAction
     ContentAction.UpdateBackNavigationStateAction(tab.id, tab.canGoBack),
     ContentAction.UpdateForwardNavigationStateAction(tab.id, tab.canGoForward),
     ContentAction.FullScreenChangedAction(tab.id, tab.fullscreen),
-    ContentAction.UpdateDesktopModeAction(tab.id, tab.desktop),
 )
 
 private fun changedContentActions(
@@ -127,9 +128,6 @@ private fun changedContentActions(
     }
     if (current.fullScreen != next.fullscreen) {
         add(ContentAction.FullScreenChangedAction(next.id, next.fullscreen))
-    }
-    if (current.desktopMode != next.desktop) {
-        add(ContentAction.UpdateDesktopModeAction(next.id, next.desktop))
     }
 }
 
