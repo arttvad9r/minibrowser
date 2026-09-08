@@ -8,10 +8,10 @@ import org.mozilla.geckoview.GeckoSession
  * Creates an Android Components engine-session facade around an existing raw GeckoSession without
  * changing MiniBrowser's current delegate ownership.
  *
- * GeckoEngineSession installs its own delegates during construction. Stage 2b only needs the
- * facade so GeckoEngineView can render the existing session; navigation, progress, content,
- * history, prompt and permission behavior must remain owned by TabManager until those features are
- * migrated deliberately. Snapshot and restore those delegates immediately after construction.
+ * GeckoEngineSession installs Gecko delegates during construction. Stage 2b only needs the facade
+ * so GeckoEngineView can render the existing session; TabManager and GeckoView must retain the exact
+ * delegate set they had before wrapping. Restoring every delegate installed by GeckoEngineSession
+ * also prevents the raw GeckoSession from retaining this temporary sidecar after EngineView.release().
  */
 internal fun createGeckoEngineSessionSidecar(
     runtime: GeckoRuntime,
@@ -21,9 +21,14 @@ internal fun createGeckoEngineSessionSidecar(
     val navigationDelegate = session.navigationDelegate
     val progressDelegate = session.progressDelegate
     val contentDelegate = session.contentDelegate
-    val historyDelegate = session.historyDelegate
-    val promptDelegate = session.promptDelegate
+    val contentBlockingDelegate = session.contentBlockingDelegate
     val permissionDelegate = session.permissionDelegate
+    val promptDelegate = session.promptDelegate
+    val mediaDelegate = session.mediaDelegate
+    val historyDelegate = session.historyDelegate
+    val mediaSessionDelegate = session.mediaSessionDelegate
+    val scrollDelegate = session.scrollDelegate
+    val translationsSessionDelegate = session.translationsSessionDelegate
 
     val engineSession = GeckoEngineSession(
         runtime = runtime,
@@ -35,9 +40,14 @@ internal fun createGeckoEngineSessionSidecar(
     session.navigationDelegate = navigationDelegate
     session.progressDelegate = progressDelegate
     session.contentDelegate = contentDelegate
-    session.historyDelegate = historyDelegate
-    session.promptDelegate = promptDelegate
+    session.contentBlockingDelegate = contentBlockingDelegate
     session.permissionDelegate = permissionDelegate
+    session.promptDelegate = promptDelegate
+    session.mediaDelegate = mediaDelegate
+    session.historyDelegate = historyDelegate
+    session.mediaSessionDelegate = mediaSessionDelegate
+    session.scrollDelegate = scrollDelegate
+    session.translationsSessionDelegate = translationsSessionDelegate
 
     return engineSession
 }
