@@ -69,7 +69,7 @@ private object DownloadIo {
 
     fun save(
         context: Context,
-        body: InputStream,
+        body: DownloadBody,
         name: String,
         mime: String,
         sourceUrl: String,
@@ -83,7 +83,7 @@ private object DownloadIo {
             if (persistHistory) DownloadHistory.init(appContext)
             val historyId = if (persistHistory) DownloadHistory.start(name, sourceUrl, mime) else null
             val result = runCatching {
-                body.use { input ->
+                body.useStream { input ->
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         saveToMediaStore(appContext, input, name, mime)
                     } else {
@@ -163,11 +163,12 @@ class GeckoDownloadController(
     private val requestPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)? = null,
 ) {
     fun handle(response: WebResponse, isPrivate: Boolean = false) {
-        val body = response.body
-        if (body == null) {
+        val responseBody = response.body
+        if (responseBody == null) {
             toast(activity.applicationContext, activity.getString(R.string.download_response_missing))
             return
         }
+        val body = InputStreamDownloadBody(responseBody)
 
         val fallback = runCatching { Uri.parse(response.uri).lastPathSegment }
             .getOrNull()
@@ -209,7 +210,7 @@ class GeckoDownloadController(
     }
 
     private fun ensureStorageAccessAndSave(
-        body: InputStream,
+        body: DownloadBody,
         name: String,
         mime: String,
         sourceUrl: String,
@@ -238,7 +239,7 @@ class GeckoDownloadController(
         }
     }
 
-    private fun InputStream.closeQuietly() {
+    private fun DownloadBody.closeQuietly() {
         runCatching { close() }
     }
 }
