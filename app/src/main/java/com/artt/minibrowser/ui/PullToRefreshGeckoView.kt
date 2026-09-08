@@ -82,14 +82,20 @@ internal class PullToRefreshGeckoView(context: Context) : GeckoView(context) {
                 onPullProgress(0f)
 
                 // This dispatches ACTION_DOWN to Gecko exactly once and additionally returns the
-                // browser-overscroll policy for the touched scroll container.
+                // browser-overscroll policy for the touched scroll container. Even when the root
+                // document is at Y=0, a nested scroller under the finger may still be able to move
+                // upward; SCROLLABLE_FLAG_TOP keeps that gesture owned by page content instead of
+                // accidentally turning it into browser refresh.
                 onTouchEventForDetailResult(event).accept(
                     { detail ->
                         if (generation != gestureGeneration) return@accept
-                        val verticalOverscrollAllowed = detail != null &&
+                        val canScrollTowardTop =
+                            detail.scrollableDirections() and PanZoomController.SCROLLABLE_FLAG_TOP != 0
+                        val browserPullAllowed =
                             detail.handledResult() != PanZoomController.INPUT_RESULT_IGNORED &&
-                            detail.overscrollDirections() and PanZoomController.OVERSCROLL_FLAG_VERTICAL != 0
-                        gestureTracker.setGeckoEligible(verticalOverscrollAllowed)
+                                !canScrollTowardTop &&
+                                detail.overscrollDirections() and PanZoomController.OVERSCROLL_FLAG_VERTICAL != 0
+                        gestureTracker.setGeckoEligible(browserPullAllowed)
                     },
                     {
                         if (generation == gestureGeneration) gestureTracker.setGeckoEligible(false)
