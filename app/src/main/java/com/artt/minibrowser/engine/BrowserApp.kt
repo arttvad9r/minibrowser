@@ -10,6 +10,8 @@ import android.os.Trace
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.ui.TabPreviewStore
+import mozilla.components.browser.engine.gecko.GeckoEngine
+import mozilla.components.browser.state.engine.EngineMiddleware
 import mozilla.components.browser.state.store.BrowserStore
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
@@ -23,9 +25,24 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
 
 class BrowserApp : Application() {
     internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
-    internal val browserStore by lazy(LazyThreadSafetyMode.NONE) { BrowserStore() }
     internal lateinit var runtime: GeckoRuntime
         private set
+    internal val engine by lazy(LazyThreadSafetyMode.NONE) {
+        GeckoEngine(
+            context = this,
+            runtime = runtime,
+        )
+    }
+    internal val browserStore by lazy(LazyThreadSafetyMode.NONE) {
+        BrowserStore(
+            middleware = EngineMiddleware.create(
+                engine = engine,
+                // TabManager still owns the current hot-tab/session memory policy during this
+                // bridge. Do not let Android Components independently suspend raw GeckoSessions.
+                trimMemoryAutomatically = false,
+            ),
+        )
+    }
     internal val extensionLoader by lazy(LazyThreadSafetyMode.NONE) { ExtensionLoader(runtime) }
     private var mainProcess = false
 
