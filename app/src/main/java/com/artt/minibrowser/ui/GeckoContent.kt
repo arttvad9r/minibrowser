@@ -1,20 +1,28 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.artt.minibrowser.ui
 
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.view.View
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.view.ViewCompat
 import com.artt.minibrowser.engine.Tab
 import org.mozilla.geckoview.BasicSelectionActionDelegate
-import org.mozilla.geckoview.GeckoView
 
 internal fun View.updateBrowserContentAccessibility(hidden: Boolean) {
     importantForAccessibility = if (hidden) {
@@ -44,30 +52,22 @@ internal fun GeckoContent(
     val hiddenFromAccessibility = LocalBrowserContentAccessibilityHidden.current
     val pageSettled = tab != null && tab.progress < 0f &&
         (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true))
+    var pullFraction by remember(tabId) { mutableFloatStateOf(0f) }
 
-    PullToRefreshBox(
-        isRefreshing = false,
-        onRefresh = {
-            if (pageSettled) session?.reload()
-        },
-        modifier = modifier,
-    ) {
+    Box(modifier = modifier) {
         AndroidView(
             factory = { context ->
-                GeckoView(context).apply {
+                PullToRefreshGeckoView(context).apply {
                     // GeckoView exposes the web form as a virtual Android Autofill structure so the
                     // user's system provider (Bitwarden, 1Password, Google Password Manager, etc.)
                     // can fill credentials without Minibrowser storing them itself.
                     setAutofillEnabled(true)
-                    // AndroidView can forward unconsumed scroll deltas to the Compose parent only
-                    // when nested scrolling is enabled on the hosted View. PullToRefreshBox then
-                    // receives the downward overscroll after Gecko has reached the top of the page.
-                    ViewCompat.setNestedScrollingEnabled(this, true)
                 }
             },
             update = { view ->
                 view.updateBrowserContentAccessibility(hiddenFromAccessibility)
                 if (view.session !== session) {
+                    view.trackScrollFor(null)
                     view.releaseSession()
                     session?.let { nextSession ->
                         // Gecko does not install a text-selection action mode for embedders by
@@ -79,8 +79,16 @@ internal fun GeckoContent(
                             }
                         }
                         view.setSession(nextSession)
+                        view.trackScrollFor(nextSession)
                     }
                 }
+                view.configurePullToRefresh(
+                    enabled = pageSettled,
+                    onProgress = { progress -> pullFraction = progress },
+                    onRefresh = {
+                        if (pageSettled) session?.reload()
+                    },
+                )
                 previewStore.maybeCapture(
                     view = view,
                     tabId = tabId,
@@ -92,9 +100,33 @@ internal fun GeckoContent(
             onRelease = { view ->
                 // The view only borrows the session. TabManager remains responsible for persistence and
                 // closing it; releasing here prevents a disposed AndroidView from retaining the session.
+                view.clearPullToRefresh()
                 view.releaseSession()
             },
             modifier = Modifier.fillMaxSize(),
         )
+
+        if (pullFraction > 0f) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 8.dp)
+                    .offset(y = (pullFraction.coerceIn(0f, 1f) * 12f).dp)
+                    .size(40.dp),
+                shape = CircleShape,
+                tonalElevation = 3.dp,
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        progress = { pullFraction.coerceIn(0f, 1f) },
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+            }
+        }
     }
 }
