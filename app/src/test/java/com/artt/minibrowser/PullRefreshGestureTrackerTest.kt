@@ -29,7 +29,30 @@ class PullRefreshGestureTrackerTest {
         tracker.setGeckoEligible(true)
 
         assertEquals(0f, tracker.onMove(x = 80f, y = 40f))
+        assertEquals(0f, tracker.onMove(x = 0f, y = 100f))
         assertFalse(tracker.finish(commit = true))
+    }
+
+    @Test
+    fun contentScrollThenReverseDoesNotBecomeRefreshPull() {
+        val tracker = tracker()
+        tracker.onDown(x = 0f, y = 100f, pageEligible = true)
+        tracker.setGeckoEligible(true)
+
+        assertEquals(0f, tracker.onMove(x = 0f, y = 70f))
+        assertEquals(0f, tracker.onMove(x = 0f, y = 190f))
+        assertFalse(tracker.finish(commit = true))
+    }
+
+    @Test
+    fun movementInsideTouchSlopDoesNotLockDirection() {
+        val tracker = tracker()
+        tracker.onDown(x = 0f, y = 0f, pageEligible = true)
+        tracker.setGeckoEligible(true)
+
+        assertEquals(0f, tracker.onMove(x = 6f, y = -6f))
+        assertEquals(1f, tracker.onMove(x = 0f, y = 90f))
+        assertTrue(tracker.finish(commit = true))
     }
 
     @Test
