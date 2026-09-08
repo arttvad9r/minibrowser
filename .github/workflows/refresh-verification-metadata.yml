@@ -1,24 +1,24 @@
-name: Refresh Dependency Verification Metadata
+name: Finalize Pull Refresh Verification Metadata
 
 on:
   push:
     branches: [audit-fixes-2026-09-07]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: refresh-verification-metadata-${{ github.ref }}
+  group: finalize-verification-metadata-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  generate:
+  finalize:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          persist-credentials: false
+          persist-credentials: true
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -32,10 +32,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Compile debug and refresh SHA-256 metadata
         run: ./gradlew --write-verification-metadata sha256 :app:compileDebugKotlin -PminibrowserAbi=arm64-v8a --stacktrace
-      - name: Upload verification metadata
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: verification-metadata-refresh
-          path: gradle/verification-metadata.xml
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit metadata and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/refresh-verification-metadata.yml
+          git add gradle/verification-metadata.xml .github/workflows/refresh-verification-metadata.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "ci: record pull refresh dependency verification"
+          git push origin HEAD:audit-fixes-2026-09-07
