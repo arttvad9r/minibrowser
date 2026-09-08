@@ -88,6 +88,9 @@ dependencies {
     implementation("org.mozilla.geckoview:geckoview-omni:154.0.20260824154132")
     implementation("org.mozilla.components:browser-state:154.0.1")
     implementation("org.mozilla.components:browser-engine-gecko:154.0.1")
+    // EngineMiddleware's public API accepts concept-engine.Engine. browser-engine-gecko keeps that
+    // dependency internal, so consumers wiring the middleware directly must expose it themselves.
+    implementation("org.mozilla.components:concept-engine:154.0.1")
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3.adaptive:adaptive:1.3.0")
