@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
+import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.Tab
 import org.mozilla.geckoview.BasicSelectionActionDelegate
 
@@ -26,7 +27,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-/** Thin Compose/GeckoView bridge. Browser chrome remains independent of Gecko session objects. */
+/** Thin Compose/EngineView bridge. Browser chrome remains independent of Gecko session objects. */
 @Composable
 internal fun GeckoContent(
     tab: Tab?,
@@ -46,32 +47,26 @@ internal fun GeckoContent(
     val indicatorBackgroundColor = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
 
     AndroidView(
-        factory = { context ->
-            BrowserSwipeRefreshLayout(context).apply {
-                // GeckoView exposes the web form as a virtual Android Autofill structure so the
-                // user's system provider (Bitwarden, 1Password, Google Password Manager, etc.)
-                // can fill credentials without Minibrowser storing them itself.
-                geckoView.setAutofillEnabled(true)
-            }
-        },
+        factory = { context -> BrowserSwipeRefreshLayout(context) },
         update = { container ->
-            val view = container.geckoView
+            val view = container.engineView
             view.updateBrowserContentAccessibility(hiddenFromAccessibility)
-            if (view.session !== session) {
-                container.resetForSessionChange()
-                view.releaseSession()
-                session?.let { nextSession ->
-                    // Gecko does not install a text-selection action mode for embedders by
-                    // default. The built-in delegate supplies Select all / Copy / Cut / Paste /
-                    // Process text using Android's standard contextual toolbar.
-                    if (nextSession.selectionActionDelegate == null) {
-                        view.context.findActivity()?.let { activity ->
-                            nextSession.setSelectionActionDelegate(BasicSelectionActionDelegate(activity))
-                        }
+            session?.let { nextSession ->
+                // Gecko does not install a text-selection action mode for embedders by default.
+                // Keep Android's standard contextual toolbar until selection is migrated to an
+                // Android Components SelectionActionDelegate.
+                if (nextSession.selectionActionDelegate == null) {
+                    view.context.findActivity()?.let { activity ->
+                        nextSession.setSelectionActionDelegate(BasicSelectionActionDelegate(activity))
                     }
-                    view.setSession(nextSession)
                 }
             }
+            val app = view.context.applicationContext as BrowserApp
+            container.bindSession(
+                runtime = app.runtime,
+                session = session,
+                privateMode = isPrivate,
+            )
             container.configurePullToRefresh(
                 pageSupportsRefresh = pageSupportsRefresh,
                 pageLoading = pageLoading,
@@ -89,12 +84,7 @@ internal fun GeckoContent(
                 pageSettled = pageSettled,
             )
         },
-        onRelease = { container ->
-            // The view only borrows the session. TabManager remains responsible for persistence and
-            // closing it; releasing here prevents a disposed AndroidView from retaining the session.
-            container.clearPullToRefresh()
-            container.geckoView.releaseSession()
-        },
+        onRelease = { container -> container.clearPullToRefresh() },
         modifier = modifier,
     )
 }
