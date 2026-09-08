@@ -59,7 +59,7 @@ class AndroidComponentsStateBridgeTest {
     }
 
     @Test
-    fun tabReorderRebuildsStoreInExactMiniBrowserOrder() {
+    fun tabReorderUsesMoveWithoutRebuildingSessions() {
         val first = snapshot(id = "1", url = "https://one.example")
         val second = snapshot(id = "2", url = "https://two.example")
         val state = BrowserState(
@@ -69,10 +69,102 @@ class AndroidComponentsStateBridgeTest {
 
         val actions = browserStoreSyncActions(state, listOf(second, first), selectedTabId = "1")
 
-        assertEquals(TabListAction.RemoveAllTabsAction(recoverable = false), actions[0])
+        assertEquals(
+            listOf(
+                TabListAction.MoveTabsAction(
+                    tabIds = listOf("2"),
+                    targetTabId = "1",
+                    placeAfter = false,
+                ),
+            ),
+            actions,
+        )
+    }
+
+    @Test
+    fun tabAddedInMiddleIsAddedThenMovedWithoutRebuildingExistingTabs() {
+        val first = snapshot(id = "1", url = "https://one.example")
+        val second = snapshot(id = "2", url = "https://two.example")
+        val third = snapshot(id = "3", url = "https://three.example")
+        val state = BrowserState(
+            tabs = listOf(first.toState(), third.toState()),
+            selectedTabId = "1",
+        )
+
+        val actions = browserStoreSyncActions(
+            state,
+            listOf(first, second, third),
+            selectedTabId = "1",
+        )
+
+        val add = assertIs<TabListAction.AddMultipleTabsAction>(actions.first())
+        assertEquals(listOf("2"), add.tabs.map { it.id })
+        assertEquals(
+            TabListAction.MoveTabsAction(
+                tabIds = listOf("2"),
+                targetTabId = "3",
+                placeAfter = false,
+            ),
+            actions.last(),
+        )
+        assertTrue(actions.none { it is TabListAction.RemoveAllTabsAction })
+    }
+
+    @Test
+    fun tabRemovalRemovesOnlyMissingTab() {
+        val first = snapshot(id = "1", url = "https://one.example")
+        val second = snapshot(id = "2", url = "https://two.example")
+        val third = snapshot(id = "3", url = "https://three.example")
+        val state = BrowserState(
+            tabs = listOf(first.toState(), second.toState(), third.toState()),
+            selectedTabId = "1",
+        )
+
+        val actions = browserStoreSyncActions(state, listOf(first, third), selectedTabId = "1")
+
+        assertEquals(listOf(TabListAction.RemoveTabsAction(listOf("2"))), actions)
+    }
+
+    @Test
+    fun contentChangeIsPreservedWhileTabsReorder() {
+        val first = snapshot(id = "1", url = "https://one.example", title = "Old")
+        val second = snapshot(id = "2", url = "https://two.example")
+        val state = BrowserState(
+            tabs = listOf(first.toState(), second.toState()),
+            selectedTabId = "1",
+        )
+
+        val actions = browserStoreSyncActions(
+            state,
+            listOf(second, first.copy(title = "New")),
+            selectedTabId = "1",
+        )
+
+        assertEquals(ContentAction.UpdateTitleAction("1", "New"), actions[0])
+        assertEquals(
+            TabListAction.MoveTabsAction(
+                tabIds = listOf("2"),
+                targetTabId = "1",
+                placeAfter = false,
+            ),
+            actions[1],
+        )
+    }
+
+    @Test
+    fun privacyChangeRecreatesOnlyAffectedTabAndRestoresSelection() {
+        val current = snapshot(id = "1", url = "https://example.com", isPrivate = false)
+        val next = current.copy(isPrivate = true)
+        val state = BrowserState(tabs = listOf(current.toState()), selectedTabId = "1")
+
+        val actions = browserStoreSyncActions(state, listOf(next), selectedTabId = "1")
+
+        assertEquals(TabListAction.RemoveTabsAction(listOf("1")), actions[0])
         val add = assertIs<TabListAction.AddMultipleTabsAction>(actions[1])
-        assertEquals(listOf("2", "1"), add.tabs.map { it.id })
+        assertEquals(listOf("1"), add.tabs.map { it.id })
+        assertTrue(add.tabs.single().content.private)
         assertEquals(TabListAction.SelectTabAction("1"), actions.last())
+        assertTrue(actions.none { it is TabListAction.RemoveAllTabsAction })
     }
 
     private fun snapshot(
