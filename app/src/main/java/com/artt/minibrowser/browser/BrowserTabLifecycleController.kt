@@ -4,7 +4,13 @@ import android.app.Activity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.TabManager
+import com.artt.minibrowser.engine.bindTabManagerToBrowserStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 /** Keeps Gecko tab visibility, persistence, and background trimming aligned with host lifecycle. */
 internal class BrowserTabLifecycleController(
@@ -12,9 +18,13 @@ internal class BrowserTabLifecycleController(
     private val tabManager: TabManager,
 ) : DefaultLifecycleObserver {
     private val lifecycle: Lifecycle = owner.lifecycle
+    private val androidComponentsBridgeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     init {
         lifecycle.addObserver(this)
+        ((owner as? Activity)?.application as? BrowserApp)?.let { app ->
+            androidComponentsBridgeScope.bindTabManagerToBrowserStore(tabManager, app.browserStore)
+        }
     }
 
     override fun onResume(owner: LifecycleOwner) {
@@ -38,8 +48,9 @@ internal class BrowserTabLifecycleController(
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
-        // TabManager still owns its final persistence/session shutdown. This observer only owns the
-        // visibility/background lifecycle signals and therefore unregisters itself here.
+        // TabManager still owns its final persistence/session shutdown. This observer owns only
+        // lifecycle signals plus the temporary BrowserStore shadow-state bridge.
+        androidComponentsBridgeScope.cancel()
         lifecycle.removeObserver(this)
     }
 }

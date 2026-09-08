@@ -10,6 +10,7 @@ import android.os.Trace
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.ui.TabPreviewStore
+import mozilla.components.browser.state.store.BrowserStore
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
@@ -22,6 +23,7 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
 
 class BrowserApp : Application() {
     internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
+    internal val browserStore by lazy(LazyThreadSafetyMode.NONE) { BrowserStore() }
     internal lateinit var runtime: GeckoRuntime
         private set
     internal val extensionLoader by lazy(LazyThreadSafetyMode.NONE) { ExtensionLoader(runtime) }
