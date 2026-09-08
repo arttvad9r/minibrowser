@@ -1,3 +1,5 @@
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -9,6 +11,22 @@ plugins {
 // Every APK is single-ABI. Phone/local builds default to arm64; CI overrides this property only
 // for the x86_64 emulator instrumentation build. Never package two copies of Gecko into one APK.
 val minibrowserAbi = providers.gradleProperty("minibrowserAbi").orElse("arm64-v8a")
+
+// GeckoView Omni already provides Glean's native capability. Match Firefox's dependency resolution
+// so org.mozilla.telemetry:glean supplies only the Kotlin/Java API instead of packaging a second
+// libxul.so from standalone glean-native.
+configurations.configureEach {
+    resolutionStrategy.capabilitiesResolution.withCapability("org.mozilla.telemetry:glean-native") {
+        val toBeSelected = candidates.firstOrNull { candidate ->
+            val id = candidate.id
+            id is ModuleComponentIdentifier && id.module.contains("geckoview")
+        }
+        if (toBeSelected != null) {
+            select(toBeSelected)
+        }
+        because("use GeckoView Glean instead of standalone Glean")
+    }
+}
 
 android {
     namespace = "com.artt.minibrowser"
