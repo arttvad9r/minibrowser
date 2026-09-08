@@ -28,6 +28,8 @@ jobs:
         run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
       - name: Resolve build dependencies and write verification metadata
+        id: resolve
+        continue-on-error: true
         run: >-
           ./gradlew --write-verification-metadata sha256
           :app:testDebugUnitTest
@@ -42,6 +44,7 @@ jobs:
           -PminibrowserAbi=x86_64
           --stacktrace
       - name: Commit generated metadata to PR branch
+        if: always()
         env:
           HEAD_REF: ${{ github.head_ref }}
         run: |
@@ -56,3 +59,6 @@ jobs:
           fi
           git commit -m "build: add Android Components verification metadata"
           git push origin "HEAD:${HEAD_REF}"
+      - name: Preserve Gradle failure status
+        if: steps.resolve.outcome == 'failure'
+        run: exit 1
