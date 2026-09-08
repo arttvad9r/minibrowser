@@ -22,7 +22,10 @@ jobs:
           curl --fail --silent --show-error --location \
             "$base/org/mozilla/components/browser-state/154.0.1/browser-state-154.0.1.pom" \
             -o browser-state.pom
+          curl --fail --silent --show-error --location \
+            "$base/org/mozilla/components/service-nimbus/154.0.1/service-nimbus-154.0.1.pom" \
+            -o service-nimbus.pom
           echo '=== browser-engine-gecko:154.0.1 Mozilla dependencies ==='
           grep -A4 -B1 -E 'geckoview|appservices|service-nimbus' browser-engine-gecko.pom || true
-          echo '=== full browser-engine-gecko POM ==='
-          cat browser-engine-gecko.pom
+          echo '=== service-nimbus:154.0.1 Mozilla dependencies ==='
+          grep -A4 -B1 -E 'appservices|glean|nimbus' service-nimbus.pom || true
