@@ -1,14 +1,14 @@
-name: Generate Glean Verification Metadata
+name: Inspect Glean Resolution
 
 on:
   pull_request:
     branches: [master]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  generate:
+  inspect:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     steps:
@@ -23,33 +23,21 @@ jobs:
       - name: Install Android SDK
         run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
-      - name: Inspect Glean native resolution
+      - name: Resolve Glean graph
         run: |
           ./gradlew :app:dependencyInsight --configuration debugRuntimeClasspath --dependency org.mozilla.telemetry:glean-native --info
           ./gradlew :app:dependencyInsight --configuration debugRuntimeClasspath --dependency org.mozilla.geckoview:geckoview-omni --info
-      - name: Resolve Glean graph and verify release R8
-        id: resolve
-        continue-on-error: true
-        run: >-
-          ./gradlew
-          :app:testDebugUnitTest
-          :app:assembleDebugAndroidTest
-          :app:assembleRelease
-          :app:bundleRelease
-          --write-verification-metadata sha256
-          --stacktrace
-      - name: Commit generated metadata to PR branch
-        if: always()
+      - name: Print published GeckoView and Glean metadata
         run: |
-          if git diff --quiet -- gradle/verification-metadata.xml; then
-            echo "No verification metadata changes"
-            exit 0
+          echo '=== GeckoView Gradle module metadata ==='
+          module=$(find "$HOME/.gradle/caches/modules-2/files-2.1/org.mozilla.geckoview/geckoview-omni/154.0.20260824154132" -type f -name '*.module' | head -n 1)
+          echo "$module"
+          if [ -n "$module" ]; then
+            grep -n -C 6 -E 'capabilit|glean-native|debugVariantDebugRuntimePublication|releaseVariantReleaseRuntimePublication' "$module" || true
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add gradle/verification-metadata.xml
-          git commit -m "build: add Glean verification metadata"
-          git push
-      - name: Preserve Gradle failure status
-        if: steps.resolve.outcome == 'failure'
-        run: exit 1
+          echo '=== Glean POM native dependency ==='
+          pom=$(find "$HOME/.gradle/caches/modules-2/files-2.1/org.mozilla.telemetry/glean/68.0.1" -type f -name '*.pom' | head -n 1)
+          echo "$pom"
+          if [ -n "$pom" ]; then
+            grep -n -C 6 'glean-native' "$pom" || true
+          fi
