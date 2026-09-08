@@ -1,4 +1,4 @@
-name: Generate Gecko Engine Verification Metadata
+name: Clean Gecko Engine Spike
 
 on:
   pull_request:
@@ -7,54 +7,23 @@ permissions:
   contents: write
 
 jobs:
-  generate:
+  clean:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.head_ref }}
+          fetch-depth: 0
           persist-credentials: true
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
-        with:
-          packages: platform-tools
-          log-accepted-android-sdk-licenses: false
-      - name: Install Android SDK
-        run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
-      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
-      - name: Resolve Gecko engine graph and write verification metadata
-        id: resolve
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          ./gradlew --write-verification-metadata sha256 :app:dependencies --configuration debugRuntimeClasspath --stacktrace
-          ./gradlew :app:dependencyInsight --dependency org.mozilla.geckoview --configuration debugRuntimeClasspath --stacktrace | tee geckoview-dependency-insight.txt
-          ./gradlew :app:testDebugUnitTest :app:verifyRoborazziDebug :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
-      - name: Print resolved GeckoView graph
-        if: always()
-        run: cat geckoview-dependency-insight.txt || true
-      - name: Commit generated metadata to PR branch
-        if: always()
+      - name: Restore Stage 1 verification metadata and remove cleanup workflow
         env:
           HEAD_REF: ${{ github.head_ref }}
         run: |
           set -euo pipefail
-          test -s gradle/verification-metadata.xml
+          git checkout bc123613347d02cb6bca3440dfd218089e74897d -- gradle/verification-metadata.xml
+          git rm .github/workflows/generate-engine-verification-metadata.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add gradle/verification-metadata.xml
-          if git diff --cached --quiet; then
-            echo "Verification metadata is already current"
-            exit 0
-          fi
-          git commit -m "build: add Gecko engine verification metadata"
+          git commit -m "chore: remove failed Gecko engine spike metadata"
           git push origin "HEAD:${HEAD_REF}"
-      - name: Preserve Gradle failure status
-        if: steps.resolve.outcome == 'failure'
-        run: exit 1
