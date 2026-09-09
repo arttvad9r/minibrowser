@@ -20,8 +20,8 @@ interface BackgroundTabHost {
 /** Browser context menu for long-pressed links and media. Text selection uses Gecko's selection delegate. */
 class GeckoContextMenuController(
     private val activity: Activity,
-    private val openTab: (String, Boolean) -> Unit,
     private val openBackgroundTab: ((String, Boolean) -> Unit)? = null,
+    private val openTab: (String, Boolean) -> Unit,
 ) {
     fun show(element: GeckoSession.ContentDelegate.ContextElement, private: Boolean) {
         val items = contextMenuPolicyItems(
