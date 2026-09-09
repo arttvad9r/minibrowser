@@ -4,48 +4,83 @@ import java.io.Closeable
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
-/**
- * App-scoped indirection for the small compatibility surface that still needs an Activity host.
- *
- * The registry itself is safe to retain from an Engine/EngineSession. A browser Activity binds its
- * host implementation for its lifetime and closes the returned lease on destruction. Identity-based
- * unbinding prevents an older Activity from clearing a newer Activity's replacement binding during
- * recreation.
- */
-internal class AndroidComponentsGeckoCompatibilityRegistry : AndroidComponentsGeckoCompatibilityHandler {
-    @Volatile
-    private var current: AndroidComponentsGeckoCompatibilityHandler? = null
+/** Immutable metadata that remains valid when the Activity hosting compatibility UI is recreated. */
+internal data class AndroidComponentsGeckoSessionContext(
+    val sessionId: String,
+    val privateMode: Boolean,
+) {
+    fun isSelected(selectedSessionId: String?): Boolean = sessionId == selectedSessionId
+}
 
-    fun bind(handler: AndroidComponentsGeckoCompatibilityHandler): Closeable {
+/**
+ * Activity-scoped implementation of the small compatibility surface that A-C 154 cannot represent
+ * losslessly. The session context is supplied by the future A-C-owned session factory rather than
+ * rediscovered from a raw GeckoSession or a retained TabManager.
+ */
+internal interface AndroidComponentsGeckoCompatibilityHost {
+    fun onWeekPrompt(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.DateTimePrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?
+
+    fun onXrPermission(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        permission: GeckoSession.PermissionDelegate.ContentPermission,
+    ): GeckoResult<Int>?
+
+    fun onLinkedMediaContextMenu(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        element: GeckoSession.ContentDelegate.ContextElement,
+    ): Boolean
+}
+
+/**
+ * App-scoped indirection for the compatibility UI host.
+ *
+ * EngineSessions keep a session-bound handler created by [forSession]. That handler captures only
+ * immutable tab metadata and resolves the currently bound Activity host on every callback. Closing
+ * an older Activity lease cannot clear a replacement binding installed during recreation.
+ */
+internal class AndroidComponentsGeckoCompatibilityRegistry {
+    @Volatile
+    private var current: AndroidComponentsGeckoCompatibilityHost? = null
+
+    fun bind(host: AndroidComponentsGeckoCompatibilityHost): Closeable {
         synchronized(this) {
-            current = handler
+            current = host
         }
         return Closeable {
             synchronized(this) {
-                if (current === handler) {
+                if (current === host) {
                     current = null
                 }
             }
         }
     }
 
-    internal fun currentHandler(): AndroidComponentsGeckoCompatibilityHandler? = current
+    internal fun currentHost(): AndroidComponentsGeckoCompatibilityHost? = current
 
-    override fun onWeekPrompt(
-        session: GeckoSession,
-        prompt: GeckoSession.PromptDelegate.DateTimePrompt,
-    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? =
-        current?.onWeekPrompt(session, prompt)
+    fun forSession(context: AndroidComponentsGeckoSessionContext): AndroidComponentsGeckoCompatibilityHandler =
+        object : AndroidComponentsGeckoCompatibilityHandler {
+            override fun onWeekPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.DateTimePrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? =
+                current?.onWeekPrompt(context, session, prompt)
 
-    override fun onXrPermission(
-        session: GeckoSession,
-        permission: GeckoSession.PermissionDelegate.ContentPermission,
-    ): GeckoResult<Int>? = current?.onXrPermission(session, permission)
+            override fun onXrPermission(
+                session: GeckoSession,
+                permission: GeckoSession.PermissionDelegate.ContentPermission,
+            ): GeckoResult<Int>? = current?.onXrPermission(context, session, permission)
 
-    override fun onLinkedMediaContextMenu(
-        session: GeckoSession,
-        element: GeckoSession.ContentDelegate.ContextElement,
-    ): Boolean = current?.onLinkedMediaContextMenu(session, element) == true
+            override fun onLinkedMediaContextMenu(
+                session: GeckoSession,
+                element: GeckoSession.ContentDelegate.ContextElement,
+            ): Boolean = current?.onLinkedMediaContextMenu(context, session, element) == true
+        }
 }
 
 /**
