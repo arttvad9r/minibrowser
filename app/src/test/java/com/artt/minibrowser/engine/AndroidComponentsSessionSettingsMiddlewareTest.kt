@@ -1,6 +1,7 @@
 package com.artt.minibrowser.engine
 
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import mozilla.components.concept.engine.DownloadDelegate
@@ -29,5 +30,25 @@ class AndroidComponentsSessionSettingsMiddlewareTest {
         assertSame(historyDelegate, settings.historyTrackingDelegate)
         assertSame(downloadDelegate, settings.downloadDelegate)
         assertTrue(settings.suspendMediaWhenInactive)
+    }
+
+    @Test
+    fun constructingMiddlewareDoesNotInitializeFeatureDelegates() {
+        var historyCreated = false
+        var downloadCreated = false
+
+        androidComponentsSessionSettingsMiddleware(
+            historyTrackingDelegateFactory = {
+                historyCreated = true
+                AndroidComponentsHistoryTrackingDelegate()
+            },
+            downloadDelegateFactory = {
+                downloadCreated = true
+                AndroidComponentsDownloadDelegate()
+            },
+        )
+
+        assertFalse(historyCreated)
+        assertFalse(downloadCreated)
     }
 }
