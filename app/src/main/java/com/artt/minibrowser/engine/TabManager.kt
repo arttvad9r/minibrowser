@@ -65,6 +65,12 @@ internal fun pageLoadErrorForCategory(category: Int): PageLoadError = when (cate
     else -> PageLoadError.Generic
 }
 
+/** Mirrors GeckoEngineSession's gate before HistoryTrackingDelegate.onVisited is invoked. */
+internal fun shouldRecordHistoryVisit(isPrivate: Boolean, flags: Int): Boolean =
+    !isPrivate &&
+        flags and GeckoSession.HistoryDelegate.VISIT_TOP_LEVEL != 0 &&
+        flags and GeckoSession.HistoryDelegate.VISIT_UNRECOVERABLE_ERROR == 0
+
 internal fun shouldCloseSession(isOpen: Boolean): Boolean = isOpen
 
 internal fun closeIfOpen(session: GeckoSession) {
@@ -969,7 +975,7 @@ class TabManager(
                 lastVisitedURL: String?,
                 flags: Int,
             ): GeckoResult<Boolean>? {
-                if (!tab.isPrivate && flags and GeckoSession.HistoryDelegate.VISIT_TOP_LEVEL != 0) {
+                if (shouldRecordHistoryVisit(tab.isPrivate, flags)) {
                     tab.historyTitleUrl = url
                     HistorySink.record(url, tab.title)
                 }

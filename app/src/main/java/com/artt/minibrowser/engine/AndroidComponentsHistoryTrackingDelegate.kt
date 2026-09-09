@@ -9,10 +9,9 @@ import mozilla.components.concept.storage.PageVisit
 /**
  * Pre-cutover adapter for Android Components history callbacks.
  *
- * This is intentionally not installed on a live GeckoEngineSession yet. GeckoEngineSession 154.0.1
- * filters unrecoverable-error visits before invoking HistoryTrackingDelegate, while MiniBrowser's
- * current raw Gecko HistoryDelegate records every non-private top-level visit. Session ownership
- * must move only after that policy difference is resolved explicitly.
+ * This is intentionally not installed on a live GeckoEngineSession yet. The raw Gecko owner uses
+ * the same top-level/non-unrecoverable visit gate as GeckoEngineSession so history storage semantics
+ * are already aligned before live session ownership moves.
  */
 internal class AndroidComponentsHistoryTrackingDelegate(
     private val history: MiniBrowserHistoryBackend = HistorySink,
