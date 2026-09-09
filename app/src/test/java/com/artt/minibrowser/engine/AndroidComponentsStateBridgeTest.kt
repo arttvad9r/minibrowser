@@ -205,7 +205,7 @@ class AndroidComponentsStateBridgeTest {
             canGoForward = false,
             fullscreen = false,
             securityState = SecurityState.Insecure,
-            mirrorsRawContent = false,
+            rawSessionOwnership = RawSessionOwnership.Relinquished,
         )
         val state = BrowserState(tabs = listOf(live.toState()), selectedTabId = "3")
 
@@ -218,7 +218,7 @@ class AndroidComponentsStateBridgeTest {
         val missingRelinquished = snapshot(
             id = "2",
             url = "https://stale.example",
-            mirrorsRawContent = false,
+            rawSessionOwnership = RawSessionOwnership.Relinquished,
         )
         val state = BrowserState(
             tabs = listOf(existing.toState()),
@@ -356,7 +356,7 @@ class AndroidComponentsStateBridgeTest {
         canGoForward: Boolean = false,
         fullscreen: Boolean = false,
         securityState: SecurityState = SecurityState.Unknown,
-        mirrorsRawContent: Boolean = true,
+        rawSessionOwnership: RawSessionOwnership = RawSessionOwnership.Owned,
     ) = BrowserStoreTabSnapshot(
         id = id,
         url = url,
@@ -369,7 +369,7 @@ class AndroidComponentsStateBridgeTest {
         canGoForward = canGoForward,
         fullscreen = fullscreen,
         securityState = securityState,
-        mirrorsRawContent = mirrorsRawContent,
+        rawSessionOwnership = rawSessionOwnership,
     )
 
     private fun BrowserStoreTabSnapshot.toState(

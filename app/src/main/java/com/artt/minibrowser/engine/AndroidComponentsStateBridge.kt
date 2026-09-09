@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
  * BrowserStore is intentionally shadow state at this stage; later Android Components features can
  * move one responsibility at a time without forcing a simultaneous TabManager rewrite.
  *
- * [mirrorsRawContent] is the one-way ownership seam: once raw session authority is relinquished,
+ * [rawSessionOwnership] is the one-way ownership seam: once raw session authority is relinquished,
  * structural tab/order information may still flow through this bridge, but stale raw content and
  * restore state must never overwrite or recreate Android Components-owned BrowserStore state.
  */
@@ -44,7 +44,7 @@ internal data class BrowserStoreTabSnapshot(
     val canGoForward: Boolean,
     val fullscreen: Boolean,
     val securityState: SecurityState,
-    val mirrorsRawContent: Boolean = true,
+    val rawSessionOwnership: RawSessionOwnership = RawSessionOwnership.Owned,
     val persistedEngineSessionState: EngineSessionStateEnvelope? = null,
     val persistedEngineSessionStateUrl: String? = null,
 )
@@ -93,7 +93,7 @@ private fun shouldRecreateShadowTab(
 ): Boolean {
     // After raw authority is relinquished this bridge must not destroy a linked/live A-C tab just
     // because its stale raw sidecar disagrees with BrowserStore metadata or restore state.
-    if (!next.mirrorsRawContent) return false
+    if (!next.rawSessionOwnership.mirrorsRawContent) return false
     if (current.content.private != next.isPrivate) return true
 
     // A-C 154 has no nullable UpdateEngineSessionStateAction. While this bridge is shadow-only,
@@ -139,7 +139,7 @@ internal fun browserStoreSyncActions(
     }
 
     val addedTabs = tabs.filter { next ->
-        if (!next.mirrorsRawContent) return@filter false
+        if (!next.rawSessionOwnership.mirrorsRawContent) return@filter false
         val current = currentById[next.id]
         current == null || shouldRecreateShadowTab(
             current = current,
@@ -164,7 +164,7 @@ internal fun browserStoreSyncActions(
     }
 
     tabs.forEach { tab ->
-        if (!tab.mirrorsRawContent) return@forEach
+        if (!tab.rawSessionOwnership.mirrorsRawContent) return@forEach
         if (tab.id in addedIdSet) {
             actions += fullContentActions(tab)
         } else {
@@ -266,7 +266,7 @@ internal class AndroidComponentsStateBridge(
         val liveIds = tabs.mapTo(mutableSetOf()) { it.id }
         decodedEngineStates.keys.retainAll(liveIds)
         val engineSessionStates = tabs.associate { tab ->
-            if (tab.mirrorsRawContent) {
+            if (tab.rawSessionOwnership.mirrorsRawContent) {
                 tab.id to resolveEngineSessionState(tab)
             } else {
                 decodedEngineStates.remove(tab.id)
