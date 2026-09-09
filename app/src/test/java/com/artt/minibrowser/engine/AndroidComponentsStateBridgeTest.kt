@@ -14,7 +14,7 @@ class AndroidComponentsStateBridgeTest {
     @Test
     fun initialSyncCreatesMozillaTabsAndSelectsCurrentTab() {
         val tabs = listOf(
-            snapshot(id = "1", url = "https://example.com", title = "Example"),
+            snapshot(id = "1", url = "https://example.com", title = "Example", desktop = true),
             snapshot(id = "2", url = "about:blank", isPrivate = true),
         )
 
@@ -23,6 +23,7 @@ class AndroidComponentsStateBridgeTest {
         val add = assertIs<TabListAction.AddMultipleTabsAction>(actions.first())
         assertEquals(listOf("1", "2"), add.tabs.map { it.id })
         assertEquals(listOf(false, true), add.tabs.map { it.content.private })
+        assertEquals(listOf(true, false), add.tabs.map { it.content.desktopMode })
         assertEquals("Example", add.tabs.first().content.title)
         assertEquals(TabListAction.SelectTabAction("2"), actions.last())
     }
@@ -33,6 +34,7 @@ class AndroidComponentsStateBridgeTest {
             id = "7",
             url = "https://example.com/page",
             title = "Page",
+            desktop = true,
             progress = 100,
             loading = false,
             canGoBack = true,
@@ -56,6 +58,17 @@ class AndroidComponentsStateBridgeTest {
         val actions = browserStoreSyncActions(state, listOf(next), "3")
 
         assertEquals(listOf(ContentAction.UpdateTitleAction("3", "New")), actions)
+    }
+
+    @Test
+    fun desktopModeChangeUsesGranularBrowserStateAction() {
+        val current = snapshot(id = "3", url = "https://example.com", desktop = false)
+        val next = current.copy(desktop = true)
+        val state = BrowserState(tabs = listOf(current.toState()), selectedTabId = "3")
+
+        val actions = browserStoreSyncActions(state, listOf(next), "3")
+
+        assertEquals(listOf(ContentAction.UpdateTabDesktopMode("3", true)), actions)
     }
 
     @Test
@@ -153,7 +166,7 @@ class AndroidComponentsStateBridgeTest {
 
     @Test
     fun privacyChangeRecreatesOnlyAffectedTabAndRestoresSelection() {
-        val current = snapshot(id = "1", url = "https://example.com", isPrivate = false)
+        val current = snapshot(id = "1", url = "https://example.com", isPrivate = false, desktop = true)
         val next = current.copy(isPrivate = true)
         val state = BrowserState(tabs = listOf(current.toState()), selectedTabId = "1")
 
@@ -163,6 +176,7 @@ class AndroidComponentsStateBridgeTest {
         val add = assertIs<TabListAction.AddMultipleTabsAction>(actions[1])
         assertEquals(listOf("1"), add.tabs.map { it.id })
         assertTrue(add.tabs.single().content.private)
+        assertTrue(add.tabs.single().content.desktopMode)
         assertEquals(TabListAction.SelectTabAction("1"), actions.last())
         assertTrue(actions.none { it is TabListAction.RemoveAllTabsAction })
     }
@@ -172,6 +186,7 @@ class AndroidComponentsStateBridgeTest {
         url: String,
         title: String = "",
         isPrivate: Boolean = false,
+        desktop: Boolean = false,
         progress: Int = 0,
         loading: Boolean = false,
         canGoBack: Boolean = false,
@@ -182,6 +197,7 @@ class AndroidComponentsStateBridgeTest {
         url = url,
         title = title,
         isPrivate = isPrivate,
+        desktop = desktop,
         progress = progress,
         loading = loading,
         canGoBack = canGoBack,
@@ -195,6 +211,7 @@ class AndroidComponentsStateBridgeTest {
             url = url,
             private = isPrivate,
             title = title,
+            desktopMode = desktop,
             progress = progress,
             loading = loading,
             fullScreen = fullscreen,
