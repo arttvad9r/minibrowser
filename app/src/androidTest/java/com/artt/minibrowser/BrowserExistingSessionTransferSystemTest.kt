@@ -137,12 +137,15 @@ class BrowserExistingSessionTransferSystemTest {
 
             val transferredRawSession = checkNotNull(rawSession)
             val deadline = SystemClock.uptimeMillis() + CLOSE_TIMEOUT_MS
-            while (transferredRawSession.isOpen && SystemClock.uptimeMillis() < deadline) {
+            while (
+                SystemClock.uptimeMillis() < deadline &&
+                isSessionOpenOnMainThread(instrumentation, transferredRawSession)
+            ) {
                 SystemClock.sleep(POLL_INTERVAL_MS)
             }
             assertFalse(
                 "TabsRemovedMiddleware closes the underlying supplied GeckoSession",
-                transferredRawSession.isOpen,
+                isSessionOpenOnMainThread(instrumentation, transferredRawSession),
             )
             prepared = null
         } finally {
@@ -237,6 +240,17 @@ class BrowserExistingSessionTransferSystemTest {
         if (app.browserStore.state.tabs.any { it.id == tabId }) {
             app.browserStore.dispatch(TabListAction.RemoveTabAction(tabId))
         }
+    }
+
+    private fun isSessionOpenOnMainThread(
+        instrumentation: android.app.Instrumentation,
+        session: GeckoSession,
+    ): Boolean {
+        var isOpen = false
+        instrumentation.runOnMainSync {
+            isOpen = session.isOpen
+        }
+        return isOpen
     }
 
     private fun newRawSession(app: BrowserApp): GeckoSession = GeckoSession(
