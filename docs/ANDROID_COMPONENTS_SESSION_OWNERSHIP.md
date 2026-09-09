@@ -28,6 +28,10 @@ render-only sidecar is never linked into `BrowserStore`. Therefore the shadow st
 session. The facade is created with `openGeckoSession=false`, all delegates it temporarily installs are
 restored, and MiniBrowser never calls `close()` on that borrowed facade.
 
+`MainActivity` now derives from `FragmentActivity`. This is deliberate host infrastructure for A-C
+features that use a `FragmentManager`; it does not activate `PromptFeature`, `SitePermissionsFeature`,
+or any live A-C `EngineSession` ownership by itself.
+
 ## A-C lifecycle behavior that constrains the cutover
 
 A-C 154.0.1 makes linked `EngineSession` lifetime an explicit BrowserStore concern:
@@ -47,6 +51,9 @@ A-C 154.0.1 makes linked `EngineSession` lifetime an explicit BrowserStore conce
   mechanism without recreating the underlying Gecko session, but construction immediately installs
   A-C's Gecko delegates and `GeckoEngineSession.close()` closes the provided raw session. It therefore
   cannot be used as a long-lived bridge while `TabManager` still owns delegates or close authority.
+- GeckoView 154 exposes public getters/setters for the prompt, permission and content delegates. After
+  a future owned `GeckoEngineSession` installs its stock A-C delegates, MiniBrowser can wrap only the
+  callbacks whose A-C 154 adapters are lossy, without reflection or access to A-C internal fields.
 
 Therefore a linked session must never remain owned by `TabManager.closeIfOpen()` at the same time.
 
@@ -58,6 +65,8 @@ Relevant A-C sources:
 - `browser/state/engine/middleware/LinkingMiddleware.kt`
 - `browser/state/reducer/EngineStateReducer.kt`
 - `browser/engine-gecko/GeckoEngineSession.kt`
+- `browser/engine-gecko/prompt/GeckoPromptDelegate.kt`
+- `browser/engine-gecko/permission/GeckoPermissionRequest.kt`
 
 ## Preconditions
 
@@ -112,11 +121,25 @@ system picture-in-picture, and verifies the corresponding BrowserStore
 `content.pictureInPictureEnabled` transition. Live `PictureInPictureFeature` ownership still waits for
 the live EngineSession cutover, but there is no remaining synthetic-only PiP validation prerequisite.
 
-Remaining known delegate blockers are the lossy `WEEK` prompt adapter boundary plus prompt host
-integration, linked VIDEO/AUDIO context-menu parity, and the final ownership/lifetime boundary itself.
-A-C 154 preserves image+link context through `HitResult.IMAGE_SRC`, but its VIDEO/AUDIO hit results keep
-the media `src` and discard the wrapping `linkUri`; MiniBrowser currently exposes actions for both
-resources.
+Three A-C 154 adapter losses are now isolated behind a non-live compatibility seam:
+
+- **WEEK prompts:** raw Gecko `DateTimePrompt.Type.WEEK` is formatted as `yyyy-'W'ww` and then collapsed
+  to `PromptRequest.TimeSelection.Type.DATE`, so the original HTML input type and MiniBrowser's ISO
+  week-year semantics are unavailable downstream.
+- **XR permission:** `GeckoPermissionRequest.Content.permissionsMap` has no `PERMISSION_XR` entry, so
+  XR becomes a generic content permission and loses MiniBrowser's XR-specific policy/UI distinction.
+- **Linked audio/video context menus:** A-C maps `TYPE_AUDIO` and `TYPE_VIDEO` to hit results containing
+  the media `src` only, dropping a wrapping `linkUri`; MiniBrowser exposes actions for both resources.
+
+`AndroidComponentsGeckoCompatibilityDelegates` leaves stock A-C delegates in charge of every other
+callback and routes only those three cases to an explicit compatibility handler. A separate app-scoped
+registry/lease seam is prepared so a future owned session can retain the registry without retaining a
+destroyed Activity; older Activity leases cannot clear a newer replacement binding during recreation.
+The installer is intentionally not invoked by the current raw/shadow path.
+
+The remaining delegate work is therefore the concrete Activity-host implementations/bindings for
+those selective callbacks plus the final live feature/session ownership boundary, not a wholesale
+replacement of A-C prompt, permission or content delegates.
 
 Do not configure future delegates by blindly replacing the current `GeckoEngine(defaultSettings=null)`
 with a generic `DefaultSettings`. In A-C 154, `engine.settings.historyTrackingDelegate` and
@@ -156,14 +179,17 @@ The ownership change should be one directional boundary, not a long-lived mixed 
    `EngineSessionState` round-trips beside the legacy raw Gecko payload, survives the raw-owned tab
    lifecycle while URL-bound, and can populate shadow BrowserStore state without creating a session.
 2. **Finish delegate/feature seams.** History filtering, PiP baseline validation, authenticated
-   initial-download body handoff and final filename normalization are aligned. Resolve or explicitly
-   retain the remaining prompt, linked VIDEO/AUDIO context-menu, download ownership/resume policy and
-   permission/navigation seams before A-C installs live delegates.
+   initial-download body handoff and final filename normalization are aligned. WEEK/XR/linked-media
+   lossy adapter cases have selective proxy boundaries but still need their Activity-host binding.
+   Resolve the remaining download ownership/resume and permission/navigation feature seams before A-C
+   installs live delegates.
 3. **Make BrowserStore the tab/session creation source.** Restore tab metadata into BrowserStore and
    let `CreateEngineSessionAction` create only the sessions that need to be hot. If preserving a live
    raw Gecko session across this boundary is preferable, use an explicit one-time
    `GeckoEngineSession(geckoSessionProvider = ...)` ownership transfer instead of allowing both owners
-   to coexist; delegate and close authority must move in the same boundary.
+   to coexist; delegate and close authority must move in the same boundary. A cutover-only session
+   factory must use the app-scoped `GeckoRuntime`, capture the underlying public `GeckoSession`, let
+   `GeckoEngineSession` install its stock delegates, then apply the selective compatibility wrappers.
 4. **Switch rendering to the linked EngineSession.** Remove the borrowed raw-session sidecar from the
    selected-tab render path.
 5. **Switch navigation/reload/back/forward/desktop operations to A-C use cases/actions.** After this
@@ -194,8 +220,8 @@ There is no supported third mode where a borrowed raw session is linked into Bro
 
 The current prompt seam remains intentionally non-live:
 
-- MiniBrowser's production and fallback file pickers now share the same engine-neutral MIME
-  normalization policy that can be reused from `PromptRequest.File`.
+- MiniBrowser's production and fallback file pickers share the same engine-neutral MIME normalization
+  policy that can be reused from `PromptRequest.File`.
 - popup target filtering already lives outside raw prompt UI plumbing in navigation policy.
 - current HTML date/time formatting, including the ISO week-based year for `WEEK`, is locked by unit
   tests.
@@ -205,16 +231,15 @@ The current prompt seam remains intentionally non-live:
   engine-adapter boundary before BrowserStore or `PromptFeature` sees the request.
 - `PromptFeature` maps `TimeSelection.Type.DATE` directly to its date picker and has no public
   date/time renderer or prompt-filter hook that can distinguish the original `WEEK` request. A
-  downstream MiniBrowser override cannot safely replace only WEEK while leaving ordinary DATE prompts
-  under stock `PromptFeature`.
+  downstream MiniBrowser override cannot safely replace only WEEK after the adapter has already
+  emitted the lossy `PromptRequest`.
 - the formatter semantics are also different. MiniBrowser uses `WeekFields.ISO`, while A-C's
   `SimpleDateFormat` pattern uses calendar year `yyyy` plus locale calendar week rules. For example,
   MiniBrowser intentionally formats 2021-01-01 as `2020-W53`, whereas that A-C formatter produces
   `2021-W01`. Default/min/max and confirmation behavior around ISO week-year boundaries must be
-  bridged, retained on a custom prompt path, or explicitly accepted before `PromptFeature` owns these
-  prompts.
+  retained by the selective raw-compatible callback before the lossy A-C prompt conversion.
 - current upstream Firefox/Android Components still has this `WEEK` adapter shape, so a dependency
   bump alone is not a known resolution.
-- `PromptFeature` uses a `FragmentManager`, while MiniBrowser currently hosts Compose in
-  `ComponentActivity`; the host integration must be chosen deliberately rather than changing the
-  Activity base class as an incidental side effect of the session cutover.
+- `MainActivity` is now a `FragmentActivity`, so the FragmentManager host prerequisite for
+  `PromptFeature` is prepared. `PromptFeature` remains intentionally inactive until live session
+  ownership and the selective WEEK callback binding are ready.
