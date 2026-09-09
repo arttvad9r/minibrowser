@@ -8,12 +8,14 @@ import com.artt.minibrowser.data.encodeEngineSessionStateEnvelope
 import mozilla.components.concept.engine.EngineSessionState
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 @RunWith(RobolectricTestRunner::class)
+@Config(manifest = Config.NONE, sdk = [36])
 class EngineSessionStateCodecTest {
     private data class TestState(val value: String) : EngineSessionState {
         override fun writeTo(writer: JsonWriter) {

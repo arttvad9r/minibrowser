@@ -28,6 +28,14 @@ internal fun encodeEngineSessionStateEnvelope(
     return createEngineSessionStateEnvelope(engineName, stateJson)
 }
 
+internal fun encodeEngineSessionStateEnvelope(
+    engine: Engine,
+    state: EngineSessionState?,
+): EngineSessionStateEnvelope? = encodeEngineSessionStateEnvelope(
+    engineName = engine.name(),
+    state = state,
+)
+
 /**
  * Restores a compatible persisted payload without depending on an engine's private JSON format.
  */
@@ -44,10 +52,9 @@ internal fun decodeEngineSessionStateEnvelope(
 
 internal fun decodeEngineSessionStateEnvelope(
     envelope: EngineSessionStateEnvelope?,
-    engineName: String,
     engine: Engine,
 ): EngineSessionState? = decodeEngineSessionStateEnvelope(
     envelope = envelope,
-    engineName = engineName,
+    engineName = engine.name(),
     createState = { reader -> engine.createSessionStateFrom(reader) },
 )
