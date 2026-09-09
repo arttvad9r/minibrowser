@@ -5,7 +5,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.engine.AndroidComponentsContentCompatibilityDelegate
 import com.artt.minibrowser.engine.AndroidComponentsGeckoCompatibilityRegistry
-import com.artt.minibrowser.engine.AndroidComponentsGeckoSessionContext
 import com.artt.minibrowser.engine.AndroidComponentsMediaSessionHandoff
 import com.artt.minibrowser.engine.AndroidComponentsOwnedSessionConfigurator
 import com.artt.minibrowser.engine.AndroidComponentsPermissionCompatibilityDelegate
@@ -33,14 +32,16 @@ class BrowserExistingSessionTransferSystemTest {
     fun existingOpenGeckoSessionCanBeTakenOverWithoutChangingIdentity() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as BrowserApp
+        val tabId = "existing-transfer-test"
 
         instrumentation.runOnMainSync {
             val rawSession = newRawSession(app)
             var prepared: AndroidComponentsPreparedExistingSessionTransfer? = null
             try {
+                addStoreTab(app, tabId, private = false)
                 assertTrue("Raw session is open before ownership transfer", rawSession.isOpen)
 
-                prepared = prepareTransfer(app, rawSession, "existing-transfer-test")
+                prepared = prepareTransfer(app, rawSession, tabId)
 
                 assertTrue("Ownership wrapper keeps the existing GeckoSession open", rawSession.isOpen)
                 assertTrue(
@@ -70,6 +71,7 @@ class BrowserExistingSessionTransferSystemTest {
                 )
             } finally {
                 prepared?.engineSession?.close()
+                removeStoreTab(app, tabId)
                 if (rawSession.isOpen) rawSession.close()
             }
         }
@@ -86,18 +88,7 @@ class BrowserExistingSessionTransferSystemTest {
         try {
             instrumentation.runOnMainSync {
                 val store = app.browserStore
-                store.state.tabs.firstOrNull { it.id == tabId }?.let {
-                    store.dispatch(TabListAction.RemoveTabAction(tabId))
-                }
-                store.dispatch(
-                    TabListAction.AddTabAction(
-                        createTab(
-                            url = "about:blank",
-                            private = false,
-                            id = tabId,
-                        ),
-                    ),
-                )
+                addStoreTab(app, tabId, private = false)
 
                 val mediaController = TestMediaSessionController()
                 val mediaMetadata = MediaSession.ElementMetadata(
@@ -156,9 +147,7 @@ class BrowserExistingSessionTransferSystemTest {
             prepared = null
         } finally {
             instrumentation.runOnMainSync {
-                app.browserStore.state.tabs.firstOrNull { it.id == tabId }?.let {
-                    app.browserStore.dispatch(TabListAction.RemoveTabAction(tabId))
-                }
+                removeStoreTab(app, tabId)
                 prepared?.engineSession?.close()
                 rawSession?.let { session ->
                     if (session.isOpen) session.close()
@@ -168,9 +157,10 @@ class BrowserExistingSessionTransferSystemTest {
     }
 
     @Test
-    fun privateModeMismatchIsRejectedBeforeDelegateTakeover() {
+    fun privateModeMismatchIsRejectedFromBrowserStoreMetadataBeforeDelegateTakeover() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as BrowserApp
+        val tabId = "private-mismatch-test"
 
         instrumentation.runOnMainSync {
             val rawSession = newRawSession(app)
@@ -178,20 +168,19 @@ class BrowserExistingSessionTransferSystemTest {
             val permissionBefore = rawSession.permissionDelegate
             val contentBefore = rawSession.contentDelegate
             try {
+                addStoreTab(app, tabId, private = true)
                 var rejected = false
                 try {
                     preflightAndroidComponentsExistingSessionTransfer(
                         rawSession = rawSession,
-                        sessionContext = AndroidComponentsGeckoSessionContext(
-                            sessionId = "private-mismatch-test",
-                            privateMode = true,
-                        ),
+                        store = app.browserStore,
+                        tabId = tabId,
                     )
                 } catch (_: IllegalStateException) {
                     rejected = true
                 }
 
-                assertTrue("Private-mode mismatch is rejected before raw ownership is relinquished", rejected)
+                assertTrue("BrowserStore private-mode mismatch is rejected before raw ownership is relinquished", rejected)
                 assertTrue("Rejected transfer leaves the raw session open", rawSession.isOpen)
                 assertSame("Prompt ownership is untouched before rejection", promptBefore, rawSession.promptDelegate)
                 assertSame(
@@ -201,6 +190,7 @@ class BrowserExistingSessionTransferSystemTest {
                 )
                 assertSame("Content ownership is untouched before rejection", contentBefore, rawSession.contentDelegate)
             } finally {
+                removeStoreTab(app, tabId)
                 if (rawSession.isOpen) rawSession.close()
             }
         }
@@ -212,13 +202,10 @@ class BrowserExistingSessionTransferSystemTest {
         tabId: String,
         mediaSessionHandoff: AndroidComponentsMediaSessionHandoff? = null,
     ): AndroidComponentsPreparedExistingSessionTransfer {
-        val sessionContext = AndroidComponentsGeckoSessionContext(
-            sessionId = tabId,
-            privateMode = false,
-        )
         val preflight = preflightAndroidComponentsExistingSessionTransfer(
             rawSession = rawSession,
-            sessionContext = sessionContext,
+            store = app.browserStore,
+            tabId = tabId,
         )
         return prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
             runtime = app.runtime,
@@ -227,6 +214,29 @@ class BrowserExistingSessionTransferSystemTest {
             compatibilityRegistry = AndroidComponentsGeckoCompatibilityRegistry(),
             mediaSessionHandoff = mediaSessionHandoff,
         )
+    }
+
+    private fun addStoreTab(
+        app: BrowserApp,
+        tabId: String,
+        private: Boolean,
+    ) {
+        removeStoreTab(app, tabId)
+        app.browserStore.dispatch(
+            TabListAction.AddTabAction(
+                createTab(
+                    url = "about:blank",
+                    private = private,
+                    id = tabId,
+                ),
+            ),
+        )
+    }
+
+    private fun removeStoreTab(app: BrowserApp, tabId: String) {
+        if (app.browserStore.state.tabs.any { it.id == tabId }) {
+            app.browserStore.dispatch(TabListAction.RemoveTabAction(tabId))
+        }
     }
 
     private fun newRawSession(app: BrowserApp): GeckoSession = GeckoSession(
