@@ -4,10 +4,10 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mozilla.components.browser.state.action.ContentAction
 
-class MainActivity : ComponentActivity(), BackgroundTabHost {
+class MainActivity : FragmentActivity(), BackgroundTabHost {
     private val browserApp by lazy { application as BrowserApp }
     private val runtime by lazy { browserApp.runtime }
     private val extensionLoader by lazy { browserApp.extensionLoader }
