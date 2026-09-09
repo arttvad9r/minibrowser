@@ -13,7 +13,7 @@ private val PROMPT_COLOR_PATTERN = Regex("^#[0-9A-Fa-f]{6}$")
  * [mozilla.components.concept.engine.prompt.PromptRequest.File] adapter can preserve the same
  * accepted-type behavior before prompt ownership moves away from the raw Gecko delegate.
  */
-internal fun acceptedPromptMimeTypes(mimeTypes: Array<String>): Array<String> = mimeTypes
+internal fun acceptedPromptMimeTypes(mimeTypes: Array<out String>): Array<String> = mimeTypes
     .map { it.trim().lowercase(Locale.ROOT) }
     .filter(::isAcceptedPromptMimeType)
     .distinct()
