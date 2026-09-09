@@ -90,13 +90,40 @@ of these outcomes first:
 - keep a small MiniBrowser policy adapter behind that A-C feature;
 - remain intentionally custom with a documented parity reason.
 
-Current known blockers include the lossy `WEEK` prompt adapter boundary and prompt host integration,
-authenticated download/header semantics, history error filtering, and link+media context-menu parity.
-PiP's raw baseline has been repaired to use content fullscreen state and Gecko compositor PiP
-transitions. Stable API 36 instrumentation now proves that an eligible state enters real Android
-picture-in-picture and that the same platform transition is mirrored into
-`BrowserStore.content.pictureInPictureEnabled`. A real Gecko/HTML media-playback end-to-end smoke is
-still required before PiP feature ownership moves.
+The history visit gate is now aligned before cutover: raw Gecko records only non-private, top-level,
+non-`VISIT_UNRECOVERABLE_ERROR` visits, matching the filter used by `GeckoEngineSession` before
+`HistoryTrackingDelegate.onVisited(...)`.
+
+The download transport seam is also narrower than originally assumed. In A-C 154.0.1,
+`GeckoEngineSession.onExternalResponse(...)` wraps the existing authenticated `WebResponse.body` in a
+concept-fetch `Response.Body`; it does not issue a second request. `skipConfirmation`, `openInApp` and
+private state are forwarded into `EngineSession.Observer.onExternalResource(...)`, then into
+`DownloadState`. `AbstractFetchDownloadService` uses that supplied `DownloadState.response` for the
+initial transfer and falls back to its HTTP client only for resume/retry/fallback or when no response
+is available. MiniBrowser now exposes its filename policy as an A-C `DownloadDelegate` and applies the
+same Mozilla `sanitizeFileName()` post-processing on the current raw path, so the final filename is
+stable across the future `GeckoEngineSession` boundary. Live `DownloadsFeature`/download-manager
+ownership is still deferred until BrowserStore receives real engine download state; its custom
+first-party dialog hook can preserve the existing confirmation UI without requiring a FragmentManager.
+
+PiP is now a validated raw baseline rather than an open parity gap. Stable API 36 instrumentation
+serves a local HTML5 video through Gecko, observes real media playback/fullscreen state, enters Android
+system picture-in-picture, and verifies the corresponding BrowserStore
+`content.pictureInPictureEnabled` transition. Live `PictureInPictureFeature` ownership still waits for
+the live EngineSession cutover, but there is no remaining synthetic-only PiP validation prerequisite.
+
+Remaining known delegate blockers are the lossy `WEEK` prompt adapter boundary plus prompt host
+integration, linked VIDEO/AUDIO context-menu parity, and the final ownership/lifetime boundary itself.
+A-C 154 preserves image+link context through `HitResult.IMAGE_SRC`, but its VIDEO/AUDIO hit results keep
+the media `src` and discard the wrapping `linkUri`; MiniBrowser currently exposes actions for both
+resources.
+
+Do not configure future delegates by blindly replacing the current `GeckoEngine(defaultSettings=null)`
+with a generic `DefaultSettings`. In A-C 154, `engine.settings.historyTrackingDelegate` and
+`engine.settings.downloadDelegate` setters write only through the nullable `defaultSettings` object,
+so they are no-ops while it is null. Supplying `DefaultSettings` also opts future sessions into the
+rest of that settings object's defaults. Delegate registration therefore belongs in the explicit
+session/default-settings cutover, after the full future settings policy is reviewed.
 
 ### 3. Session-state persistence is versioned before ownership moves
 
@@ -128,8 +155,10 @@ The ownership change should be one directional boundary, not a long-lived mixed 
 1. **Persist and hand off A-C-compatible state — complete pre-cutover.** Versioned
    `EngineSessionState` round-trips beside the legacy raw Gecko payload, survives the raw-owned tab
    lifecycle while URL-bound, and can populate shadow BrowserStore state without creating a session.
-2. **Finish delegate/feature seams.** Resolve or explicitly retain the remaining prompt, download,
-   history, context-menu and permission/navigation policies before A-C installs live delegates.
+2. **Finish delegate/feature seams.** History filtering, PiP baseline validation, authenticated
+   initial-download body handoff and final filename normalization are aligned. Resolve or explicitly
+   retain the remaining prompt, linked VIDEO/AUDIO context-menu, download ownership/resume policy and
+   permission/navigation seams before A-C installs live delegates.
 3. **Make BrowserStore the tab/session creation source.** Restore tab metadata into BrowserStore and
    let `CreateEngineSessionAction` create only the sessions that need to be hot. If preserving a live
    raw Gecko session across this boundary is preferable, use an explicit one-time
@@ -165,8 +194,8 @@ There is no supported third mode where a borrowed raw session is linked into Bro
 
 The current prompt seam remains intentionally non-live:
 
-- MiniBrowser's production file picker now uses an engine-neutral MIME normalization policy that can
-  be reused from `PromptRequest.File`.
+- MiniBrowser's production file picker uses an engine-neutral MIME normalization policy that can be
+  reused from `PromptRequest.File`.
 - popup target filtering already lives outside raw prompt UI plumbing in navigation policy.
 - current HTML date/time formatting, including the ISO week-based year for `WEEK`, is locked by unit
   tests.
