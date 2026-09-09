@@ -5,7 +5,7 @@ management to Mozilla Android Components (A-C). It is intentionally narrower tha
 migration: the goal is to prevent two owners from opening, closing, restoring, observing, or replacing
 the same live Gecko session.
 
-The A-C behavior referenced below is from Firefox / Android Components `FIREFOX_154_0_1_RELEASE`.
+The A-C behavior referenced below is from Firefox / Android Components `154.0.1`.
 
 ## Current ownership
 
@@ -77,8 +77,8 @@ of these outcomes first:
 - keep a small MiniBrowser policy adapter behind that A-C feature;
 - remain intentionally custom with a documented parity reason.
 
-Current known blockers include prompt `WEEK` input parity, prompt host integration, authenticated
-download/header semantics, history error filtering, and link+media context-menu parity.
+Current known blockers include prompt host integration and ISO `WEEK` boundary/range parity,
+authenticated download/header semantics, history error filtering, and link+media context-menu parity.
 
 ### 3. Session-state persistence is versioned before ownership moves
 
@@ -88,7 +88,7 @@ through the `EngineSessionState` interface instead.
 `GeckoEngineSessionState.actualState` is internal to `browser-engine-gecko`; MiniBrowser must not
 reach into it or depend on the private `GECKO_STATE` JSON key. The ownership migration should instead
 introduce a versioned persisted engine-state payload using the public `EngineSessionState.writeTo(...)`
-contract and restore it through `Engine.createSessionState(...)`.
+contract and restore it through `Engine.createSessionStateFrom(...)`.
 
 This persistence change may reuse the existing tab metadata file, but it must be distinguishable from
 the current raw Gecko state string so old installs can be migrated safely.
@@ -142,9 +142,17 @@ The current prompt seam remains intentionally non-live:
 - MiniBrowser's production file picker now uses an engine-neutral MIME normalization policy that can
   be reused from `PromptRequest.File`.
 - popup target filtering already lives outside raw prompt UI plumbing in navigation policy.
-- current HTML date/time formatting, including ISO `WEEK`, is locked by unit tests.
-- A-C 154.0.1 `PromptRequest.TimeSelection.Type` has `DATE`, `DATE_AND_TIME`, `TIME`, and `MONTH`, but no
-  `WEEK`; enabling `PromptFeature` unchanged would lose existing `<input type=week>` behavior.
+- current HTML date/time formatting, including the ISO week-based year for `WEEK`, is locked by unit
+  tests.
+- A-C's Gecko prompt adapter does handle raw Gecko `WEEK` prompts: it exposes them as
+  `PromptRequest.TimeSelection` and parses/confirms values with
+  `SimpleDateFormat("yyyy-'W'ww", Locale.ROOT)`. The absence of a separate `WEEK` value in
+  `PromptRequest.TimeSelection.Type` is therefore not itself a parity blocker.
+- the formatter semantics are still different. MiniBrowser uses `WeekFields.ISO`, while A-C's
+  `SimpleDateFormat` pattern uses calendar year `yyyy` plus locale calendar week rules. For example,
+  MiniBrowser intentionally formats 2021-01-01 as `2020-W53`, whereas that A-C formatter produces
+  `2021-W01`. Default/min/max and confirmation behavior around ISO week-year boundaries must be
+  bridged or explicitly accepted before `PromptFeature` owns these prompts.
 - `PromptFeature` uses a `FragmentManager`, while MiniBrowser currently hosts Compose in
   `ComponentActivity`; the host integration must be chosen deliberately rather than changing the
   Activity base class as an incidental side effect of the session cutover.
