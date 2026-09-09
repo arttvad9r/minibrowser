@@ -10,6 +10,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.browser.BrowserPictureInPictureController
 import com.artt.minibrowser.browser.BrowserPictureInPictureMediaState
+import com.artt.minibrowser.browser.BrowserPictureInPicturePlaybackState
+import com.artt.minibrowser.browser.pictureInPictureMediaStateForTab
 import com.artt.minibrowser.engine.TabManager
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.MediaSession
@@ -17,6 +19,7 @@ import org.mozilla.geckoview.MediaSession
 /**
  * Bridges Gecko media-session callbacks into Android PiP without taking ownership of playback.
  * PiP is deliberately disabled for private tabs to preserve the app's FLAG_SECURE privacy model.
+ * Browser fullscreen comes from TabManager's ContentDelegate state, matching A-C's PiP contract.
  */
 @Composable
 internal fun BrowserPictureInPictureEffect(
@@ -28,9 +31,10 @@ internal fun BrowserPictureInPictureEffect(
     val currentTab = tabs.firstOrNull { it.id == currentId }
     val session = currentTab?.session
     val privateTab = currentTab?.isPrivate == true
+    val contentFullscreen = currentTab?.fullscreen == true
 
-    var mediaState by remember(session, privateTab) {
-        mutableStateOf(BrowserPictureInPictureMediaState(privateTab = privateTab))
+    var playbackState by remember(session, privateTab) {
+        mutableStateOf(BrowserPictureInPicturePlaybackState())
     }
 
     DisposableEffect(session, privateTab) {
@@ -49,23 +53,23 @@ internal fun BrowserPictureInPictureEffect(
                 override fun onDeactivated(session: GeckoSession, mediaSession: MediaSession) {
                     if (disposed || activeMediaSession !== mediaSession) return
                     activeMediaSession = null
-                    mediaState = BrowserPictureInPictureMediaState(privateTab = privateTab)
+                    playbackState = BrowserPictureInPicturePlaybackState()
                 }
 
                 override fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
                     if (disposed) return
                     activeMediaSession = mediaSession
-                    mediaState = mediaState.copy(playing = true)
+                    playbackState = playbackState.copy(playing = true)
                 }
 
                 override fun onPause(session: GeckoSession, mediaSession: MediaSession) {
                     if (disposed || activeMediaSession !== mediaSession) return
-                    mediaState = mediaState.copy(playing = false)
+                    playbackState = playbackState.copy(playing = false)
                 }
 
                 override fun onStop(session: GeckoSession, mediaSession: MediaSession) {
                     if (disposed || activeMediaSession !== mediaSession) return
-                    mediaState = mediaState.copy(playing = false)
+                    playbackState = playbackState.copy(playing = false)
                 }
 
                 override fun onFullscreen(
@@ -76,9 +80,10 @@ internal fun BrowserPictureInPictureEffect(
                 ) {
                     if (disposed) return
                     activeMediaSession = mediaSession
+                    // Media-session fullscreen is useful for video dimensions, but it is not the
+                    // browser fullscreen authority. ContentDelegate.onFullScreen owns eligibility.
                     val isVideo = enabled && (meta == null || meta.videoTrackCount > 0)
-                    mediaState = mediaState.copy(
-                        fullscreenVideo = isVideo,
+                    playbackState = playbackState.copy(
                         videoWidth = if (isVideo) meta?.width ?: 0L else 0L,
                         videoHeight = if (isVideo) meta?.height ?: 0L else 0L,
                     )
@@ -97,6 +102,12 @@ internal fun BrowserPictureInPictureEffect(
     }
 
     SideEffect {
-        controller.update(mediaState)
+        controller.update(
+            pictureInPictureMediaStateForTab(
+                contentFullscreen = contentFullscreen,
+                privateTab = privateTab,
+                playback = playbackState,
+            ),
+        )
     }
 }

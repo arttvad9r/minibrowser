@@ -283,10 +283,15 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
         newConfig: Configuration,
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        if (isInPictureInPictureMode && ::tabManager.isInitialized) {
-            // BrowserTabLifecycleController may receive onPause during the transition. Keep the
-            // selected GeckoSession active so suspendMediaWhenInactive does not stop the video.
-            tabManager.setAppVisible(true)
+        if (::tabManager.isInitialized) {
+            // A-C's PictureInPictureFeature forwards the platform transition to the EngineSession;
+            // while raw Gecko owns the live session, mirror that contract directly on its compositor.
+            tabManager.current()?.session?.compositorController?.onPipModeChanged(isInPictureInPictureMode)
+            if (isInPictureInPictureMode) {
+                // BrowserTabLifecycleController may receive onPause during the transition. Keep the
+                // selected GeckoSession active so suspendMediaWhenInactive does not stop the video.
+                tabManager.setAppVisible(true)
+            }
         }
     }
 
