@@ -107,11 +107,18 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.animation:animation")
     implementation("androidx.activity:activity-compose:1.13.0")
-    // Fragment 1.8.9 requests an older lifecycle-livedata-core metadata version. MiniBrowser already
-    // pins Lifecycle 2.11.0, so align the Fragment host with that set instead of admitting 2.6.1.
+    // Fragment 1.8.9 declares older baseline AndroidX dependencies. MiniBrowser already uses newer,
+    // verified versions of these modules, so keep the Fragment host on the existing dependency set
+    // instead of expanding dependency-verification trust to metadata that will never be selected.
     implementation("androidx.fragment:fragment:1.8.9") {
+        exclude(group = "androidx.annotation", module = "annotation")
+        exclude(group = "androidx.annotation", module = "annotation-experimental")
+        exclude(group = "androidx.collection", module = "collection")
         exclude(group = "androidx.lifecycle", module = "lifecycle-livedata-core")
     }
+    implementation("androidx.annotation:annotation:1.10.0")
+    implementation("androidx.annotation:annotation-experimental:1.6.0")
+    implementation("androidx.collection:collection:1.6.0")
     implementation("androidx.lifecycle:lifecycle-livedata-core:2.11.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.11.0")
