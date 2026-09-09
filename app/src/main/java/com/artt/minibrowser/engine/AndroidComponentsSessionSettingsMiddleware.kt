@@ -4,6 +4,8 @@ import mozilla.components.browser.state.action.BrowserAction
 import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.concept.engine.DownloadDelegate
+import mozilla.components.concept.engine.Engine
+import mozilla.components.concept.engine.EngineSession
 import mozilla.components.concept.engine.Settings
 import mozilla.components.concept.engine.history.HistoryTrackingDelegate
 import mozilla.components.lib.state.Middleware
@@ -24,28 +26,52 @@ internal fun configureAndroidComponentsOwnedSession(
 }
 
 /**
- * Pre-cutover middleware. It is inert while MiniBrowser does not dispatch Create/LinkEngineSession
- * actions. Once A-C creates a session, configure it immediately before the Link action continues
- * through EngineMiddleware and reaches the BrowserStore reducer.
+ * Owns the small session-only policy that must survive the raw -> A-C handoff.
  *
- * Delegate factories are lazy on purpose: merely constructing the shadow BrowserStore must not
- * initialize HistorySink or other live feature infrastructure before a session is actually linked.
+ * Delegate factories are lazy on purpose: constructing the shadow BrowserStore must not initialize
+ * HistorySink or live download infrastructure before an EngineSession is actually created/linked.
  */
-internal fun androidComponentsSessionSettingsMiddleware(
+internal class AndroidComponentsOwnedSessionConfigurator(
     historyTrackingDelegateFactory: () -> HistoryTrackingDelegate = { AndroidComponentsHistoryTrackingDelegate() },
     downloadDelegateFactory: () -> DownloadDelegate = { AndroidComponentsDownloadDelegate() },
-): Middleware<BrowserState, BrowserAction> {
-    val historyTrackingDelegate by lazy(LazyThreadSafetyMode.NONE, historyTrackingDelegateFactory)
-    val downloadDelegate by lazy(LazyThreadSafetyMode.NONE, downloadDelegateFactory)
+) {
+    private val historyTrackingDelegate by lazy(LazyThreadSafetyMode.NONE, historyTrackingDelegateFactory)
+    private val downloadDelegate by lazy(LazyThreadSafetyMode.NONE, downloadDelegateFactory)
 
-    return { _, next, action ->
-        if (action is EngineAction.LinkEngineSessionAction) {
-            configureAndroidComponentsOwnedSession(
-                settings = action.engineSession.settings,
-                historyTrackingDelegate = historyTrackingDelegate,
-                downloadDelegate = downloadDelegate,
-            )
-        }
-        next(action)
+    fun configure(settings: Settings) {
+        configureAndroidComponentsOwnedSession(
+            settings = settings,
+            historyTrackingDelegate = historyTrackingDelegate,
+            downloadDelegate = downloadDelegate,
+        )
     }
+}
+
+/**
+ * Engine facade used only by EngineMiddleware. Ordinary A-C-created sessions are configured as soon
+ * as Engine.createSession() returns, before CreateEngineSessionMiddleware applies desktop mode,
+ * restores state, or dispatches LinkEngineSessionAction.
+ *
+ * The underlying GeckoEngine intentionally keeps defaultSettings=null so this facade cannot rewrite
+ * the shared GeckoRuntime settings that the raw MiniBrowser owner still controls.
+ */
+internal class AndroidComponentsSessionConfiguringEngine(
+    private val delegate: Engine,
+    private val configurator: AndroidComponentsOwnedSessionConfigurator,
+) : Engine by delegate {
+    override fun createSession(private: Boolean, contextId: String?): EngineSession =
+        delegate.createSession(private, contextId).also { configurator.configure(it.settings) }
+}
+
+/**
+ * Fallback for EngineSessions created outside Engine.createSession(), notably WebExtension paths.
+ * It is inert while MiniBrowser does not dispatch/link live A-C EngineSessions.
+ */
+internal fun androidComponentsSessionSettingsMiddleware(
+    configurator: AndroidComponentsOwnedSessionConfigurator,
+): Middleware<BrowserState, BrowserAction> = { _, next, action ->
+    if (action is EngineAction.LinkEngineSessionAction) {
+        configurator.configure(action.engineSession.settings)
+    }
+    next(action)
 }
