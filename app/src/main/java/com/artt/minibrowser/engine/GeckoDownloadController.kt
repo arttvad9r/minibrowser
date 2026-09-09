@@ -170,12 +170,10 @@ class GeckoDownloadController(
         }
         val body = InputStreamDownloadBody(responseBody)
 
-        val fallback = runCatching { Uri.parse(response.uri).lastPathSegment }
-            .getOrNull()
-            ?.substringBefore('?')
-            ?.takeIf { it.isNotBlank() }
-            ?: "download"
-        val name = parseFilename(response.headers.header("Content-Disposition"), fallback)
+        val name = androidComponentsCompatibleDownloadFilename(
+            contentDisposition = response.headers.header("Content-Disposition"),
+            url = response.uri,
+        )
         val mime = normalizeDownloadMime(response.headers.header("Content-Type"))
         val persistHistory = shouldPersistDownloadHistory(isPrivate)
 
