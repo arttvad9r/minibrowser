@@ -35,11 +35,12 @@ internal data class AndroidComponentsExistingSessionTransferPlan(
         )
 
     /**
-     * Atomically performs the BrowserStore side of the existing-session ownership cutover.
+     * Performs the ordered BrowserStore side of the existing-session ownership cutover.
      *
-     * Keeping link and media replay in one operation prevents callers from dispatching retained media
-     * state before the tab has a MediaSession-capable EngineSession observer, or from forgetting the
-     * replay altogether.
+     * BrowserStore observers may see the linked state before media replay because these are separate
+     * synchronous dispatches; this method guarantees their required order, not transactional atomicity.
+     * Keeping the sequence in one operation prevents callers from replaying retained media too early
+     * or from forgetting the replay altogether.
      */
     fun linkAndReplayTo(store: BrowserStore, engineSession: EngineSession) {
         val target = store.state.tabs.firstOrNull { it.id == tabId }
