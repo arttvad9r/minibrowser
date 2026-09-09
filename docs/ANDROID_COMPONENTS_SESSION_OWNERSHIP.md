@@ -12,14 +12,17 @@ The A-C behavior referenced below is from Firefox / Android Components `154.0.1`
 `TabManager` is still the live-session owner. It currently:
 
 - constructs every raw `GeckoSession`;
-- installs MiniBrowser navigation, progress, content, history, prompt, permission, download and context-menu delegates;
+- installs MiniBrowser navigation, progress, content, history, prompt, permission, download, context-menu and media-session delegates before opening/restoring a session;
 - opens sessions against the application `GeckoRuntime`;
 - closes sessions when tabs are removed, hibernated, browser data is cleared, the host is destroyed, or a crashed session is replaced;
-- keeps raw `GeckoSession.SessionState` for restore/persistence;
+- keeps raw `GeckoSession.SessionState` as the only active restore source;
+- preserves a separately persisted, URL-bound A-C `EngineSessionState` envelope without using it to restore the raw session;
 - applies the hot-tab budget and manually reopens cold tabs.
 
-`BrowserStore` is shadow state only. `EngineMiddleware` is installed, but MiniBrowser does not dispatch
-`CreateEngineSessionAction` and does not link the render-only sidecar into `BrowserStore`.
+`BrowserStore` is shadow state only. The bridge mirrors tab metadata and any compatible persisted
+`EngineSessionState`, but `EngineMiddleware` is never given `CreateEngineSessionAction` and the
+render-only sidecar is never linked into `BrowserStore`. Therefore the shadow store still owns no live
+`EngineSession`.
 
 `GeckoEngineView` currently renders a temporary `GeckoEngineSession` facade around the existing raw
 session. The facade is created with `openGeckoSession=false`, all delegates it temporarily installs are
@@ -33,7 +36,8 @@ A-C 154.0.1 makes linked `EngineSession` lifetime an explicit BrowserStore conce
   `desktopMode` state, restores `engineSessionState` when present, and dispatches
   `LinkEngineSessionAction`.
 - `TabsRemovedMiddleware` dispatches `UnlinkEngineSessionAction` and then calls `close()` on the linked
-  `EngineSession` whenever a tab is removed.
+  `EngineSession` whenever a tab is removed. Removing a shadow tab whose `engineSession` is null does
+  not close the raw Gecko session.
 - `SuspendMiddleware` also unlinks and closes the `EngineSession`; a later
   `CreateEngineSessionAction` creates a new session and restores the saved `engineSessionState`.
 - `LinkingMiddleware` unregisters the engine observer on `UnlinkEngineSessionAction`; unlinking by
@@ -64,8 +68,11 @@ Before A-C creates a session, BrowserStore must already contain the values used 
 - selected tab;
 - restorable engine-session state when available.
 
-The migration bridge now mirrors desktop mode through the public
-`ContentAction.UpdateTabDesktopMode` action and passes `desktopMode` when creating shadow tabs.
+The migration bridge mirrors these creation-critical values while remaining shadow-only. A valid,
+URL-bound persisted engine-state envelope is decoded through `Engine.createSessionStateFrom(...)` and
+stored on the shadow tab. Because A-C 154 has no nullable `UpdateEngineSessionStateAction`, replacing or
+clearing that restore state recreates only the affected shadow tab while it has no linked
+`EngineSession`. No `CreateEngineSessionAction` is dispatched by this bridge.
 
 ### 2. Raw delegate behavior has an A-C destination or an explicit retained policy
 
@@ -79,19 +86,25 @@ of these outcomes first:
 
 Current known blockers include prompt host integration and ISO `WEEK` boundary/range parity,
 authenticated download/header semantics, history error filtering, and link+media context-menu parity.
+PiP's raw baseline has been repaired to use content fullscreen state and Gecko compositor PiP
+transitions, but a deterministic real playback smoke is still required before PiP feature ownership
+moves.
 
 ### 3. Session-state persistence is versioned before ownership moves
 
-Current `TabStore` persists `GeckoSession.SessionState.toString()` directly. A-C exposes persistence
-through the `EngineSessionState` interface instead.
+This precondition is now implemented without activating A-C session ownership.
 
-`GeckoEngineSessionState.actualState` is internal to `browser-engine-gecko`; MiniBrowser must not
-reach into it or depend on the private `GECKO_STATE` JSON key. The ownership migration should instead
-introduce a versioned persisted engine-state payload using the public `EngineSessionState.writeTo(...)`
-contract and restore it through `Engine.createSessionStateFrom(...)`.
+MiniBrowser persists raw `GeckoSession.SessionState` and A-C `EngineSessionState` in separate fields.
+The A-C payload is stored in a versioned, engine-qualified envelope with an exact URL binding. It is
+serialized only through `EngineSessionState.writeTo(...)` and decoded only through
+`Engine.createSessionStateFrom(...)`; MiniBrowser does not reach into
+`GeckoEngineSessionState.actualState` or depend on the private `GECKO_STATE` JSON key.
 
-This persistence change may reuse the existing tab metadata file, but it must be distinguishable from
-the current raw Gecko state string so old installs can be migrated safely.
+Raw-owned `TabManager` preserves a compatible envelope through materialization, normal persistence and
+closed-tab restore, drops stale/unbound state when navigation invalidates its URL binding, and clears
+both raw and A-C opaque snapshots when credential sanitization changes persisted metadata. The decoded
+A-C state may now be mirrored into shadow BrowserStore state, but raw `GeckoSession.SessionState`
+remains the only active restore path until the ownership cutover.
 
 ### 4. Render binding no longer borrows raw sessions
 
@@ -104,8 +117,9 @@ the borrowed sidecar and delegate snapshot/restore logic can be removed.
 
 The ownership change should be one directional boundary, not a long-lived mixed mode.
 
-1. **Persist A-C-compatible state.** Teach restore/persistence to round-trip versioned
-   `EngineSessionState` while still retaining the ability to read the existing raw Gecko payload.
+1. **Persist and hand off A-C-compatible state — complete pre-cutover.** Versioned
+   `EngineSessionState` round-trips beside the legacy raw Gecko payload, survives the raw-owned tab
+   lifecycle while URL-bound, and can populate shadow BrowserStore state without creating a session.
 2. **Finish delegate/feature seams.** Resolve or explicitly retain the remaining prompt, download,
    history, context-menu and permission/navigation policies before A-C installs live delegates.
 3. **Make BrowserStore the tab/session creation source.** Restore tab metadata into BrowserStore and
@@ -127,8 +141,9 @@ The ownership change should be one directional boundary, not a long-lived mixed 
 
 For any tab, exactly one of these modes is allowed:
 
-- **Raw-owned:** `TabManager` may open/close/replace its raw `GeckoSession`; BrowserStore must not hold
-  an owned linked `EngineSession` for that tab.
+- **Raw-owned:** `TabManager` may open/close/replace its raw `GeckoSession`; BrowserStore may hold
+  metadata and a restorable `EngineSessionState`, but must not hold an owned linked `EngineSession` for
+  that tab.
 - **A-C-owned:** BrowserStore/EngineMiddleware may create/link/suspend/close its `EngineSession`;
   `TabManager` must not close or replace the underlying Gecko session.
 
