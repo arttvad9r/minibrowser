@@ -265,7 +265,9 @@ class BrowserPictureInPicturePlaybackSystemTest {
         const val TEST_VIDEO_ASSET = "pip_test.webm"
         const val LOOPBACK_HOST = "127.0.0.1"
         const val DEFAULT_TIMEOUT_MS = 10_000L
-        const val MEDIA_READY_TIMEOUT_MS = 12_000L
+        // MediaSession playback callbacks can lag fullscreen on heavily loaded CI emulators. This
+        // test validates eventual real Gecko -> PiP behavior, not a playback-start latency SLA.
+        const val MEDIA_READY_TIMEOUT_MS = 25_000L
         const val POLL_INTERVAL_MS = 100L
         const val PAGE_SETTLE_MS = 300L
         const val TAP_DURATION_MS = 50L
