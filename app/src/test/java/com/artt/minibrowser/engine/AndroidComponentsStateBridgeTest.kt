@@ -1,14 +1,19 @@
 package com.artt.minibrowser.engine
 
+import android.util.JsonWriter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import mozilla.components.browser.state.action.ContentAction
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.ContentState
+import mozilla.components.browser.state.state.EngineState
 import mozilla.components.browser.state.state.TabSessionState
+import mozilla.components.concept.engine.EngineSessionState
 
 class AndroidComponentsStateBridgeTest {
     @Test
@@ -26,6 +31,24 @@ class AndroidComponentsStateBridgeTest {
         assertEquals(listOf(true, false), add.tabs.map { it.content.desktopMode })
         assertEquals("Example", add.tabs.first().content.title)
         assertEquals(TabListAction.SelectTabAction("2"), actions.last())
+    }
+
+    @Test
+    fun initialSyncCarriesEngineRestoreStateWithoutCreatingLiveSession() {
+        val tab = snapshot(id = "1", url = "https://example.com")
+        val engineState = TestEngineSessionState("restored")
+
+        val actions = browserStoreSyncActions(
+            state = BrowserState(),
+            tabs = listOf(tab),
+            selectedTabId = "1",
+            engineSessionStates = mapOf("1" to engineState),
+        )
+
+        val added = assertIs<TabListAction.AddMultipleTabsAction>(actions.first()).tabs.single()
+        assertSame(engineState, added.engineState.engineSessionState)
+        assertNull(added.engineState.engineSession)
+        assertEquals(TabListAction.SelectTabAction("1"), actions.last())
     }
 
     @Test
@@ -47,6 +70,72 @@ class AndroidComponentsStateBridgeTest {
         )
 
         assertTrue(browserStoreSyncActions(state, listOf(tab), "7").isEmpty())
+    }
+
+    @Test
+    fun unchangedEngineRestoreStateKeepsShadowTabIdentity() {
+        val tab = snapshot(id = "7", url = "https://example.com/page")
+        val engineState = TestEngineSessionState("same")
+        val state = BrowserState(
+            tabs = listOf(tab.toState(engineSessionState = engineState)),
+            selectedTabId = "7",
+        )
+
+        assertTrue(
+            browserStoreSyncActions(
+                state = state,
+                tabs = listOf(tab),
+                selectedTabId = "7",
+                engineSessionStates = mapOf("7" to engineState),
+            ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun clearingEngineRestoreStateRecreatesOnlyShadowTab() {
+        val tab = snapshot(id = "7", url = "https://example.com/page", desktop = true)
+        val oldEngineState = TestEngineSessionState("old")
+        val state = BrowserState(
+            tabs = listOf(tab.toState(engineSessionState = oldEngineState)),
+            selectedTabId = "7",
+        )
+
+        val actions = browserStoreSyncActions(
+            state = state,
+            tabs = listOf(tab),
+            selectedTabId = "7",
+            engineSessionStates = mapOf<String, EngineSessionState?>("7" to null),
+        )
+
+        assertEquals(TabListAction.RemoveTabsAction(listOf("7")), actions[0])
+        val added = assertIs<TabListAction.AddMultipleTabsAction>(actions[1]).tabs.single()
+        assertNull(added.engineState.engineSessionState)
+        assertNull(added.engineState.engineSession)
+        assertTrue(added.content.desktopMode)
+        assertEquals(TabListAction.SelectTabAction("7"), actions.last())
+    }
+
+    @Test
+    fun replacingEngineRestoreStateRecreatesOnlyShadowTab() {
+        val tab = snapshot(id = "7", url = "https://example.com/page")
+        val oldEngineState = TestEngineSessionState("old")
+        val newEngineState = TestEngineSessionState("new")
+        val state = BrowserState(
+            tabs = listOf(tab.toState(engineSessionState = oldEngineState)),
+            selectedTabId = "7",
+        )
+
+        val actions = browserStoreSyncActions(
+            state = state,
+            tabs = listOf(tab),
+            selectedTabId = "7",
+            engineSessionStates = mapOf("7" to newEngineState),
+        )
+
+        assertEquals(TabListAction.RemoveTabsAction(listOf("7")), actions[0])
+        val added = assertIs<TabListAction.AddMultipleTabsAction>(actions[1]).tabs.single()
+        assertSame(newEngineState, added.engineState.engineSessionState)
+        assertEquals(TabListAction.SelectTabAction("7"), actions.last())
     }
 
     @Test
@@ -205,7 +294,9 @@ class AndroidComponentsStateBridgeTest {
         fullscreen = fullscreen,
     )
 
-    private fun BrowserStoreTabSnapshot.toState() = TabSessionState(
+    private fun BrowserStoreTabSnapshot.toState(
+        engineSessionState: EngineSessionState? = null,
+    ) = TabSessionState(
         id = id,
         content = ContentState(
             url = url,
@@ -218,5 +309,14 @@ class AndroidComponentsStateBridgeTest {
             canGoBack = canGoBack,
             canGoForward = canGoForward,
         ),
+        engineState = EngineState(engineSessionState = engineSessionState),
     )
+
+    private data class TestEngineSessionState(val marker: String) : EngineSessionState {
+        override fun writeTo(writer: JsonWriter) {
+            writer.beginObject()
+            writer.name("marker").value(marker)
+            writer.endObject()
+        }
+    }
 }

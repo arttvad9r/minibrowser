@@ -1,6 +1,8 @@
 package com.artt.minibrowser.engine
 
 import androidx.compose.runtime.snapshotFlow
+import com.artt.minibrowser.data.EngineSessionStateEnvelope
+import com.artt.minibrowser.data.decodeBoundEngineSessionStateEnvelope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -13,8 +15,11 @@ import mozilla.components.browser.state.action.ContentAction
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.ContentState
+import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.browser.state.store.BrowserStore
+import mozilla.components.concept.engine.Engine
+import mozilla.components.concept.engine.EngineSessionState
 import kotlin.math.roundToInt
 
 /**
@@ -33,6 +38,8 @@ internal data class BrowserStoreTabSnapshot(
     val canGoBack: Boolean,
     val canGoForward: Boolean,
     val fullscreen: Boolean,
+    val persistedEngineSessionState: EngineSessionStateEnvelope? = null,
+    val persistedEngineSessionStateUrl: String? = null,
 )
 
 private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
@@ -53,7 +60,24 @@ private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
         canGoBack = canGoBack,
         canGoForward = canGoForward,
         fullscreen = fullscreen,
+        persistedEngineSessionState = persistedEngineSessionState,
+        persistedEngineSessionStateUrl = persistedEngineSessionStateUrl,
     )
+}
+
+private fun shouldRecreateShadowTab(
+    current: TabSessionState,
+    next: BrowserStoreTabSnapshot,
+    desiredEngineSessionState: EngineSessionState?,
+): Boolean {
+    if (current.content.private != next.isPrivate) return true
+
+    // A-C 154 has no nullable UpdateEngineSessionStateAction. While this bridge is shadow-only,
+    // recreate just the affected BrowserStore tab to atomically replace or clear its persisted
+    // restore state. Never use this path once a live EngineSession has been linked: TabsRemovedMiddleware
+    // would then own closing it, which belongs to the later explicit ownership cutover.
+    return current.engineState.engineSession == null &&
+        current.engineState.engineSessionState !== desiredEngineSessionState
 }
 
 /**
@@ -61,21 +85,29 @@ private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
  * Structural changes remove, add and move only the tabs that actually changed, preserving existing
  * BrowserStore sessions for ordinary reorders. Content changes are diffed by tab ID so structural
  * updates do not cause unrelated content actions.
+ *
+ * [engineSessionStates] contains already-decoded, URL-bound A-C restore state. The shadow store may
+ * hold this state before live ownership moves, but this function never dispatches CreateEngineSessionAction.
  */
 internal fun browserStoreSyncActions(
     state: BrowserState,
     tabs: List<BrowserStoreTabSnapshot>,
     selectedTabId: String?,
+    engineSessionStates: Map<String, EngineSessionState?> = emptyMap(),
 ): List<BrowserAction> {
     val actions = mutableListOf<BrowserAction>()
     val currentById = state.tabs.associateBy { it.id }
     val nextById = tabs.associateBy { it.id }
 
-    // Privacy is part of immutable tab creation state in this migration bridge. If it ever changes
-    // for an existing ID, recreate only that tab rather than rebuilding the complete BrowserStore.
     val removedIds = state.tabs.mapNotNull { current ->
         val next = nextById[current.id]
-        current.id.takeIf { next == null || next.isPrivate != current.content.private }
+        current.id.takeIf {
+            next == null || shouldRecreateShadowTab(
+                current = current,
+                next = next,
+                desiredEngineSessionState = engineSessionStates[next.id],
+            )
+        }
     }
     val removedIdSet = removedIds.toSet()
     if (removedIds.isNotEmpty()) {
@@ -84,7 +116,11 @@ internal fun browserStoreSyncActions(
 
     val addedTabs = tabs.filter { next ->
         val current = currentById[next.id]
-        current == null || current.content.private != next.isPrivate
+        current == null || shouldRecreateShadowTab(
+            current = current,
+            next = next,
+            desiredEngineSessionState = engineSessionStates[next.id],
+        )
     }
     val addedIdSet = addedTabs.mapTo(mutableSetOf()) { it.id }
     if (addedTabs.isNotEmpty()) {
@@ -96,6 +132,7 @@ internal fun browserStoreSyncActions(
                     id = tab.id,
                     title = tab.title,
                     desktopMode = tab.desktop,
+                    engineSessionState = engineSessionStates[tab.id],
                 )
             },
         )
@@ -174,11 +211,46 @@ private fun changedContentActions(
     }
 }
 
+private data class PersistedEngineStateKey(
+    val envelope: EngineSessionStateEnvelope?,
+    val stateUrl: String?,
+    val tabUrl: String,
+)
+
+private data class CachedEngineSessionState(
+    val key: PersistedEngineStateKey,
+    val decoded: EngineSessionState?,
+)
+
 internal class AndroidComponentsStateBridge(
     private val store: BrowserStore,
+    private val engine: Engine,
 ) {
+    private val decodedEngineStates = mutableMapOf<String, CachedEngineSessionState>()
+
     fun sync(tabs: List<BrowserStoreTabSnapshot>, selectedTabId: String?) {
-        browserStoreSyncActions(store.state, tabs, selectedTabId).forEach(store::dispatch)
+        val liveIds = tabs.mapTo(mutableSetOf()) { it.id }
+        decodedEngineStates.keys.retainAll(liveIds)
+        val engineSessionStates = tabs.associate { tab -> tab.id to resolveEngineSessionState(tab) }
+        browserStoreSyncActions(store.state, tabs, selectedTabId, engineSessionStates).forEach(store::dispatch)
+    }
+
+    private fun resolveEngineSessionState(tab: BrowserStoreTabSnapshot): EngineSessionState? {
+        val key = PersistedEngineStateKey(
+            envelope = tab.persistedEngineSessionState,
+            stateUrl = tab.persistedEngineSessionStateUrl,
+            tabUrl = tab.url,
+        )
+        decodedEngineStates[tab.id]?.takeIf { it.key == key }?.let { return it.decoded }
+
+        val decoded = decodeBoundEngineSessionStateEnvelope(
+            envelope = tab.persistedEngineSessionState,
+            stateUrl = tab.persistedEngineSessionStateUrl,
+            tabUrl = tab.url,
+            engine = engine,
+        )
+        decodedEngineStates[tab.id] = CachedEngineSessionState(key, decoded)
+        return decoded
     }
 }
 
@@ -186,8 +258,9 @@ internal class AndroidComponentsStateBridge(
 internal fun CoroutineScope.bindTabManagerToBrowserStore(
     tabManager: TabManager,
     store: BrowserStore,
+    engine: Engine,
 ): Job = launch {
-    val bridge = AndroidComponentsStateBridge(store)
+    val bridge = AndroidComponentsStateBridge(store, engine)
     tabManager.tabs
         .flatMapLatest { tabs ->
             // _tabs only emits on structural changes. Individual Tab properties are Compose state,

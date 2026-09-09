@@ -23,7 +23,11 @@ internal class BrowserTabLifecycleController(
     init {
         lifecycle.addObserver(this)
         ((owner as? Activity)?.application as? BrowserApp)?.let { app ->
-            androidComponentsBridgeScope.bindTabManagerToBrowserStore(tabManager, app.browserStore)
+            androidComponentsBridgeScope.bindTabManagerToBrowserStore(
+                tabManager = tabManager,
+                store = app.browserStore,
+                engine = app.engine,
+            )
         }
     }
 
