@@ -21,16 +21,13 @@ import kotlin.math.roundToInt
  * Temporary migration snapshot used while raw GeckoSession remains the execution source of truth.
  * BrowserStore is intentionally shadow state at this stage; later Android Components features can
  * move one responsibility at a time without forcing a simultaneous TabManager rewrite.
- *
- * Desktop mode deliberately remains owned by TabManager for now. Android Components 154 exposes
- * ContentState.desktopMode but no public BrowserAction that can update it. Rebuilding a tab only to
- * mirror that bit would discard granular state and undermine the purpose of this bridge.
  */
 internal data class BrowserStoreTabSnapshot(
     val id: String,
     val url: String,
     val title: String,
     val isPrivate: Boolean,
+    val desktop: Boolean,
     val progress: Int,
     val loading: Boolean,
     val canGoBack: Boolean,
@@ -50,6 +47,7 @@ private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
         url = url,
         title = title,
         isPrivate = isPrivate,
+        desktop = desktop,
         progress = progressPercent,
         loading = loading,
         canGoBack = canGoBack,
@@ -97,6 +95,7 @@ internal fun browserStoreSyncActions(
                     private = tab.isPrivate,
                     id = tab.id,
                     title = tab.title,
+                    desktopMode = tab.desktop,
                 )
             },
         )
@@ -161,6 +160,7 @@ private fun changedContentActions(
 ): List<BrowserAction> = buildList {
     if (current.url != next.url) add(ContentAction.UpdateUrlAction(next.id, next.url))
     if (current.title != next.title) add(ContentAction.UpdateTitleAction(next.id, next.title))
+    if (current.desktopMode != next.desktop) add(ContentAction.UpdateTabDesktopMode(next.id, next.desktop))
     if (current.progress != next.progress) add(ContentAction.UpdateProgressAction(next.id, next.progress))
     if (current.loading != next.loading) add(ContentAction.UpdateLoadingStateAction(next.id, next.loading))
     if (current.canGoBack != next.canGoBack) {
