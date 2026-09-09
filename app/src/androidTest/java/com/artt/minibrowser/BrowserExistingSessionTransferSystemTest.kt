@@ -6,12 +6,17 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.engine.AndroidComponentsContentCompatibilityDelegate
 import com.artt.minibrowser.engine.AndroidComponentsGeckoCompatibilityRegistry
 import com.artt.minibrowser.engine.AndroidComponentsMediaSessionHandoff
+import com.artt.minibrowser.engine.AndroidComponentsNavigationUiCompatibilityDelegate
 import com.artt.minibrowser.engine.AndroidComponentsOwnedSessionConfigurator
 import com.artt.minibrowser.engine.AndroidComponentsPermissionCompatibilityDelegate
 import com.artt.minibrowser.engine.AndroidComponentsPreparedExistingSessionTransfer
+import com.artt.minibrowser.engine.AndroidComponentsProgressUiCompatibilityDelegate
 import com.artt.minibrowser.engine.AndroidComponentsPromptCompatibilityDelegate
+import com.artt.minibrowser.engine.AndroidComponentsUiCompatibilityHandoff
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.ExternalAppNavigationPolicyRegistry
+import com.artt.minibrowser.engine.PageLoadError
+import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.preflightAndroidComponentsExistingSessionTransfer
 import com.artt.minibrowser.engine.prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish
 import mozilla.components.browser.state.action.TabListAction
@@ -19,6 +24,7 @@ import mozilla.components.browser.state.state.createTab
 import mozilla.components.concept.engine.mediasession.MediaSession
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,6 +62,18 @@ class BrowserExistingSessionTransferSystemTest {
                     "A-C content delegate is wrapped by the selective compatibility proxy",
                     rawSession.contentDelegate is AndroidComponentsContentCompatibilityDelegate,
                 )
+                assertTrue(
+                    "A-C progress delegate retains MiniBrowser-only security UI state",
+                    rawSession.progressDelegate is AndroidComponentsProgressUiCompatibilityDelegate,
+                )
+                assertTrue(
+                    "A-C navigation delegate retains MiniBrowser-only load-error UI state",
+                    rawSession.navigationDelegate is AndroidComponentsNavigationUiCompatibilityDelegate,
+                )
+                val uiCompatibility = app.uiCompatibilityState.snapshot(tabId)
+                assertNotNull("Raw UI compatibility state is handed off before delegate takeover", uiCompatibility)
+                assertSame(SecurityState.Exception, uiCompatibility!!.securityState)
+                assertSame(PageLoadError.Network, uiCompatibility.pageLoadError)
                 assertTrue(
                     "Future owned session keeps MiniBrowser's suspend-media policy",
                     prepared!!.engineSession.settings.suspendMediaWhenInactive,
@@ -133,6 +151,10 @@ class BrowserExistingSessionTransferSystemTest {
 
                 store.dispatch(TabListAction.RemoveTabAction(tabId))
                 assertTrue("Transferred test tab is removed from BrowserStore", store.state.tabs.none { it.id == tabId })
+                assertNull(
+                    "BrowserStore removal also drops MiniBrowser-only UI compatibility state",
+                    app.uiCompatibilityState.snapshot(tabId),
+                )
             }
 
             val transferredRawSession = checkNotNull(rawSession)
@@ -204,6 +226,10 @@ class BrowserExistingSessionTransferSystemTest {
         rawSession: GeckoSession,
         tabId: String,
         mediaSessionHandoff: AndroidComponentsMediaSessionHandoff? = null,
+        uiCompatibilityHandoff: AndroidComponentsUiCompatibilityHandoff = AndroidComponentsUiCompatibilityHandoff(
+            securityState = SecurityState.Exception,
+            pageLoadError = PageLoadError.Network,
+        ),
     ): AndroidComponentsPreparedExistingSessionTransfer {
         val preflight = preflightAndroidComponentsExistingSessionTransfer(
             rawSession = rawSession,
@@ -215,6 +241,8 @@ class BrowserExistingSessionTransferSystemTest {
             preflight = preflight,
             configurator = newConfigurator(),
             compatibilityRegistry = AndroidComponentsGeckoCompatibilityRegistry(),
+            uiCompatibilityState = app.uiCompatibilityState,
+            uiCompatibilityHandoff = uiCompatibilityHandoff,
             mediaSessionHandoff = mediaSessionHandoff,
         )
     }
