@@ -11,8 +11,8 @@ internal const val ENGINE_SESSION_STATE_ENVELOPE_VERSION = 1
  *
  * This deliberately lives beside the legacy raw Gecko session-state persistence instead of
  * overloading it. A-C exposes EngineSessionState.writeTo(JsonWriter) for serialization and
- * Engine.createSessionState(...) for restore; the payload is engine-specific, so the engine name
- * is persisted with it and must match before restore.
+ * Engine.createSessionStateFrom(...) for restore; the payload is engine-specific, so the engine
+ * name is persisted with it and must match before restore.
  */
 @Serializable
 data class EngineSessionStateEnvelope(

@@ -12,6 +12,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.browser.isCurrentPermissionRequestTab
+import com.artt.minibrowser.data.EngineSessionStateEnvelope
 import com.artt.minibrowser.data.HistorySink
 import com.artt.minibrowser.data.PersistedBrowserState
 import com.artt.minibrowser.data.PersistedTab
@@ -182,6 +183,22 @@ internal fun selectSessionStateForUrl(
     return SessionStateSelection(null, null)
 }
 
+internal data class EngineSessionStateSelection(
+    val state: EngineSessionStateEnvelope?,
+    val stateUrl: String?,
+)
+
+internal fun selectEngineSessionStateForUrl(
+    tabUrl: String,
+    state: EngineSessionStateEnvelope?,
+    stateUrl: String?,
+): EngineSessionStateSelection =
+    if (state != null && stateUrl == tabUrl) {
+        EngineSessionStateSelection(state, tabUrl)
+    } else {
+        EngineSessionStateSelection(null, null)
+    }
+
 internal fun currentSessionStateUrl(state: GeckoSession.SessionState): String? = runCatching {
     val index = state.currentIndex
     if (index < 0 || index >= state.size) null else state[index].uri
@@ -198,6 +215,8 @@ internal data class PersistenceTabSnapshot(
     val serializedSessionState: String?,
     val serializedSessionStateUrl: String?,
     val isPrivate: Boolean,
+    val serializedEngineSessionState: EngineSessionStateEnvelope? = null,
+    val serializedEngineSessionStateUrl: String? = null,
 )
 
 internal data class PersistenceSnapshot(
@@ -215,6 +234,11 @@ internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): Persis
             serializedState = it.serializedSessionState,
             serializedStateUrl = it.serializedSessionStateUrl,
         )
+        val selectedEngineState = selectEngineSessionStateForUrl(
+            tabUrl = it.url,
+            state = it.serializedEngineSessionState,
+            stateUrl = it.serializedEngineSessionStateUrl,
+        )
         PersistedTab(
             id = it.id,
             url = it.url,
@@ -223,6 +247,8 @@ internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): Persis
             sessionState = selectedState.state,
             lastAccess = it.lastAccess,
             sessionStateUrl = selectedState.stateUrl,
+            engineSessionState = selectedEngineState.state,
+            engineSessionStateUrl = selectedEngineState.stateUrl,
         )
     },
 )
@@ -259,6 +285,8 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     @Volatile internal var latestSessionStateUrl: String? = null
     internal var persistedSessionState: String? = null
     internal var persistedSessionStateUrl: String? = null
+    internal var persistedEngineSessionState: EngineSessionStateEnvelope? = null
+    internal var persistedEngineSessionStateUrl: String? = null
     internal var historyTitleUrl: String? = null
     internal var lastAccess = System.currentTimeMillis()
 }
@@ -276,6 +304,8 @@ data class ClosedTabSnapshot(
     val latestSessionStateUrl: String?,
     val persistedSessionState: String?,
     val persistedSessionStateUrl: String?,
+    val persistedEngineSessionState: EngineSessionStateEnvelope? = null,
+    val persistedEngineSessionStateUrl: String? = null,
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -376,6 +406,13 @@ class TabManager(
                 tab.persistedSessionState = saved.sessionState
                 tab.persistedSessionStateUrl = stateUrl
             }
+            val engineStateUrl = saved.engineSessionStateUrl
+            if (saved.engineSessionState != null && engineStateUrl == saved.url) {
+                // Preserve the opaque A-C state for a future ownership cutover, but do not decode or
+                // restore it while this tab is still raw-Gecko-owned.
+                tab.persistedEngineSessionState = saved.engineSessionState
+                tab.persistedEngineSessionStateUrl = engineStateUrl
+            }
         }
         attachDelegates(tab)
         if (publish) _tabs.value += tab
@@ -464,6 +501,8 @@ class TabManager(
             latestSessionStateUrl = dying.latestSessionStateUrl,
             persistedSessionState = dying.persistedSessionState,
             persistedSessionStateUrl = dying.persistedSessionStateUrl,
+            persistedEngineSessionState = dying.persistedEngineSessionState,
+            persistedEngineSessionStateUrl = dying.persistedEngineSessionStateUrl,
         )
         runtime.webExtensionController.setTabActive(dying.session, false)
         dying.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
@@ -492,6 +531,8 @@ class TabManager(
             latestSessionStateUrl = snapshot.latestSessionStateUrl
             persistedSessionState = snapshot.persistedSessionState
             persistedSessionStateUrl = snapshot.persistedSessionStateUrl
+            persistedEngineSessionState = snapshot.persistedEngineSessionState
+            persistedEngineSessionStateUrl = snapshot.persistedEngineSessionStateUrl
             restoreUrlOnOpen = true
         }
         seq = maxOf(seq, tab.id)
@@ -659,6 +700,8 @@ class TabManager(
                 serializedSessionState = it.persistedSessionState,
                 serializedSessionStateUrl = it.persistedSessionStateUrl,
                 isPrivate = it.isPrivate,
+                serializedEngineSessionState = it.persistedEngineSessionState,
+                serializedEngineSessionStateUrl = it.persistedEngineSessionStateUrl,
             )
         },
     )
@@ -697,6 +740,10 @@ class TabManager(
                 tab.historyTitleUrl = null
                 tab.url = url
                 tab.title = ""
+                if (tab.persistedEngineSessionStateUrl != url) {
+                    tab.persistedEngineSessionState = null
+                    tab.persistedEngineSessionStateUrl = null
+                }
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
@@ -744,6 +791,10 @@ class TabManager(
                 val nextUrl = url.orEmpty()
                 if (nextUrl != tab.url) tab.historyTitleUrl = null
                 tab.url = nextUrl
+                if (tab.persistedEngineSessionStateUrl != nextUrl) {
+                    tab.persistedEngineSessionState = null
+                    tab.persistedEngineSessionStateUrl = null
+                }
             }
 
             override fun onLoadRequest(
