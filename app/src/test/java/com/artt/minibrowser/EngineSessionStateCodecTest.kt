@@ -1,21 +1,22 @@
 package com.artt.minibrowser
 
+import android.app.Application
 import android.util.JsonReader
 import android.util.JsonWriter
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artt.minibrowser.data.EngineSessionStateEnvelope
 import com.artt.minibrowser.data.decodeEngineSessionStateEnvelope
 import com.artt.minibrowser.data.encodeEngineSessionStateEnvelope
 import mozilla.components.concept.engine.EngineSessionState
 import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
-@RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, sdk = [35])
+@RunWith(AndroidJUnit4::class)
+@Config(application = Application::class, sdk = [35])
 class EngineSessionStateCodecTest {
     private data class TestState(val value: String) : EngineSessionState {
         override fun writeTo(writer: JsonWriter) {
