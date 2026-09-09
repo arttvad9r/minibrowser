@@ -24,7 +24,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.util.Locale
 
 /** Small native prompt bridge; it deliberately denies unattended popup/auth actions. */
 class GeckoPromptController(
@@ -594,25 +593,16 @@ class GeckoPromptController(
             return Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addCategory(Intent.CATEGORY_DEFAULT)
         }
 
-        val accepted = normalizeMimeTypes(prompt.mimeTypes)
+        val accepted = acceptedPromptMimeTypes(prompt.mimeTypes.orEmpty())
         return Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = mergedMimeType(accepted)
-            if (accepted.isNotEmpty()) putExtra(Intent.EXTRA_MIME_TYPES, accepted)
+            putExtra(Intent.EXTRA_MIME_TYPES, accepted)
             if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
                 putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             }
         }
     }
-
-    private fun normalizeMimeTypes(values: Array<String>?): Array<String> = values.orEmpty()
-        .map { it.trim().lowercase(Locale.ROOT) }
-        .filter { value ->
-            val slash = value.indexOf('/')
-            slash > 0 && slash < value.lastIndex
-        }
-        .distinct()
-        .toTypedArray()
 
     private fun mergedMimeType(types: Array<String>): String {
         if (types.isEmpty()) return "*/*"
