@@ -27,6 +27,10 @@ data class PersistedTab(
     // URL the Gecko session state belongs to. Older persisted files do not have this field;
     // their unbound session state is deliberately ignored by TabManager and the URL is reloaded.
     val sessionStateUrl: String? = null,
+    // Future A-C-owned sessions persist EngineSessionState separately from the legacy raw Gecko
+    // string above. These fields remain null while TabManager is the live session owner.
+    val engineSessionState: EngineSessionStateEnvelope? = null,
+    val engineSessionStateUrl: String? = null,
 )
 
 @Serializable
@@ -81,11 +85,23 @@ internal fun sanitizePersistedBrowserState(state: PersistedBrowserState): Persis
         }
 
         val safeSessionStateUrl = sanitizePersistedSessionUrl(tab.sessionStateUrl)
-        if (safeUrl != tab.url || safeTitle != tab.title || safeSessionStateUrl != tab.sessionStateUrl) {
-            // Gecko session state is opaque and can contain the original URL/title. If credentials
-            // were removed from any persisted browser metadata, discard that snapshot and reload
-            // the sanitized URL instead of retaining the opaque sensitive copy on disk.
-            normalized = normalized.copy(sessionState = null, sessionStateUrl = null)
+        val safeEngineSessionStateUrl = sanitizePersistedSessionUrl(tab.engineSessionStateUrl)
+        if (
+            safeUrl != tab.url ||
+            safeTitle != tab.title ||
+            safeSessionStateUrl != tab.sessionStateUrl ||
+            safeEngineSessionStateUrl != tab.engineSessionStateUrl
+        ) {
+            // Both raw Gecko and A-C engine session snapshots are opaque and can contain the
+            // original URL/title. If credentials were removed from persisted browser metadata,
+            // discard every bound snapshot and reload the sanitized URL instead of retaining an
+            // opaque sensitive copy on disk.
+            normalized = normalized.copy(
+                sessionState = null,
+                sessionStateUrl = null,
+                engineSessionState = null,
+                engineSessionStateUrl = null,
+            )
         }
 
         normalized.takeIf { it.id > 0L && seenIds.add(it.id) }
