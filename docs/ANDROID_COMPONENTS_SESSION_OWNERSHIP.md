@@ -42,6 +42,11 @@ A-C 154.0.1 makes linked `EngineSession` lifetime an explicit BrowserStore conce
   `CreateEngineSessionAction` creates a new session and restores the saved `engineSessionState`.
 - `LinkingMiddleware` unregisters the engine observer on `UnlinkEngineSessionAction`; unlinking by
   itself is not a second close operation.
+- `GeckoEngineSession` can be constructed around an existing raw `GeckoSession` through its public
+  `geckoSessionProvider` with `openGeckoSession=false`. That is a possible future ownership-transfer
+  mechanism without recreating the underlying Gecko session, but construction immediately installs
+  A-C's Gecko delegates and `GeckoEngineSession.close()` closes the provided raw session. It therefore
+  cannot be used as a long-lived bridge while `TabManager` still owns delegates or close authority.
 
 Therefore a linked session must never remain owned by `TabManager.closeIfOpen()` at the same time.
 
@@ -52,6 +57,7 @@ Relevant A-C sources:
 - `browser/state/engine/middleware/SuspendMiddleware.kt`
 - `browser/state/engine/middleware/LinkingMiddleware.kt`
 - `browser/state/reducer/EngineStateReducer.kt`
+- `browser/engine-gecko/GeckoEngineSession.kt`
 
 ## Preconditions
 
@@ -84,11 +90,13 @@ of these outcomes first:
 - keep a small MiniBrowser policy adapter behind that A-C feature;
 - remain intentionally custom with a documented parity reason.
 
-Current known blockers include prompt host integration and ISO `WEEK` boundary/range parity,
+Current known blockers include the lossy `WEEK` prompt adapter boundary and prompt host integration,
 authenticated download/header semantics, history error filtering, and link+media context-menu parity.
 PiP's raw baseline has been repaired to use content fullscreen state and Gecko compositor PiP
-transitions, but a deterministic real playback smoke is still required before PiP feature ownership
-moves.
+transitions. Stable API 36 instrumentation now proves that an eligible state enters real Android
+picture-in-picture and that the same platform transition is mirrored into
+`BrowserStore.content.pictureInPictureEnabled`. A real Gecko/HTML media-playback end-to-end smoke is
+still required before PiP feature ownership moves.
 
 ### 3. Session-state persistence is versioned before ownership moves
 
@@ -123,7 +131,10 @@ The ownership change should be one directional boundary, not a long-lived mixed 
 2. **Finish delegate/feature seams.** Resolve or explicitly retain the remaining prompt, download,
    history, context-menu and permission/navigation policies before A-C installs live delegates.
 3. **Make BrowserStore the tab/session creation source.** Restore tab metadata into BrowserStore and
-   let `CreateEngineSessionAction` create only the sessions that need to be hot.
+   let `CreateEngineSessionAction` create only the sessions that need to be hot. If preserving a live
+   raw Gecko session across this boundary is preferable, use an explicit one-time
+   `GeckoEngineSession(geckoSessionProvider = ...)` ownership transfer instead of allowing both owners
+   to coexist; delegate and close authority must move in the same boundary.
 4. **Switch rendering to the linked EngineSession.** Remove the borrowed raw-session sidecar from the
    selected-tab render path.
 5. **Switch navigation/reload/back/forward/desktop operations to A-C use cases/actions.** After this
@@ -159,15 +170,22 @@ The current prompt seam remains intentionally non-live:
 - popup target filtering already lives outside raw prompt UI plumbing in navigation policy.
 - current HTML date/time formatting, including the ISO week-based year for `WEEK`, is locked by unit
   tests.
-- A-C's Gecko prompt adapter does handle raw Gecko `WEEK` prompts: it exposes them as
-  `PromptRequest.TimeSelection` and parses/confirms values with
-  `SimpleDateFormat("yyyy-'W'ww", Locale.ROOT)`. The absence of a separate `WEEK` value in
-  `PromptRequest.TimeSelection.Type` is therefore not itself a parity blocker.
-- the formatter semantics are still different. MiniBrowser uses `WeekFields.ISO`, while A-C's
+- A-C's Gecko prompt adapter accepts raw Gecko `WEEK` prompts, but it parses them with
+  `SimpleDateFormat("yyyy-'W'ww", Locale.ROOT)` and emits a normal
+  `PromptRequest.TimeSelection.Type.DATE`. The original HTML `WEEK` type is therefore lost at the
+  engine-adapter boundary before BrowserStore or `PromptFeature` sees the request.
+- `PromptFeature` maps `TimeSelection.Type.DATE` directly to its date picker and has no public
+  date/time renderer or prompt-filter hook that can distinguish the original `WEEK` request. A
+  downstream MiniBrowser override cannot safely replace only WEEK while leaving ordinary DATE prompts
+  under stock `PromptFeature`.
+- the formatter semantics are also different. MiniBrowser uses `WeekFields.ISO`, while A-C's
   `SimpleDateFormat` pattern uses calendar year `yyyy` plus locale calendar week rules. For example,
   MiniBrowser intentionally formats 2021-01-01 as `2020-W53`, whereas that A-C formatter produces
   `2021-W01`. Default/min/max and confirmation behavior around ISO week-year boundaries must be
-  bridged or explicitly accepted before `PromptFeature` owns these prompts.
+  bridged, retained on a custom prompt path, or explicitly accepted before `PromptFeature` owns these
+  prompts.
+- current upstream Firefox/Android Components still has this `WEEK` adapter shape, so a dependency
+  bump alone is not a known resolution.
 - `PromptFeature` uses a `FragmentManager`, while MiniBrowser currently hosts Compose in
   `ComponentActivity`; the host integration must be chosen deliberately rather than changing the
   Activity base class as an incidental side effect of the session cutover.
