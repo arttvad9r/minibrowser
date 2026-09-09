@@ -21,7 +21,7 @@ internal data class AndroidComponentsRawMediaSessionHandoffState<T : Any>(
         AndroidComponentsMediaSessionHandoff(
             controller = controllerFactory(session),
             playbackState = playbackState,
-            fullScreen = fullScreen,
+            fullscreen = fullScreen,
             elementMetadata = elementMetadata,
         )
     }
