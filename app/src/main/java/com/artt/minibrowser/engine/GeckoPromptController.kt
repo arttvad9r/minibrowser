@@ -322,7 +322,7 @@ class GeckoPromptController(
         activity.runOnUiThread {
             if (!isPromptOpen(prompt)) return@runOnUiThread
             val input = EditText(activity).apply {
-                setText((prompt.defaultValue ?: "").takeIf { it.matches(Regex("^#[0-9A-Fa-f]{6}$")) } ?: "#000000")
+                setText(promptColorOrDefault(prompt.defaultValue))
                 inputType = InputType.TYPE_CLASS_TEXT
             }
             val dialog = AlertDialog.Builder(activity)
@@ -337,7 +337,7 @@ class GeckoPromptController(
             dialog.setOnShowListener {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                     val value = input.text.toString()
-                    if (value.matches(Regex("^#[0-9A-Fa-f]{6}$"))) {
+                    if (isValidPromptColor(value)) {
                         guard.complete { prompt.confirm(value) }
                         dialog.dismiss()
                     } else {
