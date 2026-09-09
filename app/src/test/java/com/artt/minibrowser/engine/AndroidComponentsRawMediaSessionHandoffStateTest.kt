@@ -78,7 +78,7 @@ class AndroidComponentsRawMediaSessionHandoffStateTest {
         requireNotNull(handoff)
         assertSame(NoOpController, handoff.controller)
         assertEquals(MediaSession.PlaybackState.PLAYING, handoff.playbackState)
-        assertEquals(true, handoff.fullScreen)
+        assertEquals(true, handoff.fullscreen)
         assertSame(metadata, handoff.elementMetadata)
     }
 
