@@ -35,12 +35,13 @@ class BrowserApp : Application() {
     }
     internal val browserStore by lazy(LazyThreadSafetyMode.NONE) {
         BrowserStore(
-            middleware = EngineMiddleware.create(
-                engine = engine,
-                // TabManager still owns the current hot-tab/session memory policy during this
-                // bridge. Do not let Android Components independently suspend raw GeckoSessions.
-                trimMemoryAutomatically = false,
-            ),
+            middleware = listOf(androidComponentsSessionSettingsMiddleware()) +
+                EngineMiddleware.create(
+                    engine = engine,
+                    // TabManager still owns the current hot-tab/session memory policy during this
+                    // bridge. Do not let Android Components independently suspend raw GeckoSessions.
+                    trimMemoryAutomatically = false,
+                ),
         )
     }
     internal val extensionLoader by lazy(LazyThreadSafetyMode.NONE) { ExtensionLoader(runtime) }
