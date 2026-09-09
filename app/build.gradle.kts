@@ -91,6 +91,9 @@ dependencies {
     // EngineMiddleware's public API accepts concept-engine.Engine. browser-engine-gecko keeps that
     // dependency internal, so consumers wiring the middleware directly must expose it themselves.
     implementation("org.mozilla.components:concept-engine:154.0.1")
+    // MiniBrowser calls Mozilla's public filename sanitizer directly so raw Gecko downloads already
+    // produce the same final filename GeckoEngineSession will expose after the ownership cutover.
+    implementation("org.mozilla.components:support-ktx:154.0.1")
     // Firefox 154.0.1 aligns Android Components/Nimbus with Glean 68.0.1. We need its Kotlin/Java
     // API for Nimbus/R8, but GeckoView Omni already contains the matching native Glean provider.
     // Exclude only the redundant standalone native artifact to avoid packaging a second libxul.so.
