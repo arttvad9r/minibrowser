@@ -147,9 +147,10 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
         val handledShortcut = handleShortcut(launchIntent)
 
         setContent {
-            BrowserPictureInPictureEffect(tabManager, pictureInPicture)
+            BrowserPictureInPictureEffect(tabManager, browserApp.browserStore, pictureInPicture)
             BrowserRoute(
                 tabManager = tabManager,
+                browserStore = browserApp.browserStore,
                 settingsViewModel = settingsViewModel,
                 browserDataViewModel = browserDataViewModel,
                 browserDataClearer = browserDataClearer,
@@ -194,6 +195,13 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                 override fun handleOnBackPressed() {
                     val ui = browserViewModel.state.value
                     val current = tabManager.current()
+                    val currentContent = current?.let { tab ->
+                        browserApp.browserStore.state.tabs
+                            .firstOrNull { it.id == tab.id.toString() }
+                            ?.content
+                    }
+                    val inFullscreen = currentContent?.fullScreen ?: (current?.fullscreen == true)
+                    val canGoBack = currentContent?.canGoBack ?: (current?.canGoBack == true)
 
                     when {
                         ui.showSwitcher -> browserViewModel.showSwitcher(false)
@@ -202,9 +210,9 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                             current?.session?.finder?.clear()
                             browserViewModel.showFind(false)
                         }
-                        current?.fullscreen == true -> current.session.exitFullScreen()
+                        inFullscreen -> current?.session?.exitFullScreen()
                         ui.screen != BrowserScreen.Browser -> browserViewModel.screen(BrowserScreen.Browser)
-                        current?.canGoBack == true -> current.session.goBack()
+                        canGoBack -> current?.session?.goBack()
                         current != null && closeCurrentTabForSystemBack(current.id) -> Unit
                         else -> passThroughToSystem()
                     }

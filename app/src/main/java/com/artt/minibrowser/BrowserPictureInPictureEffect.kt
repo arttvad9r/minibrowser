@@ -8,22 +8,29 @@ import com.artt.minibrowser.browser.BrowserPictureInPictureController
 import com.artt.minibrowser.browser.BrowserPictureInPicturePlaybackState
 import com.artt.minibrowser.browser.pictureInPictureMediaStateForTab
 import com.artt.minibrowser.engine.TabManager
+import mozilla.components.browser.state.store.BrowserStore
 
 /**
- * Maps TabManager-owned Gecko media state into Android PiP without taking ownership of playback.
- * PiP is deliberately disabled for private tabs to preserve the app's FLAG_SECURE privacy model.
- * Browser fullscreen comes from TabManager's ContentDelegate state, matching A-C's PiP contract.
+ * Maps BrowserStore content state plus the raw-owner media handoff snapshot into Android PiP without
+ * taking ownership of playback. PiP remains disabled for private tabs to preserve FLAG_SECURE.
+ * Playing/video geometry intentionally stays on the MiniBrowser media snapshot because stock A-C
+ * PiP does not preserve the current aspect-ratio/source-rect behavior.
  */
 @Composable
 internal fun BrowserPictureInPictureEffect(
     tabManager: TabManager,
+    browserStore: BrowserStore,
     controller: BrowserPictureInPictureController,
 ) {
     val tabs by tabManager.tabs.collectAsStateWithLifecycle()
     val currentId by tabManager.currentId.collectAsStateWithLifecycle()
+    val browserStoreState by browserStore.stateFlow.collectAsStateWithLifecycle()
     val currentTab = tabs.firstOrNull { it.id == currentId }
-    val privateTab = currentTab?.isPrivate == true
-    val contentFullscreen = currentTab?.fullscreen == true
+    val currentContent = browserStoreState.tabs
+        .firstOrNull { it.id == currentId?.toString() }
+        ?.content
+    val privateTab = currentContent?.private ?: (currentTab?.isPrivate == true)
+    val contentFullscreen = currentContent?.fullScreen ?: (currentTab?.fullscreen == true)
     val mediaPlayback = currentTab?.mediaPlaybackState
 
     SideEffect {

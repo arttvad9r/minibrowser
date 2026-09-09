@@ -87,6 +87,7 @@ import com.artt.minibrowser.ui.chromiumSharedXAxisExit
 import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import mozilla.components.browser.state.store.BrowserStore
 
 /**
  * Screen-level browser route. It collects state from browser ViewModels and translates user
@@ -95,6 +96,7 @@ import kotlinx.coroutines.flow.collectLatest
 @Composable
 internal fun BrowserRoute(
     tabManager: TabManager,
+    browserStore: BrowserStore,
     settingsViewModel: SettingsViewModel,
     browserDataViewModel: BrowserDataViewModel,
     browserDataClearer: BrowserDataClearer,
@@ -121,6 +123,7 @@ internal fun BrowserRoute(
     val browserUi by browserViewModel.state.collectAsStateWithLifecycle()
     val pageBookmarkUi by pageBookmarkViewModel.uiState.collectAsStateWithLifecycle()
     val omniboxSuggestionsUi by omniboxSuggestionsViewModel.uiState.collectAsStateWithLifecycle()
+    val browserStoreState by browserStore.stateFlow.collectAsStateWithLifecycle()
     val screen = browserUi.screen
     val showSwitcher = browserUi.showSwitcher
     val showFind = browserUi.showFind
@@ -132,16 +135,28 @@ internal fun BrowserRoute(
     val tabs by tabManager.tabs.collectAsStateWithLifecycle()
     val currentId by tabManager.currentId.collectAsStateWithLifecycle()
     val currentTab = tabs.firstOrNull { it.id == currentId }
+    val currentStoreContent = browserStoreState.tabs
+        .firstOrNull { it.id == currentId?.toString() }
+        ?.content
     val currentSession = currentTab?.session
+    val currentUrl = currentStoreContent?.url ?: currentTab?.url.orEmpty()
+    val currentTitle = currentStoreContent?.title ?: currentTab?.title.orEmpty()
+    val currentIsPrivate = currentStoreContent?.private ?: (currentTab?.isPrivate == true)
+    val currentDesktop = currentStoreContent?.desktopMode ?: (currentTab?.desktop == true)
+    val canGoBack = currentStoreContent?.canGoBack ?: (currentTab?.canGoBack == true)
+    val canGoForward = currentStoreContent?.canGoForward ?: (currentTab?.canGoForward == true)
+    val inFullscreen = currentStoreContent?.fullScreen ?: (currentTab?.fullscreen == true)
+    val isLoading = currentStoreContent?.loading ?: ((currentTab?.progress ?: -1f) >= 0f)
+    val pageProgress = currentStoreContent?.let { content ->
+        if (content.loading) content.progress / 100f else -1f
+    } ?: (currentTab?.progress ?: -1f)
     val focusManager = LocalFocusManager.current
-    val inFullscreen = currentTab?.fullscreen == true
-    val isLoading = (currentTab?.progress ?: -1f) >= 0f
 
     BrowserRootEffects(
         screen = screen,
         showSwitcher = showSwitcher,
-        currentUrl = currentTab?.url,
-        canGoBack = currentTab?.canGoBack == true,
+        currentUrl = currentUrl,
+        canGoBack = canGoBack,
         inFullscreen = inFullscreen,
         showFind = showFind,
         onClearFocus = { focusManager.clearFocus(force = true) },
@@ -160,16 +175,18 @@ internal fun BrowserRoute(
     BrowserWindowEffects(
         controller = browserWindow,
         darkTheme = darkTheme,
-        isPrivate = currentTab?.isPrivate == true,
+        isPrivate = currentIsPrivate,
         inFullscreen = inFullscreen,
     )
 
-    val bookmarked = pageBookmarkUi.url == currentTab?.url && pageBookmarkUi.isBookmarked
-    val showStart = currentTab?.url.isNullOrBlank() || currentTab.url == "about:blank"
+    val bookmarked = pageBookmarkUi.url == currentUrl && pageBookmarkUi.isBookmarked
+    val showStart = currentUrl.isBlank() || currentUrl == "about:blank"
     val toggleAdblock: (Boolean) -> Unit = settingsViewModel::setAdblock
     val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
     val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
     val retryVot: () -> Unit = settingsViewModel::retryVot
+    // GeckoView's certificate-exception bit has no lossless A-C 154 BrowserStore equivalent yet.
+    // Keep this one visual distinction on the raw compatibility state until its sidecar is wired.
     val chromeSecurityState = when (currentTab?.securityState) {
         SecurityState.Secure -> BrowserSecurityUiState.Secure
         SecurityState.Insecure -> BrowserSecurityUiState.Insecure
@@ -179,17 +196,17 @@ internal fun BrowserRoute(
     val chromeAdblockStatus = settingsUi.adblockStatus.toExtensionUiState()
     val settingsVotStatus = settingsUi.votStatus.toExtensionUiState()
     val chromeState = BrowserChromeUiState(
-        url = currentTab?.url.orEmpty(),
-        isWebPage = currentTab?.url?.let(::isValidWebUri) == true,
-        isPrivate = currentTab?.isPrivate == true,
+        url = currentUrl,
+        isWebPage = isValidWebUri(currentUrl),
+        isPrivate = currentIsPrivate,
         isLoading = isLoading,
         securityState = chromeSecurityState,
-        canGoBack = currentTab?.canGoBack == true,
-        canGoForward = currentTab?.canGoForward == true,
-        desktop = currentTab?.desktop == true,
+        canGoBack = canGoBack,
+        canGoForward = canGoForward,
+        desktop = currentDesktop,
     )
-    val canOpenExternal = remember(currentTab?.url) {
-        browserIntents.canOpenInExternalApp(currentTab?.url)
+    val canOpenExternal = remember(currentUrl) {
+        browserIntents.canOpenInExternalApp(currentUrl)
     }
     val settingsScreenState = SettingsScreenUiState(
         searchEngine = prefs.searchEngine.toSettingsUiState(),
@@ -202,12 +219,14 @@ internal fun BrowserRoute(
         clearDataInProgress = browserDataUi.isClearing,
         clearDataFailed = browserDataUi.clearFailed,
     )
+    val browserStoreTabsById = browserStoreState.tabs.associateBy { it.id }
     val tabItems = tabs.map { tab ->
+        val content = browserStoreTabsById[tab.id.toString()]?.content
         BrowserTabItemUiState(
             id = tab.id,
-            url = tab.url,
-            title = tab.title,
-            isPrivate = tab.isPrivate,
+            url = content?.url ?: tab.url,
+            title = content?.title ?: tab.title,
+            isPrivate = content?.private ?: tab.isPrivate,
         )
     }
     val suggestionItems = omniboxSuggestionsUi.suggestions.map { suggestion ->
@@ -259,7 +278,7 @@ internal fun BrowserRoute(
         onFind = { browserViewModel.showFind(true) },
         onCloseFind = { browserViewModel.showFind(false) },
         onToggleBookmark = {
-            currentTab?.let { tab -> pageBookmarkViewModel.toggle(tab.url, tab.title) }
+            if (currentTab != null) pageBookmarkViewModel.toggle(currentUrl, currentTitle)
         },
         onBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
         onHistory = { browserViewModel.screen(BrowserScreen.History) },
@@ -267,19 +286,19 @@ internal fun BrowserRoute(
             downloadsReturnToSettings = false
             browserViewModel.screen(BrowserScreen.Downloads)
         },
-        onShare = { browserIntents.shareUrl(currentTab?.url) },
+        onShare = { browserIntents.shareUrl(currentUrl) },
         onSettings = { browserViewModel.screen(BrowserScreen.Settings) },
         onToggleAdblock = toggleAdblock,
         onRetryAdblock = retryAdblock,
         onTranslate = {
-            currentTab?.let { tab ->
-                buildTranslateUri(tab.url, prefs.translateTarget)?.let(tab.session::loadUri)
+            if (currentTab != null) {
+                buildTranslateUri(currentUrl, prefs.translateTarget)?.let(currentTab.session::loadUri)
             }
         },
         onToggleDesktop = {
             currentTab?.let(::toggleDesktopMode)
         },
-        onOpenExternal = { browserIntents.openInExternalApp(currentTab?.url) },
+        onOpenExternal = { browserIntents.openInExternalApp(currentUrl) },
     )
 
     val settingsPaneTitle = stringResource(R.string.settings_title)
@@ -360,7 +379,7 @@ internal fun BrowserRoute(
                             tabPreviewStore,
                             Modifier.fillMaxSize(),
                         )
-                        BrowserPageProgress(currentTab?.progress ?: -1f)
+                        BrowserPageProgress(pageProgress)
                     },
                     findContent = if (currentTab != null) {
                         {
@@ -372,7 +391,7 @@ internal fun BrowserRoute(
                         null
                     },
                     startPageContent = {
-                        if (currentTab?.isPrivate == true) {
+                        if (currentIsPrivate && currentTab != null) {
                             StartPage(
                                 bookmarks = emptyList(),
                                 iconsDir = iconsDir,
