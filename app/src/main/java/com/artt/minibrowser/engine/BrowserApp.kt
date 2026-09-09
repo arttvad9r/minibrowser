@@ -26,6 +26,7 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
 class BrowserApp : Application() {
     internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
     internal val externalAppNavigationPolicyRegistry = ExternalAppNavigationPolicyRegistry()
+    internal val uiCompatibilityState = AndroidComponentsUiCompatibilityState()
     internal lateinit var runtime: GeckoRuntime
         private set
     internal val engine by lazy(LazyThreadSafetyMode.NONE) {
@@ -46,6 +47,7 @@ class BrowserApp : Application() {
         BrowserStore(
             middleware = listOf(
                 androidComponentsSessionSettingsMiddleware(browserStoreSessionConfigurator),
+                androidComponentsUiCompatibilityCleanupMiddleware(uiCompatibilityState),
             ) + EngineMiddleware.create(
                 engine = browserStoreEngine,
                 // TabManager still owns the current hot-tab/session memory policy during this

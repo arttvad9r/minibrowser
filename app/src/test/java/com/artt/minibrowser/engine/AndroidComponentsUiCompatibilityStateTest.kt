@@ -88,4 +88,17 @@ class AndroidComponentsUiCompatibilityStateTest {
 
         assertNull(state.snapshot("7"))
     }
+
+    @Test
+    fun retainDropsOnlySessionsThatNoLongerExistInBrowserStore() {
+        val state = AndroidComponentsUiCompatibilityState()
+        state.onSecurityChange(sessionId = "7", isException = false, isSecure = true)
+        state.onLoadError(sessionId = "8", category = WebRequestError.ERROR_CATEGORY_NETWORK)
+
+        state.retain(setOf("8", "9"))
+
+        assertNull(state.snapshot("7"))
+        assertEquals(PageLoadError.Network, state.snapshot("8")?.pageLoadError)
+        assertNull(state.snapshot("9"))
+    }
 }

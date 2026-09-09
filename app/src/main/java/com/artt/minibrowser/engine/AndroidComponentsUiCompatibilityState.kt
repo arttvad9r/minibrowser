@@ -3,6 +3,10 @@ package com.artt.minibrowser.engine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import mozilla.components.browser.state.action.BrowserAction
+import mozilla.components.browser.state.state.BrowserState
+import mozilla.components.lib.state.Middleware
 
 /**
  * MiniBrowser UI state that A-C 154 BrowserStore cannot represent losslessly.
@@ -71,7 +75,7 @@ internal class AndroidComponentsUiCompatibilityState {
         isException: Boolean,
         isSecure: Boolean,
     ) {
-        update(sessionId) { current ->
+        updateSnapshot(sessionId) { current ->
             current.copy(
                 securityState = securityStateForGeckoSecurityInfo(
                     isException = isException,
@@ -82,28 +86,52 @@ internal class AndroidComponentsUiCompatibilityState {
     }
 
     fun onLoadError(sessionId: String, category: Int) {
-        update(sessionId) { current ->
+        updateSnapshot(sessionId) { current ->
             current.copy(pageLoadError = pageLoadErrorForCategory(category))
         }
     }
 
     fun remove(sessionId: String) {
-        if (sessionId !in mutableSnapshots.value) return
-        mutableSnapshots.value = mutableSnapshots.value - sessionId
+        mutableSnapshots.update { current -> current - sessionId }
     }
 
-    private fun update(
+    /** Keeps sidecar lifetime aligned with BrowserStore tab lifetime without enumerating remove actions. */
+    fun retain(sessionIds: Set<String>) {
+        mutableSnapshots.update { current ->
+            if (current.keys.all(sessionIds::contains)) {
+                current
+            } else {
+                current.filterKeys(sessionIds::contains)
+            }
+        }
+    }
+
+    private fun updateSnapshot(
         sessionId: String,
         transform: (AndroidComponentsUiCompatibilitySnapshot) -> AndroidComponentsUiCompatibilitySnapshot,
     ) {
-        val current = mutableSnapshots.value[sessionId] ?: AndroidComponentsUiCompatibilitySnapshot()
-        set(sessionId, transform(current))
+        mutableSnapshots.update { current ->
+            val snapshot = current[sessionId] ?: AndroidComponentsUiCompatibilitySnapshot()
+            current + (sessionId to transform(snapshot))
+        }
     }
 
     private fun set(
         sessionId: String,
         snapshot: AndroidComponentsUiCompatibilitySnapshot,
     ) {
-        mutableSnapshots.value = mutableSnapshots.value + (sessionId to snapshot)
+        mutableSnapshots.update { current -> current + (sessionId to snapshot) }
     }
+}
+
+/**
+ * Prunes compatibility entries only after the BrowserStore reducer/middleware chain has processed
+ * an action. Store.dispatch is synchronous in A-C 154, so the post-[next] state is the authoritative
+ * live-tab set and covers single, bulk and future removal action variants uniformly.
+ */
+internal fun androidComponentsUiCompatibilityCleanupMiddleware(
+    compatibilityState: AndroidComponentsUiCompatibilityState,
+): Middleware<BrowserState, BrowserAction> = { store, next, action ->
+    next(action)
+    compatibilityState.retain(store.state.tabs.mapTo(mutableSetOf()) { it.id })
 }
