@@ -194,8 +194,8 @@ There is no supported third mode where a borrowed raw session is linked into Bro
 
 The current prompt seam remains intentionally non-live:
 
-- MiniBrowser's production file picker uses an engine-neutral MIME normalization policy that can be
-  reused from `PromptRequest.File`.
+- MiniBrowser's production and fallback file pickers now share the same engine-neutral MIME
+  normalization policy that can be reused from `PromptRequest.File`.
 - popup target filtering already lives outside raw prompt UI plumbing in navigation policy.
 - current HTML date/time formatting, including the ISO week-based year for `WEEK`, is locked by unit
   tests.
