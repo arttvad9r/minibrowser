@@ -101,4 +101,35 @@ class AndroidComponentsUiCompatibilityStateTest {
         assertEquals(PageLoadError.Network, state.snapshot("8")?.pageLoadError)
         assertNull(state.snapshot("9"))
     }
+
+    @Test
+    fun effectiveUiStateFallsBackToRawStateBeforeTakeover() {
+        assertEquals(
+            SecurityState.Secure,
+            effectiveUiSecurityState(compatibility = null, raw = SecurityState.Secure),
+        )
+        assertEquals(
+            PageLoadError.Network,
+            effectiveUiPageLoadError(compatibility = null, raw = PageLoadError.Network),
+        )
+    }
+
+    @Test
+    fun compatibilitySnapshotOverridesRawStateAfterTakeoverIncludingExplicitErrorClear() {
+        val compatibility = AndroidComponentsUiCompatibilitySnapshot(
+            securityState = SecurityState.Exception,
+            pageLoadError = null,
+        )
+
+        assertEquals(
+            SecurityState.Exception,
+            effectiveUiSecurityState(compatibility, raw = SecurityState.Secure),
+        )
+        assertNull(
+            effectiveUiPageLoadError(
+                compatibility = compatibility,
+                raw = PageLoadError.Security,
+            ),
+        )
+    }
 }

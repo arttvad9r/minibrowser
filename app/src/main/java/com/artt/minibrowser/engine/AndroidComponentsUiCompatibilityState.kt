@@ -42,6 +42,21 @@ internal fun securityStateForGeckoSecurityInfo(
     else -> SecurityState.Insecure
 }
 
+/** Uses takeover-only compatibility state when present, otherwise preserves the raw-owner UI path. */
+internal fun effectiveUiSecurityState(
+    compatibility: AndroidComponentsUiCompatibilitySnapshot?,
+    raw: SecurityState?,
+): SecurityState = compatibility?.securityState ?: raw ?: SecurityState.Unknown
+
+/**
+ * A present compatibility snapshot is authoritative even when its error is null: page start uses
+ * null to clear a previous raw error, so Elvis fallback would incorrectly resurrect stale UI state.
+ */
+internal fun effectiveUiPageLoadError(
+    compatibility: AndroidComponentsUiCompatibilitySnapshot?,
+    raw: PageLoadError?,
+): PageLoadError? = if (compatibility != null) compatibility.pageLoadError else raw
+
 internal class AndroidComponentsUiCompatibilityState {
     private val mutableSnapshots =
         MutableStateFlow<Map<String, AndroidComponentsUiCompatibilitySnapshot>>(emptyMap())

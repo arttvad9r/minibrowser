@@ -49,6 +49,7 @@ import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.SettingsViewModel
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.HistoryRepository
+import com.artt.minibrowser.engine.AndroidComponentsUiCompatibilityState
 import com.artt.minibrowser.engine.ClosedTabSnapshot
 import com.artt.minibrowser.engine.ExtensionLoader
 import com.artt.minibrowser.engine.NavigationTarget
@@ -58,6 +59,8 @@ import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
+import com.artt.minibrowser.engine.effectiveUiPageLoadError
+import com.artt.minibrowser.engine.effectiveUiSecurityState
 import com.artt.minibrowser.engine.resolveNavigation
 import com.artt.minibrowser.engine.toggleDesktopMode
 import com.artt.minibrowser.net.isValidWebUri
@@ -97,6 +100,7 @@ import mozilla.components.browser.state.store.BrowserStore
 internal fun BrowserRoute(
     tabManager: TabManager,
     browserStore: BrowserStore,
+    uiCompatibilityState: AndroidComponentsUiCompatibilityState,
     settingsViewModel: SettingsViewModel,
     browserDataViewModel: BrowserDataViewModel,
     browserDataClearer: BrowserDataClearer,
@@ -124,6 +128,7 @@ internal fun BrowserRoute(
     val pageBookmarkUi by pageBookmarkViewModel.uiState.collectAsStateWithLifecycle()
     val omniboxSuggestionsUi by omniboxSuggestionsViewModel.uiState.collectAsStateWithLifecycle()
     val browserStoreState by browserStore.stateFlow.collectAsStateWithLifecycle()
+    val uiCompatibilitySnapshots by uiCompatibilityState.snapshots.collectAsStateWithLifecycle()
     val screen = browserUi.screen
     val showSwitcher = browserUi.showSwitcher
     val showFind = browserUi.showFind
@@ -138,6 +143,7 @@ internal fun BrowserRoute(
     val currentStoreContent = browserStoreState.tabs
         .firstOrNull { it.id == currentId?.toString() }
         ?.content
+    val currentUiCompatibility = currentId?.toString()?.let(uiCompatibilitySnapshots::get)
     val currentSession = currentTab?.session
     val currentUrl = currentStoreContent?.url ?: currentTab?.url.orEmpty()
     val currentTitle = currentStoreContent?.title ?: currentTab?.title.orEmpty()
@@ -150,6 +156,14 @@ internal fun BrowserRoute(
     val pageProgress = currentStoreContent?.let { content ->
         if (content.loading) content.progress / 100f else -1f
     } ?: (currentTab?.progress ?: -1f)
+    val effectiveSecurityState = effectiveUiSecurityState(
+        compatibility = currentUiCompatibility,
+        raw = currentTab?.securityState,
+    )
+    val effectiveLoadError = effectiveUiPageLoadError(
+        compatibility = currentUiCompatibility,
+        raw = currentTab?.loadError,
+    )
     val focusManager = LocalFocusManager.current
 
     BrowserRootEffects(
@@ -185,13 +199,14 @@ internal fun BrowserRoute(
     val retryAdblock: () -> Unit = settingsViewModel::retryAdblock
     val toggleVot: (Boolean) -> Unit = settingsViewModel::setVot
     val retryVot: () -> Unit = settingsViewModel::retryVot
-    // GeckoView's certificate-exception bit has no lossless A-C 154 BrowserStore equivalent yet.
-    // Keep this one visual distinction on the raw compatibility state until its sidecar is wired.
-    val chromeSecurityState = when (currentTab?.securityState) {
+    // A-C 154 SecurityInfo has no certificate-exception bit. The compatibility sidecar becomes
+    // authoritative only after takeover; while raw Gecko still owns the tab, the sidecar is absent
+    // and this path preserves the existing raw SecurityState behavior.
+    val chromeSecurityState = when (effectiveSecurityState) {
         SecurityState.Secure -> BrowserSecurityUiState.Secure
         SecurityState.Insecure -> BrowserSecurityUiState.Insecure
         SecurityState.Exception -> BrowserSecurityUiState.Exception
-        SecurityState.Unknown, null -> BrowserSecurityUiState.Unknown
+        SecurityState.Unknown -> BrowserSecurityUiState.Unknown
     }
     val chromeAdblockStatus = settingsUi.adblockStatus.toExtensionUiState()
     val settingsVotStatus = settingsUi.votStatus.toExtensionUiState()
@@ -246,7 +261,7 @@ internal fun BrowserRoute(
         showFind = showFind,
         showStart = showStart,
         inFullscreen = inFullscreen,
-        loadError = currentTab?.loadError.toUiState(),
+        loadError = effectiveLoadError.toUiState(),
         canOpenExternal = canOpenExternal,
         browserContentHiddenByRoute = browserContentHiddenByRoute,
     )

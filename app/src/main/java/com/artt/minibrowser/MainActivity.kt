@@ -151,6 +151,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
             BrowserRoute(
                 tabManager = tabManager,
                 browserStore = browserApp.browserStore,
+                uiCompatibilityState = browserApp.uiCompatibilityState,
                 settingsViewModel = settingsViewModel,
                 browserDataViewModel = browserDataViewModel,
                 browserDataClearer = browserDataClearer,
