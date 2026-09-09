@@ -15,6 +15,7 @@ import mozilla.components.browser.state.action.ContentAction
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.ContentState
+import mozilla.components.browser.state.state.SecurityInfo
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.browser.state.store.BrowserStore
@@ -38,6 +39,7 @@ internal data class BrowserStoreTabSnapshot(
     val canGoBack: Boolean,
     val canGoForward: Boolean,
     val fullscreen: Boolean,
+    val securityState: SecurityState,
     val persistedEngineSessionState: EngineSessionStateEnvelope? = null,
     val persistedEngineSessionStateUrl: String? = null,
 )
@@ -60,9 +62,23 @@ private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
         canGoBack = canGoBack,
         canGoForward = canGoForward,
         fullscreen = fullscreen,
+        securityState = securityState,
         persistedEngineSessionState = persistedEngineSessionState,
         persistedEngineSessionStateUrl = persistedEngineSessionStateUrl,
     )
+}
+
+/**
+ * A-C 154 exposes secure/insecure/unknown but has no state for GeckoView's certificate-exception bit.
+ * Preserve the coarse connection classification in BrowserStore; the Exception distinction remains
+ * a MiniBrowser compatibility sidecar until the UI read-side ownership cutover is complete.
+ */
+internal fun SecurityState.toBrowserStoreSecurityInfo(): SecurityInfo = when (this) {
+    SecurityState.Unknown -> SecurityInfo.Unknown
+    SecurityState.Secure -> SecurityInfo.Secure()
+    SecurityState.Insecure,
+    SecurityState.Exception,
+    -> SecurityInfo.Insecure()
 }
 
 private fun shouldRecreateShadowTab(
@@ -183,13 +199,16 @@ internal fun browserStoreSyncActions(
     return actions
 }
 
-private fun fullContentActions(tab: BrowserStoreTabSnapshot): List<BrowserAction> = listOf(
-    ContentAction.UpdateProgressAction(tab.id, tab.progress),
-    ContentAction.UpdateLoadingStateAction(tab.id, tab.loading),
-    ContentAction.UpdateBackNavigationStateAction(tab.id, tab.canGoBack),
-    ContentAction.UpdateForwardNavigationStateAction(tab.id, tab.canGoForward),
-    ContentAction.FullScreenChangedAction(tab.id, tab.fullscreen),
-)
+private fun fullContentActions(tab: BrowserStoreTabSnapshot): List<BrowserAction> = buildList {
+    add(ContentAction.UpdateProgressAction(tab.id, tab.progress))
+    add(ContentAction.UpdateLoadingStateAction(tab.id, tab.loading))
+    add(ContentAction.UpdateBackNavigationStateAction(tab.id, tab.canGoBack))
+    add(ContentAction.UpdateForwardNavigationStateAction(tab.id, tab.canGoForward))
+    add(ContentAction.FullScreenChangedAction(tab.id, tab.fullscreen))
+    if (tab.securityState != SecurityState.Unknown) {
+        add(ContentAction.UpdateSecurityInfoAction(tab.id, tab.securityState.toBrowserStoreSecurityInfo()))
+    }
+}
 
 private fun changedContentActions(
     current: ContentState,
@@ -208,6 +227,10 @@ private fun changedContentActions(
     }
     if (current.fullScreen != next.fullscreen) {
         add(ContentAction.FullScreenChangedAction(next.id, next.fullscreen))
+    }
+    val securityInfo = next.securityState.toBrowserStoreSecurityInfo()
+    if (current.securityInfo != securityInfo) {
+        add(ContentAction.UpdateSecurityInfoAction(next.id, securityInfo))
     }
 }
 

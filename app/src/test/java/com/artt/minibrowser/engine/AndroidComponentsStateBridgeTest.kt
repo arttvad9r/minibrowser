@@ -12,6 +12,7 @@ import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.ContentState
 import mozilla.components.browser.state.state.EngineState
+import mozilla.components.browser.state.state.SecurityInfo
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.concept.engine.EngineSessionState
 
@@ -63,6 +64,7 @@ class AndroidComponentsStateBridgeTest {
             canGoBack = true,
             canGoForward = false,
             fullscreen = false,
+            securityState = SecurityState.Secure,
         )
         val state = BrowserState(
             tabs = listOf(tab.toState()),
@@ -158,6 +160,25 @@ class AndroidComponentsStateBridgeTest {
         val actions = browserStoreSyncActions(state, listOf(next), "3")
 
         assertEquals(listOf(ContentAction.UpdateTabDesktopMode("3", true)), actions)
+    }
+
+    @Test
+    fun securityStateChangeUsesGranularBrowserStateAction() {
+        val current = snapshot(id = "3", url = "https://example.com", securityState = SecurityState.Unknown)
+        val next = current.copy(securityState = SecurityState.Secure)
+        val state = BrowserState(tabs = listOf(current.toState()), selectedTabId = "3")
+
+        val actions = browserStoreSyncActions(state, listOf(next), "3")
+
+        assertEquals(
+            listOf(ContentAction.UpdateSecurityInfoAction("3", SecurityInfo.Secure())),
+            actions,
+        )
+    }
+
+    @Test
+    fun certificateExceptionKeepsCoarseInsecureClassificationInBrowserStore() {
+        assertEquals(SecurityInfo.Insecure(), SecurityState.Exception.toBrowserStoreSecurityInfo())
     }
 
     @Test
@@ -281,6 +302,7 @@ class AndroidComponentsStateBridgeTest {
         canGoBack: Boolean = false,
         canGoForward: Boolean = false,
         fullscreen: Boolean = false,
+        securityState: SecurityState = SecurityState.Unknown,
     ) = BrowserStoreTabSnapshot(
         id = id,
         url = url,
@@ -292,6 +314,7 @@ class AndroidComponentsStateBridgeTest {
         canGoBack = canGoBack,
         canGoForward = canGoForward,
         fullscreen = fullscreen,
+        securityState = securityState,
     )
 
     private fun BrowserStoreTabSnapshot.toState(
@@ -308,6 +331,7 @@ class AndroidComponentsStateBridgeTest {
             fullScreen = fullscreen,
             canGoBack = canGoBack,
             canGoForward = canGoForward,
+            securityInfo = securityState.toBrowserStoreSecurityInfo(),
         ),
         engineState = EngineState(engineSessionState = engineSessionState),
     )
