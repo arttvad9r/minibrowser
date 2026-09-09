@@ -58,3 +58,38 @@ internal fun decodeEngineSessionStateEnvelope(
     engineName = engine.name(),
     createState = { reader -> engine.createSessionStateFrom(reader) },
 )
+
+/**
+ * Restores only state explicitly bound to the current tab URL.
+ *
+ * Persisted engine state is opaque and may describe a different history entry than the surrounding
+ * tab metadata. Fail closed on missing or stale URL bindings, matching the legacy Gecko restore
+ * contract, before invoking any engine parser.
+ */
+internal fun decodeBoundEngineSessionStateEnvelope(
+    envelope: EngineSessionStateEnvelope?,
+    stateUrl: String?,
+    tabUrl: String,
+    engineName: String,
+    createState: (JsonReader) -> EngineSessionState,
+): EngineSessionState? {
+    if (stateUrl == null || stateUrl != tabUrl) return null
+    return decodeEngineSessionStateEnvelope(
+        envelope = envelope,
+        engineName = engineName,
+        createState = createState,
+    )
+}
+
+internal fun decodeBoundEngineSessionStateEnvelope(
+    envelope: EngineSessionStateEnvelope?,
+    stateUrl: String?,
+    tabUrl: String,
+    engine: Engine,
+): EngineSessionState? = decodeBoundEngineSessionStateEnvelope(
+    envelope = envelope,
+    stateUrl = stateUrl,
+    tabUrl = tabUrl,
+    engineName = engine.name(),
+    createState = { reader -> engine.createSessionStateFrom(reader) },
+)

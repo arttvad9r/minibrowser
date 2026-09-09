@@ -5,6 +5,7 @@ import android.util.JsonReader
 import android.util.JsonWriter
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artt.minibrowser.data.EngineSessionStateEnvelope
+import com.artt.minibrowser.data.decodeBoundEngineSessionStateEnvelope
 import com.artt.minibrowser.data.decodeEngineSessionStateEnvelope
 import com.artt.minibrowser.data.encodeEngineSessionStateEnvelope
 import mozilla.components.concept.engine.EngineSessionState
@@ -73,6 +74,54 @@ class EngineSessionStateCodecTest {
 
         assertNull(restored)
         assertFalse(invoked)
+    }
+
+    @Test
+    fun boundRestoreRequiresExactTabUrlBeforeEngineParser() {
+        var invoked = false
+        val envelope = EngineSessionStateEnvelope(
+            engine = "gecko",
+            stateJson = "{\"value\":\"state\"}",
+        )
+
+        assertNull(
+            decodeBoundEngineSessionStateEnvelope(
+                envelope = envelope,
+                stateUrl = null,
+                tabUrl = "https://example.com/current",
+                engineName = "gecko",
+            ) {
+                invoked = true
+                TestState("unexpected")
+            },
+        )
+        assertNull(
+            decodeBoundEngineSessionStateEnvelope(
+                envelope = envelope,
+                stateUrl = "https://example.com/old",
+                tabUrl = "https://example.com/current",
+                engineName = "gecko",
+            ) {
+                invoked = true
+                TestState("unexpected")
+            },
+        )
+        assertFalse(invoked)
+
+        val restored = decodeBoundEngineSessionStateEnvelope(
+            envelope = envelope,
+            stateUrl = "https://example.com/current",
+            tabUrl = "https://example.com/current",
+            engineName = "gecko",
+        ) { reader ->
+            reader.beginObject()
+            assertEquals("value", reader.nextName())
+            val value = reader.nextString()
+            reader.endObject()
+            TestState(value)
+        }
+
+        assertEquals(TestState("state"), restored)
     }
 
     @Test
