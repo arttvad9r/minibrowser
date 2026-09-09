@@ -15,7 +15,7 @@ internal const val ENGINE_SESSION_STATE_ENVELOPE_VERSION = 1
  * is persisted with it and must match before restore.
  */
 @Serializable
-internal data class EngineSessionStateEnvelope(
+data class EngineSessionStateEnvelope(
     val version: Int = ENGINE_SESSION_STATE_ENVELOPE_VERSION,
     val engine: String,
     val stateJson: String,
