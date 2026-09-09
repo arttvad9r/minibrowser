@@ -16,16 +16,16 @@ class AndroidComponentsSessionSettingsMiddlewareTest {
     }
 
     @Test
-    fun configuresOnlyTheSessionOwnedMigrationContract() {
+    fun configuratorAppliesTheSessionOwnedMigrationContract() {
         val settings = TestSettings()
         val historyDelegate = AndroidComponentsHistoryTrackingDelegate()
         val downloadDelegate = AndroidComponentsDownloadDelegate()
-
-        configureAndroidComponentsOwnedSession(
-            settings = settings,
-            historyTrackingDelegate = historyDelegate,
-            downloadDelegate = downloadDelegate,
+        val configurator = AndroidComponentsOwnedSessionConfigurator(
+            historyTrackingDelegateFactory = { historyDelegate },
+            downloadDelegateFactory = { downloadDelegate },
         )
+
+        configurator.configure(settings)
 
         assertSame(historyDelegate, settings.historyTrackingDelegate)
         assertSame(downloadDelegate, settings.downloadDelegate)
@@ -33,11 +33,10 @@ class AndroidComponentsSessionSettingsMiddlewareTest {
     }
 
     @Test
-    fun constructingMiddlewareDoesNotInitializeFeatureDelegates() {
+    fun constructingConfiguratorAndMiddlewareDoesNotInitializeFeatureDelegates() {
         var historyCreated = false
         var downloadCreated = false
-
-        androidComponentsSessionSettingsMiddleware(
+        val configurator = AndroidComponentsOwnedSessionConfigurator(
             historyTrackingDelegateFactory = {
                 historyCreated = true
                 AndroidComponentsHistoryTrackingDelegate()
@@ -47,6 +46,8 @@ class AndroidComponentsSessionSettingsMiddlewareTest {
                 AndroidComponentsDownloadDelegate()
             },
         )
+
+        androidComponentsSessionSettingsMiddleware(configurator)
 
         assertFalse(historyCreated)
         assertFalse(downloadCreated)
