@@ -8,6 +8,7 @@ import mozilla.components.concept.engine.Engine
 import mozilla.components.concept.engine.EngineSession
 import mozilla.components.concept.engine.Settings
 import mozilla.components.concept.engine.history.HistoryTrackingDelegate
+import mozilla.components.concept.engine.request.RequestInterceptor
 import mozilla.components.lib.state.Middleware
 
 /**
@@ -19,30 +20,40 @@ internal fun configureAndroidComponentsOwnedSession(
     settings: Settings,
     historyTrackingDelegate: HistoryTrackingDelegate,
     downloadDelegate: DownloadDelegate,
+    requestInterceptor: RequestInterceptor,
 ) {
     settings.historyTrackingDelegate = historyTrackingDelegate
     settings.downloadDelegate = downloadDelegate
+    settings.requestInterceptor = requestInterceptor
     settings.suspendMediaWhenInactive = true
 }
 
 /**
  * Owns the small session-only policy that must survive the raw -> A-C handoff.
  *
- * Delegate factories are lazy on purpose: constructing the shadow BrowserStore must not initialize
- * HistorySink or live download infrastructure before an EngineSession is actually created/linked.
+ * Delegate/interceptor factories are lazy on purpose: constructing the shadow BrowserStore must not
+ * initialize HistorySink or other live feature infrastructure before an EngineSession is actually
+ * created/linked.
  */
 internal class AndroidComponentsOwnedSessionConfigurator(
+    private val externalNavigationPolicy: ExternalAppNavigationPolicy,
     historyTrackingDelegateFactory: () -> HistoryTrackingDelegate = { AndroidComponentsHistoryTrackingDelegate() },
     downloadDelegateFactory: () -> DownloadDelegate = { AndroidComponentsDownloadDelegate() },
+    requestInterceptorFactory: (ExternalAppNavigationPolicy) -> RequestInterceptor =
+        { AndroidComponentsExternalAppRequestInterceptor(it) },
 ) {
     private val historyTrackingDelegate by lazy(LazyThreadSafetyMode.NONE, historyTrackingDelegateFactory)
     private val downloadDelegate by lazy(LazyThreadSafetyMode.NONE, downloadDelegateFactory)
+    private val requestInterceptor by lazy(LazyThreadSafetyMode.NONE) {
+        requestInterceptorFactory(externalNavigationPolicy)
+    }
 
     fun configure(settings: Settings) {
         configureAndroidComponentsOwnedSession(
             settings = settings,
             historyTrackingDelegate = historyTrackingDelegate,
             downloadDelegate = downloadDelegate,
+            requestInterceptor = requestInterceptor,
         )
     }
 }
