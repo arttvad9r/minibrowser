@@ -124,13 +124,25 @@ class GeckoPermissionController(
     override fun onContentPermissionRequest(
         session: GeckoSession,
         perm: GeckoSession.PermissionDelegate.ContentPermission,
+    ): GeckoResult<Int> = handleContentPermissionRequest(perm) { isSessionCurrent(session) }
+
+    /**
+     * Reuses the exact raw content-permission policy/UI with a caller-owned session identity check.
+     * Future A-C-owned sessions can therefore validate BrowserStore session ids without retaining or
+     * rediscovering the old raw GeckoSession -> Tab mapping.
+     */
+    @SuppressLint("UnsafeOptInUsageError")
+    internal fun handleContentPermissionRequest(
+        perm: GeckoSession.PermissionDelegate.ContentPermission,
+        isSessionEligible: () -> Boolean,
     ): GeckoResult<Int> {
         val action = contentPermissionAction(perm.permission, sitePolicy)
         val resolvedValue = resolveContentPermissionValue(action, perm.value)
         if (resolvedValue != GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT) {
             return GeckoResult.fromValue(resolvedValue)
         }
-        if (!canHandle(session)) {
+        fun canHandleRequest(): Boolean = canShowUi() && isSessionEligible()
+        if (!canHandleRequest()) {
             return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
         }
         val result = GeckoResult<Int>()
@@ -171,7 +183,7 @@ class GeckoPermissionController(
                 runCatching { result.complete(value) }.onSuccess { completed = true }
             }
 
-            if (!canHandle(session)) {
+            if (!canHandleRequest()) {
                 complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
                 return@runOnUiThread
             }
@@ -184,7 +196,7 @@ class GeckoPermissionController(
                     }
                     .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
                         complete(
-                            if (canHandle(session)) {
+                            if (canHandleRequest()) {
                                 GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
                             } else {
                                 GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY

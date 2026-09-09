@@ -21,6 +21,7 @@ interface BackgroundTabHost {
 class GeckoContextMenuController(
     private val activity: Activity,
     private val openTab: (String, Boolean) -> Unit,
+    private val openBackgroundTab: ((String, Boolean) -> Unit)? = null,
 ) {
     fun show(element: GeckoSession.ContentDelegate.ContextElement, private: Boolean) {
         val items = contextMenuPolicyItems(
@@ -88,6 +89,11 @@ class GeckoContextMenuController(
     }
 
     private fun openBackground(value: String, private: Boolean) {
+        val explicit = openBackgroundTab
+        if (explicit != null) {
+            explicit(value, private)
+            return
+        }
         val host = activity as? BackgroundTabHost
         if (host != null) {
             host.openBackgroundTab(value, private)
