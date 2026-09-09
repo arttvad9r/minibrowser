@@ -27,17 +27,25 @@ internal fun configureAndroidComponentsOwnedSession(
  * Pre-cutover middleware. It is inert while MiniBrowser does not dispatch Create/LinkEngineSession
  * actions. Once A-C creates a session, configure it immediately before the Link action continues
  * through EngineMiddleware and reaches the BrowserStore reducer.
+ *
+ * Delegate factories are lazy on purpose: merely constructing the shadow BrowserStore must not
+ * initialize HistorySink or other live feature infrastructure before a session is actually linked.
  */
 internal fun androidComponentsSessionSettingsMiddleware(
-    historyTrackingDelegate: HistoryTrackingDelegate = AndroidComponentsHistoryTrackingDelegate(),
-    downloadDelegate: DownloadDelegate = AndroidComponentsDownloadDelegate(),
-): Middleware<BrowserState, BrowserAction> = { _, next, action ->
-    if (action is EngineAction.LinkEngineSessionAction) {
-        configureAndroidComponentsOwnedSession(
-            settings = action.engineSession.settings,
-            historyTrackingDelegate = historyTrackingDelegate,
-            downloadDelegate = downloadDelegate,
-        )
+    historyTrackingDelegateFactory: () -> HistoryTrackingDelegate = { AndroidComponentsHistoryTrackingDelegate() },
+    downloadDelegateFactory: () -> DownloadDelegate = { AndroidComponentsDownloadDelegate() },
+): Middleware<BrowserState, BrowserAction> {
+    val historyTrackingDelegate by lazy(LazyThreadSafetyMode.NONE, historyTrackingDelegateFactory)
+    val downloadDelegate by lazy(LazyThreadSafetyMode.NONE, downloadDelegateFactory)
+
+    return { _, next, action ->
+        if (action is EngineAction.LinkEngineSessionAction) {
+            configureAndroidComponentsOwnedSession(
+                settings = action.engineSession.settings,
+                historyTrackingDelegate = historyTrackingDelegate,
+                downloadDelegate = downloadDelegate,
+            )
+        }
+        next(action)
     }
-    next(action)
 }
