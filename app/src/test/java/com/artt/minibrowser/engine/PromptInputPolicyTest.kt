@@ -2,6 +2,9 @@ package com.artt.minibrowser.engine
 
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PromptInputPolicyTest {
     @Test
@@ -52,5 +55,23 @@ class PromptInputPolicyTest {
             acceptedPromptMimeTypes(arrayOf("", "invalid", "text/")),
         )
         assertContentEquals(arrayOf("*/*"), acceptedPromptMimeTypes(emptyArray()))
+    }
+
+    @Test
+    fun validatesSixDigitPromptColors() {
+        assertTrue(isValidPromptColor("#000000"))
+        assertTrue(isValidPromptColor("#aBcDeF"))
+        assertFalse(isValidPromptColor("#fff"))
+        assertFalse(isValidPromptColor("112233"))
+        assertFalse(isValidPromptColor("#11223344"))
+        assertFalse(isValidPromptColor("#12xz56"))
+    }
+
+    @Test
+    fun invalidPromptColorFallsBackToBlack() {
+        assertEquals("#123ABC", promptColorOrDefault("#123ABC"))
+        assertEquals("#000000", promptColorOrDefault(null))
+        assertEquals("#000000", promptColorOrDefault(""))
+        assertEquals("#000000", promptColorOrDefault("red"))
     }
 }
