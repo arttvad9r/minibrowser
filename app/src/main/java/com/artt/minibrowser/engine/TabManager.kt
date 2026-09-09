@@ -33,7 +33,6 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
-import org.mozilla.geckoview.MediaSession
 import org.mozilla.geckoview.StorageController
 import org.mozilla.geckoview.WebRequestError
 import java.io.File
@@ -303,6 +302,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var securityState by mutableStateOf(SecurityState.Unknown)
     var loadError by mutableStateOf<PageLoadError?>(null)
     internal var mediaPlaybackState by mutableStateOf(TabMediaPlaybackState())
+    internal var rawMediaSessionDelegate: AndroidComponentsRawMediaSessionDelegate? = null
     internal val progressGate = ProgressGate()
     internal var restoreUrlOnOpen = false
     @Volatile internal var latestSessionState: GeckoSession.SessionState? = null
@@ -766,7 +766,7 @@ class TabManager(
                 tab.securityState = SecurityState.Unknown
                 tab.progress = 0.05f
                 tab.historyTitleUrl = null
-                tab.mediaPlaybackState = TabMediaPlaybackState()
+                resetMediaPlaybackState(tab)
                 tab.url = url
                 tab.title = ""
                 if (tab.persistedEngineSessionStateUrl != url) {
@@ -917,56 +917,18 @@ class TabManager(
         }
 
         val mediaOwnerSession = tab.session
-        tab.mediaPlaybackState = TabMediaPlaybackState()
-        var activeMediaSession: MediaSession? = null
-        tab.session.setMediaSessionDelegate(object : MediaSession.Delegate {
-            private fun ownsCurrentSession(session: GeckoSession): Boolean =
-                session === mediaOwnerSession && tab.session === mediaOwnerSession
-
-            override fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
-                if (!ownsCurrentSession(session)) return
-                activeMediaSession = mediaSession
-            }
-
-            override fun onDeactivated(session: GeckoSession, mediaSession: MediaSession) {
-                if (!ownsCurrentSession(session) || activeMediaSession !== mediaSession) return
-                activeMediaSession = null
-                tab.mediaPlaybackState = TabMediaPlaybackState()
-            }
-
-            override fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
-                if (!ownsCurrentSession(session)) return
-                activeMediaSession = mediaSession
-                tab.mediaPlaybackState = tab.mediaPlaybackState.copy(playing = true)
-            }
-
-            override fun onPause(session: GeckoSession, mediaSession: MediaSession) {
-                if (!ownsCurrentSession(session) || activeMediaSession !== mediaSession) return
-                tab.mediaPlaybackState = tab.mediaPlaybackState.copy(playing = false)
-            }
-
-            override fun onStop(session: GeckoSession, mediaSession: MediaSession) {
-                if (!ownsCurrentSession(session) || activeMediaSession !== mediaSession) return
-                tab.mediaPlaybackState = tab.mediaPlaybackState.copy(playing = false)
-            }
-
-            override fun onFullscreen(
-                session: GeckoSession,
-                mediaSession: MediaSession,
-                enabled: Boolean,
-                meta: MediaSession.ElementMetadata?,
-            ) {
-                if (!ownsCurrentSession(session)) return
-                activeMediaSession = mediaSession
-                val fullscreenVideo = enabled && (meta == null || meta.videoTrackCount > 0)
-                tab.mediaPlaybackState = tabMediaPlaybackStateWithVideoMetadata(
-                    state = tab.mediaPlaybackState,
-                    fullscreenVideo = fullscreenVideo,
-                    width = meta?.width,
-                    height = meta?.height,
-                )
-            }
-        })
+        val rawMediaSessionDelegate = AndroidComponentsRawMediaSessionDelegate(
+            ownerSession = mediaOwnerSession,
+            stillOwnsSession = { tab.session === mediaOwnerSession },
+            onPlaybackSnapshotChanged = { state ->
+                if (tab.session === mediaOwnerSession) {
+                    tab.mediaPlaybackState = state
+                }
+            },
+        )
+        tab.rawMediaSessionDelegate = rawMediaSessionDelegate
+        tab.mediaPlaybackState = rawMediaSessionDelegate.playbackSnapshot
+        tab.session.setMediaSessionDelegate(rawMediaSessionDelegate)
 
         tab.session.historyDelegate = object : GeckoSession.HistoryDelegate {
             override fun onVisited(
@@ -987,7 +949,12 @@ class TabManager(
     }
 
     private fun resetMediaPlaybackState(tab: Tab) {
-        tab.mediaPlaybackState = TabMediaPlaybackState()
+        val delegate = tab.rawMediaSessionDelegate
+        if (delegate != null) {
+            delegate.reset()
+        } else {
+            tab.mediaPlaybackState = TabMediaPlaybackState()
+        }
     }
 
     private fun launchExternalUri(tab: Tab, uri: String) {

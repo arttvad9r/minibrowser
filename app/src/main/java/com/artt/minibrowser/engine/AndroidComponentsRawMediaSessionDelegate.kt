@@ -5,11 +5,11 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.MediaSession as GeckoMediaSession
 
 /**
- * Raw-owner media delegate prepared for the final ownership boundary.
+ * Raw-owner media delegate used by TabManager before the Android Components ownership boundary.
  *
  * It preserves MiniBrowser's current lightweight PiP playback snapshot while also retaining the
  * GeckoView MediaSession object and concept-engine metadata needed for an identity-preserving A-C
- * handoff. Nothing in the current raw path instantiates this class yet.
+ * handoff. Its ownership predicate makes callbacks from a superseded raw session harmless.
  */
 internal class AndroidComponentsRawMediaSessionDelegate(
     private val ownerSession: GeckoSession,
