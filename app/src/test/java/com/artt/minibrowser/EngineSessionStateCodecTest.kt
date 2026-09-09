@@ -15,7 +15,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, sdk = [36])
+@Config(manifest = Config.NONE, sdk = [35])
 class EngineSessionStateCodecTest {
     private data class TestState(val value: String) : EngineSessionState {
         override fun writeTo(writer: JsonWriter) {
