@@ -40,9 +40,9 @@ class BrowserPictureInPicturePlaybackSystemTest {
                 scenario.onActivity(activityRef::set)
                 val browserApp = targetContext.applicationContext as BrowserApp
 
-                waitFor("The local Gecko media page finished loading") {
+                waitFor("The local Gecko media page reached full progress") {
                     selectedContent(browserApp)?.let { content ->
-                        content.url == server.pageUrl && !content.loading
+                        content.url == server.pageUrl && content.progress == 100
                     } == true
                 }
 
