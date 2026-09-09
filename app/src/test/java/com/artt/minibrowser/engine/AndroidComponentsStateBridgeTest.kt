@@ -182,6 +182,59 @@ class AndroidComponentsStateBridgeTest {
     }
 
     @Test
+    fun relinquishedSnapshotDoesNotOverwriteLiveBrowserStoreContent() {
+        val live = snapshot(
+            id = "3",
+            url = "https://live.example/page",
+            title = "Live",
+            desktop = true,
+            progress = 100,
+            loading = false,
+            canGoBack = true,
+            canGoForward = true,
+            fullscreen = true,
+            securityState = SecurityState.Secure,
+        )
+        val staleRaw = live.copy(
+            url = "https://stale.example/old",
+            title = "Stale",
+            desktop = false,
+            progress = 12,
+            loading = true,
+            canGoBack = false,
+            canGoForward = false,
+            fullscreen = false,
+            securityState = SecurityState.Insecure,
+            mirrorsRawContent = false,
+        )
+        val state = BrowserState(tabs = listOf(live.toState()), selectedTabId = "3")
+
+        assertTrue(browserStoreSyncActions(state, listOf(staleRaw), "3").isEmpty())
+    }
+
+    @Test
+    fun missingRelinquishedSnapshotIsNotRecreatedSelectedOrUsedAsReorderTarget() {
+        val existing = snapshot(id = "1", url = "https://one.example")
+        val missingRelinquished = snapshot(
+            id = "2",
+            url = "https://stale.example",
+            mirrorsRawContent = false,
+        )
+        val state = BrowserState(
+            tabs = listOf(existing.toState()),
+            selectedTabId = "1",
+        )
+
+        val actions = browserStoreSyncActions(
+            state = state,
+            tabs = listOf(missingRelinquished, existing),
+            selectedTabId = "2",
+        )
+
+        assertTrue(actions.isEmpty())
+    }
+
+    @Test
     fun tabReorderUsesMoveWithoutRebuildingSessions() {
         val first = snapshot(id = "1", url = "https://one.example")
         val second = snapshot(id = "2", url = "https://two.example")
@@ -303,6 +356,7 @@ class AndroidComponentsStateBridgeTest {
         canGoForward: Boolean = false,
         fullscreen: Boolean = false,
         securityState: SecurityState = SecurityState.Unknown,
+        mirrorsRawContent: Boolean = true,
     ) = BrowserStoreTabSnapshot(
         id = id,
         url = url,
@@ -315,6 +369,7 @@ class AndroidComponentsStateBridgeTest {
         canGoForward = canGoForward,
         fullscreen = fullscreen,
         securityState = securityState,
+        mirrorsRawContent = mirrorsRawContent,
     )
 
     private fun BrowserStoreTabSnapshot.toState(

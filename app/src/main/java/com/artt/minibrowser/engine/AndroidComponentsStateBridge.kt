@@ -27,6 +27,10 @@ import kotlin.math.roundToInt
  * Temporary migration snapshot used while raw GeckoSession remains the execution source of truth.
  * BrowserStore is intentionally shadow state at this stage; later Android Components features can
  * move one responsibility at a time without forcing a simultaneous TabManager rewrite.
+ *
+ * [mirrorsRawContent] is the one-way ownership seam: once raw session authority is relinquished,
+ * structural tab/order information may still flow through this bridge, but stale raw content and
+ * restore state must never overwrite or recreate Android Components-owned BrowserStore state.
  */
 internal data class BrowserStoreTabSnapshot(
     val id: String,
@@ -40,6 +44,7 @@ internal data class BrowserStoreTabSnapshot(
     val canGoForward: Boolean,
     val fullscreen: Boolean,
     val securityState: SecurityState,
+    val mirrorsRawContent: Boolean = true,
     val persistedEngineSessionState: EngineSessionStateEnvelope? = null,
     val persistedEngineSessionStateUrl: String? = null,
 )
@@ -86,6 +91,9 @@ private fun shouldRecreateShadowTab(
     next: BrowserStoreTabSnapshot,
     desiredEngineSessionState: EngineSessionState?,
 ): Boolean {
+    // After raw authority is relinquished this bridge must not destroy a linked/live A-C tab just
+    // because its stale raw sidecar disagrees with BrowserStore metadata or restore state.
+    if (!next.mirrorsRawContent) return false
     if (current.content.private != next.isPrivate) return true
 
     // A-C 154 has no nullable UpdateEngineSessionStateAction. While this bridge is shadow-only,
@@ -131,6 +139,7 @@ internal fun browserStoreSyncActions(
     }
 
     val addedTabs = tabs.filter { next ->
+        if (!next.mirrorsRawContent) return@filter false
         val current = currentById[next.id]
         current == null || shouldRecreateShadowTab(
             current = current,
@@ -155,6 +164,7 @@ internal fun browserStoreSyncActions(
     }
 
     tabs.forEach { tab ->
+        if (!tab.mirrorsRawContent) return@forEach
         if (tab.id in addedIdSet) {
             actions += fullContentActions(tab)
         } else {
@@ -171,24 +181,25 @@ internal fun browserStoreSyncActions(
         .filterNot { it in removedIdSet }
         .toMutableList()
         .apply { addAll(addedTabs.map { it.id }) }
+    val desiredStoreOrder = tabs.map { it.id }.filter(simulatedOrder::contains)
 
-    tabs.forEachIndexed { targetIndex, tab ->
-        if (simulatedOrder.getOrNull(targetIndex) != tab.id) {
-            val currentIndex = simulatedOrder.indexOf(tab.id)
+    desiredStoreOrder.forEachIndexed { targetIndex, tabId ->
+        if (simulatedOrder.getOrNull(targetIndex) != tabId) {
+            val currentIndex = simulatedOrder.indexOf(tabId)
             if (currentIndex >= 0) {
                 val targetTabId = simulatedOrder[targetIndex]
                 actions += TabListAction.MoveTabsAction(
-                    tabIds = listOf(tab.id),
+                    tabIds = listOf(tabId),
                     targetTabId = targetTabId,
                     placeAfter = false,
                 )
                 simulatedOrder.removeAt(currentIndex)
-                simulatedOrder.add(targetIndex, tab.id)
+                simulatedOrder.add(targetIndex, tabId)
             }
         }
     }
 
-    val validSelectedId = selectedTabId?.takeIf { selected -> tabs.any { it.id == selected } }
+    val validSelectedId = selectedTabId?.takeIf(simulatedOrder::contains)
     if (
         validSelectedId != null &&
         (state.selectedTabId != validSelectedId || validSelectedId in removedIdSet)
@@ -254,7 +265,14 @@ internal class AndroidComponentsStateBridge(
     fun sync(tabs: List<BrowserStoreTabSnapshot>, selectedTabId: String?) {
         val liveIds = tabs.mapTo(mutableSetOf()) { it.id }
         decodedEngineStates.keys.retainAll(liveIds)
-        val engineSessionStates = tabs.associate { tab -> tab.id to resolveEngineSessionState(tab) }
+        val engineSessionStates = tabs.associate { tab ->
+            if (tab.mirrorsRawContent) {
+                tab.id to resolveEngineSessionState(tab)
+            } else {
+                decodedEngineStates.remove(tab.id)
+                tab.id to null
+            }
+        }
         browserStoreSyncActions(store.state, tabs, selectedTabId, engineSessionStates).forEach(store::dispatch)
     }
 
