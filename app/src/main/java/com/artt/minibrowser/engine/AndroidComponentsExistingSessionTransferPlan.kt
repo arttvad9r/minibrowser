@@ -2,6 +2,7 @@ package com.artt.minibrowser.engine
 
 import mozilla.components.browser.state.action.BrowserAction
 import mozilla.components.browser.state.action.EngineAction
+import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
 
 /**
@@ -13,8 +14,10 @@ import mozilla.components.concept.engine.EngineSession
  * BrowserStore tab must still have no linked EngineSession.
  *
  * Existing-session transfer must never trigger a second navigation. A-C LinkingMiddleware loads the
- * tab URL when skipLoading=false, so this plan hard-codes skipLoading=true. Media state is replayed
- * only after the LinkEngineSessionAction has been dispatched and reduced.
+ * tab URL when skipLoading=false, so this plan hard-codes skipLoading=true. The plan also owns the
+ * ordering of the BrowserStore cutover: Store.dispatch() is synchronous, therefore retained media
+ * state can be replayed immediately after the link action has been reduced and EngineObserver is
+ * attached to the transferred EngineSession.
  */
 internal data class AndroidComponentsExistingSessionTransferPlan(
     val tabId: String,
@@ -30,6 +33,30 @@ internal data class AndroidComponentsExistingSessionTransferPlan(
             skipLoading = skipLoading,
             includeParent = includeParent,
         )
+
+    /**
+     * Atomically performs the BrowserStore side of the existing-session ownership cutover.
+     *
+     * Keeping link and media replay in one operation prevents callers from dispatching retained media
+     * state before the tab has a MediaSession-capable EngineSession observer, or from forgetting the
+     * replay altogether.
+     */
+    fun linkAndReplayTo(store: BrowserStore, engineSession: EngineSession) {
+        val target = store.state.tabs.firstOrNull { it.id == tabId }
+        checkNotNull(target) { "BrowserStore tab $tabId does not exist" }
+        check(target.engineState.engineSession == null) {
+            "BrowserStore tab $tabId already has an EngineSession"
+        }
+
+        store.dispatch(linkAction(engineSession))
+        check(
+            store.state.tabs.firstOrNull { it.id == tabId }
+                ?.engineState
+                ?.engineSession === engineSession,
+        ) { "BrowserStore did not link the prepared EngineSession for tab $tabId" }
+
+        mediaReplayActions.forEach(store::dispatch)
+    }
 }
 
 internal fun androidComponentsExistingSessionTransferPlan(

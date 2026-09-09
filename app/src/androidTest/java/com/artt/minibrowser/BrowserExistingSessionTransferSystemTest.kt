@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.engine.AndroidComponentsContentCompatibilityDelegate
 import com.artt.minibrowser.engine.AndroidComponentsGeckoCompatibilityRegistry
 import com.artt.minibrowser.engine.AndroidComponentsGeckoSessionContext
+import com.artt.minibrowser.engine.AndroidComponentsMediaSessionHandoff
 import com.artt.minibrowser.engine.AndroidComponentsOwnedSessionConfigurator
 import com.artt.minibrowser.engine.AndroidComponentsPermissionCompatibilityDelegate
 import com.artt.minibrowser.engine.AndroidComponentsPreparedExistingSessionTransfer
@@ -15,7 +16,9 @@ import com.artt.minibrowser.engine.ExternalAppNavigationPolicyRegistry
 import com.artt.minibrowser.engine.prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.createTab
+import mozilla.components.concept.engine.mediasession.MediaSession
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -95,13 +98,45 @@ class BrowserExistingSessionTransferSystemTest {
                     ),
                 )
 
+                val mediaController = TestMediaSessionController()
+                val mediaMetadata = MediaSession.ElementMetadata(
+                    source = "https://example.com/video.webm",
+                    duration = 42.0,
+                    width = 1920L,
+                    height = 1080L,
+                    audioTrackCount = 1,
+                    videoTrackCount = 1,
+                )
                 rawSession = newRawSession(app)
-                prepared = prepareTransfer(app, rawSession, tabId)
-                store.dispatch(prepared!!.transferPlan.linkAction(prepared!!.engineSession))
-                prepared!!.transferPlan.mediaReplayActions.forEach(store::dispatch)
+                prepared = prepareTransfer(
+                    app = app,
+                    rawSession = rawSession,
+                    tabId = tabId,
+                    mediaSessionHandoff = AndroidComponentsMediaSessionHandoff(
+                        controller = mediaController,
+                        playbackState = MediaSession.PlaybackState.PLAYING,
+                        fullscreen = true,
+                        elementMetadata = mediaMetadata,
+                    ),
+                )
+                prepared!!.transferPlan.linkAndReplayTo(store, prepared!!.engineSession)
 
-                val linked = store.state.tabs.first { it.id == tabId }.engineState.engineSession
-                assertSame("BrowserStore links the exact prepared EngineSession", prepared!!.engineSession, linked)
+                val transferredTab = store.state.tabs.first { it.id == tabId }
+                assertSame(
+                    "BrowserStore links the exact prepared EngineSession",
+                    prepared!!.engineSession,
+                    transferredTab.engineState.engineSession,
+                )
+                val mediaState = transferredTab.mediaSessionState
+                assertNotNull("Retained media session is replayed during cutover", mediaState)
+                assertSame("Media controller identity is retained", mediaController, mediaState!!.controller)
+                assertSame(
+                    "Playing state is retained",
+                    MediaSession.PlaybackState.PLAYING,
+                    mediaState.playbackState,
+                )
+                assertTrue("Fullscreen media state is retained", mediaState.fullscreen)
+                assertSame("Media element metadata is retained", mediaMetadata, mediaState.elementMetadata)
 
                 store.dispatch(TabListAction.RemoveTabAction(tabId))
                 assertTrue("Transferred test tab is removed from BrowserStore", store.state.tabs.none { it.id == tabId })
@@ -174,6 +209,7 @@ class BrowserExistingSessionTransferSystemTest {
         app: BrowserApp,
         rawSession: GeckoSession,
         tabId: String,
+        mediaSessionHandoff: AndroidComponentsMediaSessionHandoff? = null,
     ): AndroidComponentsPreparedExistingSessionTransfer =
         prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
             runtime = app.runtime,
@@ -184,7 +220,7 @@ class BrowserExistingSessionTransferSystemTest {
             ),
             configurator = newConfigurator(),
             compatibilityRegistry = AndroidComponentsGeckoCompatibilityRegistry(),
-            mediaSessionHandoff = null,
+            mediaSessionHandoff = mediaSessionHandoff,
         )
 
     private fun newRawSession(app: BrowserApp): GeckoSession = GeckoSession(
@@ -197,6 +233,19 @@ class BrowserExistingSessionTransferSystemTest {
     private fun newConfigurator() = AndroidComponentsOwnedSessionConfigurator(
         externalNavigationPolicy = ExternalAppNavigationPolicyRegistry(),
     )
+
+    private class TestMediaSessionController : MediaSession.Controller {
+        override fun pause() = Unit
+        override fun stop() = Unit
+        override fun play() = Unit
+        override fun seekTo(time: Double, fast: Boolean) = Unit
+        override fun seekForward() = Unit
+        override fun seekBackward() = Unit
+        override fun nextTrack() = Unit
+        override fun previousTrack() = Unit
+        override fun skipAd() = Unit
+        override fun muteAudio(mute: Boolean) = Unit
+    }
 
     private companion object {
         const val CLOSE_TIMEOUT_MS = 5_000L
