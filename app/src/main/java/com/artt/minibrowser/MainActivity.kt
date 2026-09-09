@@ -42,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import mozilla.components.browser.state.action.ContentAction
 
 class MainActivity : ComponentActivity(), BackgroundTabHost {
     private val browserApp by lazy { application as BrowserApp }
@@ -286,7 +287,18 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
         if (::tabManager.isInitialized) {
             // A-C's PictureInPictureFeature forwards the platform transition to the EngineSession;
             // while raw Gecko owns the live session, mirror that contract directly on its compositor.
-            tabManager.current()?.session?.compositorController?.onPipModeChanged(isInPictureInPictureMode)
+            val current = tabManager.current()
+            current?.session?.compositorController?.onPipModeChanged(isInPictureInPictureMode)
+            current?.let { tab ->
+                // Mirror A-C's ContentAction contract in shadow BrowserStore without linking or
+                // creating an EngineSession. Raw Gecko remains the sole live session owner.
+                browserApp.browserStore.dispatch(
+                    ContentAction.PictureInPictureChangedAction(
+                        sessionId = tab.id.toString(),
+                        pipEnabled = isInPictureInPictureMode,
+                    ),
+                )
+            }
             if (isInPictureInPictureMode) {
                 // BrowserTabLifecycleController may receive onPause during the transition. Keep the
                 // selected GeckoSession active so suspendMediaWhenInactive does not stop the video.
