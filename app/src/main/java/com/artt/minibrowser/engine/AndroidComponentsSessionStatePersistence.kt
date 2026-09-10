@@ -98,13 +98,15 @@ internal class AndroidComponentsSessionStatePersistenceObserver(
         try {
             forward()
         } finally {
+            // Restore correlation context before invoking external persistence signaling. A throwing
+            // signal callback must never leave a stale capture installed for a later engine update.
+            currentCapture = previous
             // If the stock A-C delegate did not emit a matching opaque state, retaining an older
             // snapshot would incorrectly bind it to a later document. Fail closed instead.
             if (!capture.observed) {
                 persistenceState.remove(sessionId)
                 notifyPersistenceStateChanged()
             }
-            currentCapture = previous
         }
     }
 
