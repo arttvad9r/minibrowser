@@ -36,6 +36,7 @@ import com.artt.minibrowser.engine.BackgroundTabHost
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
+import com.artt.minibrowser.engine.clearWebDataAcrossAndroidComponentsOwnership
 import java.io.File
 import java.util.ArrayDeque
 import kotlinx.coroutines.Dispatchers
@@ -70,7 +71,9 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
             clearHistory = { historyRepo.clear() },
             clearBookmarks = { bookmarksRepo.clearAll() },
             clearFaviconCaches = { FaviconRepository.clear(iconsDir) },
-            clearWebData = { tabManager.clearWebData() },
+            clearWebData = {
+                clearWebDataAcrossAndroidComponentsOwnership(tabManager, browserApp.browserStore)
+            },
         )
     }
     private val browserDataViewModel by lazy {
