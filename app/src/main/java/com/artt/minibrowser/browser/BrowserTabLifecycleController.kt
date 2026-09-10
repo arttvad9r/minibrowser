@@ -8,6 +8,7 @@ import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.ExternalAppRequestHandler
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.bindTabManagerToBrowserStore
+import com.artt.minibrowser.engine.closeBrowserSessionsForFinalActivityDestroy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -66,10 +67,22 @@ internal class BrowserTabLifecycleController(
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
-        // TabManager still owns its final persistence/session shutdown. This observer owns only
-        // lifecycle signals plus the temporary BrowserStore shadow-state bridge.
         unbindExternalNavigationPolicy()
         androidComponentsBridgeScope.cancel()
+
+        // Configuration change retains exact Tab/GeckoSession ownership through the process-local
+        // handoff. A real final destroy instead closes both raw and linked owners after TabManager's
+        // final persistence snapshot. Calling TabManager.close() here is safe even if its own
+        // lifecycle observer already ran: close() is idempotent, while linked cleanup still proceeds.
+        if (activity?.isChangingConfigurations != true) {
+            val browserApp = app
+            if (browserApp != null) {
+                closeBrowserSessionsForFinalActivityDestroy(tabManager, browserApp.browserStore)
+            } else {
+                tabManager.close()
+            }
+        }
+
         lifecycle.removeObserver(this)
     }
 
