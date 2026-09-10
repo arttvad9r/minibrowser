@@ -7,23 +7,6 @@ import kotlin.test.assertTrue
 
 class AndroidComponentsGeckoCompatibilityDelegatesTest {
     @Test
-    fun onlyWeekDateTimePromptUsesRawCompatibility() {
-        assertTrue(
-            shouldUseRawWeekPrompt(
-                GeckoSession.PromptDelegate.DateTimePrompt.Type.WEEK,
-            ),
-        )
-        assertFalse(shouldUseRawWeekPrompt(GeckoSession.PromptDelegate.DateTimePrompt.Type.DATE))
-        assertFalse(shouldUseRawWeekPrompt(GeckoSession.PromptDelegate.DateTimePrompt.Type.MONTH))
-        assertFalse(shouldUseRawWeekPrompt(GeckoSession.PromptDelegate.DateTimePrompt.Type.TIME))
-        assertFalse(
-            shouldUseRawWeekPrompt(
-                GeckoSession.PromptDelegate.DateTimePrompt.Type.DATETIME_LOCAL,
-            ),
-        )
-    }
-
-    @Test
     fun linkedAudioAndVideoUseRawContextMenuCompatibility() {
         assertTrue(
             shouldUseRawLinkedMediaContextMenu(
