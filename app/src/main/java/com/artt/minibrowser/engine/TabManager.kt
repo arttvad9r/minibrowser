@@ -31,6 +31,7 @@ import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.concept.engine.EngineSessionState
@@ -795,26 +796,61 @@ class TabManager(
     private fun effectiveHotTabLimit(): Int =
         if (backgroundTrimRequested) backgroundHotTabLimit else hotTabLimit
 
-    private fun enforceHotTabBudget() {
+    internal fun enforceHotTabBudget() {
         if (closed) return
-        val targetLimit = effectiveHotTabLimit()
-        var openCount = _tabs.value.count { it.hasRawSessionAuthority && it.session.isOpen }
-        if (openCount <= targetLimit) return
+        val structuralTabs = _tabs.value
+        val browserApp = if (
+            structuralTabs.any { it.rawSessionOwnership == RawSessionOwnership.Relinquished }
+        ) {
+            context.applicationContext as? BrowserApp
+        } else {
+            null
+        }
+        val storeTabsById = browserApp
+            ?.browserStore
+            ?.state
+            ?.tabs
+            ?.associateBy { it.id }
+            .orEmpty()
+        val entries = structuralTabs.mapNotNull { tab ->
+            when {
+                tab.hasRawSessionAuthority && tab.session.isOpen -> {
+                    val hasRestorableState = tab.url.isBlank() || tab.url == "about:blank" ||
+                        (tab.latestSessionState != null && tab.latestSessionStateUrl == tab.url)
+                    HotTabBudgetEntry(
+                        tabId = tab.id,
+                        owner = HotTabSessionOwner.Raw,
+                        lastAccess = tab.lastAccess,
+                        canEvict = tab.progress < 0f && hasRestorableState,
+                    )
+                }
 
-        val selectedId = currentId.value
-        val coldest = _tabs.value
-            .asSequence()
-            .filter { it.hasRawSessionAuthority && it.id != selectedId && it.session.isOpen }
-            .sortedBy { it.lastAccess }
-            .toList()
-        for (tab in coldest) {
-            if (openCount <= targetLimit) break
-            if (tab.progress >= 0f) continue
-            val hasRestorableState = tab.url.isBlank() || tab.url == "about:blank" ||
-                (tab.latestSessionState != null && tab.latestSessionStateUrl == tab.url)
-            if (!hasRestorableState) continue
-            hibernateTab(tab)
-            openCount--
+                tab.rawSessionOwnership == RawSessionOwnership.Relinquished -> {
+                    val storeTab = storeTabsById[tab.id.toString()] ?: return@mapNotNull null
+                    if (storeTab.engineState.engineSession == null) return@mapNotNull null
+                    HotTabBudgetEntry(
+                        tabId = tab.id,
+                        owner = HotTabSessionOwner.AndroidComponents,
+                        lastAccess = tab.lastAccess,
+                        canEvict = !storeTab.content.loading,
+                    )
+                }
+
+                else -> null
+            }
+        }
+        val structuralTabsById = structuralTabs.associateBy { it.id }
+        planHotTabBudget(
+            entries = entries,
+            selectedTabId = currentId.value,
+            limit = effectiveHotTabLimit(),
+        ).forEach { eviction ->
+            when (eviction.owner) {
+                HotTabSessionOwner.Raw -> structuralTabsById[eviction.tabId]?.let(::hibernateTab)
+                HotTabSessionOwner.AndroidComponents -> browserApp?.browserStore?.dispatch(
+                    EngineAction.SuspendEngineSessionAction(eviction.tabId.toString()),
+                )
+            }
         }
     }
 
@@ -1058,7 +1094,7 @@ class TabManager(
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 if (!tab.ownsRawSession(session)) return
                 tab.progress = -1f
-                if (tab.id != currentId.value && _tabs.value.count { it.hasRawSessionAuthority && it.session.isOpen } > effectiveHotTabLimit()) {
+                if (tab.id != currentId.value) {
                     enforceHotTabBudget()
                 }
             }
@@ -1087,7 +1123,7 @@ class TabManager(
                     tab.persistedSessionStateUrl = null
                 }
                 if (!tab.isPrivate) requestPersist(immediate = false)
-                if (tab.id != currentId.value && _tabs.value.count { it.hasRawSessionAuthority && it.session.isOpen } > effectiveHotTabLimit()) {
+                if (tab.id != currentId.value) {
                     enforceHotTabBudget()
                 }
             }

@@ -15,8 +15,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import mozilla.components.browser.state.action.AppLifecycleAction
 import mozilla.components.lib.state.ext.flow
@@ -45,6 +47,23 @@ internal class BrowserTabLifecycleController(
                 browserApp.sessionStatePersistence.snapshots
                     .drop(1)
                     .collect { tabManager.requestPersistForAndroidComponentsSessionStateChange() }
+            }
+            androidComponentsBridgeScope.launch {
+                // SessionFeature can create a previously-suspended selected EngineSession after
+                // TabManager.select() has returned. Re-run the shared budget when linked-session
+                // topology or loading eligibility changes so that rewarm cannot escape the limit.
+                browserApp.browserStore.stateFlow
+                    .map { state ->
+                        state.tabs.mapNotNull { tab ->
+                            if (tab.engineState.engineSession == null) {
+                                null
+                            } else {
+                                tab.id to tab.content.loading
+                            }
+                        }
+                    }
+                    .distinctUntilChanged()
+                    .collect { tabManager.enforceHotTabBudget() }
             }
             androidComponentsBridgeScope.launch {
                 // The initial current tab is handled by onResume. Later selections cross ownership
