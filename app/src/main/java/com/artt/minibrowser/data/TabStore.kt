@@ -5,6 +5,7 @@ import android.os.Trace
 import android.util.Log
 import com.artt.minibrowser.net.sanitizeWebUriForPersistence
 import com.artt.minibrowser.net.sanitizeWebUriUserInfoInText
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -27,8 +28,12 @@ data class PersistedTab(
     // URL the Gecko session state belongs to. Older persisted files do not have this field;
     // their unbound session state is deliberately ignored by TabManager and the URL is reloaded.
     val sessionStateUrl: String? = null,
+    // Durable lifetime owner is independent from the optional A-C restore payload below. Existing
+    // files and current raw-owned snapshots omit this field and therefore remain raw-owned.
+    @SerialName("session_owner")
+    val sessionOwner: PersistedSessionOwner = PersistedSessionOwner.Raw,
     // Future A-C-owned sessions persist EngineSessionState separately from the legacy raw Gecko
-    // string above. These fields remain null while TabManager is the live session owner.
+    // string above. Raw-owned shadow tabs may also carry this payload during migration.
     val engineSessionState: EngineSessionStateEnvelope? = null,
     val engineSessionStateUrl: String? = null,
 )
@@ -94,11 +99,12 @@ internal fun sanitizePersistedBrowserState(state: PersistedBrowserState): Persis
         ) {
             // Both raw Gecko and A-C engine session snapshots are opaque and can contain the
             // original URL/title. If credentials were removed from persisted browser metadata,
-            // discard every bound snapshot and reload the sanitized URL instead of retaining an
-            // opaque sensitive copy on disk.
+            // discard every bound snapshot and its ownership claim, then reload the sanitized URL
+            // through the legacy raw path instead of retaining sensitive/ambiguous engine state.
             normalized = normalized.copy(
                 sessionState = null,
                 sessionStateUrl = null,
+                sessionOwner = PersistedSessionOwner.Raw,
                 engineSessionState = null,
                 engineSessionStateUrl = null,
             )
