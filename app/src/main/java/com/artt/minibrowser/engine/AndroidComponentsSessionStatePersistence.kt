@@ -28,6 +28,22 @@ internal fun shouldRequestAndroidComponentsSessionStatePersist(
     ownership: RawSessionOwnership,
 ): Boolean = !isPrivate && ownership == RawSessionOwnership.Relinquished
 
+/**
+ * Routes an app-scoped A-C persistence-state change into TabManager's existing debounced writer.
+ * The concrete changed session id is intentionally unnecessary here: one dirty signal serializes the
+ * complete current tab snapshot, and the queue is conflated. The per-session entry point remains for
+ * the irreversible existing-session transfer, where the exact id is already available synchronously.
+ */
+internal fun TabManager.requestPersistForAndroidComponentsSessionStateChange() {
+    val persistedTab = tabs.value.firstOrNull { tab ->
+        shouldRequestAndroidComponentsSessionStatePersist(
+            isPrivate = tab.isPrivate,
+            ownership = tab.rawSessionOwnership,
+        )
+    } ?: return
+    requestPersistFromAndroidComponentsSessionState(persistedTab.id.toString())
+}
+
 /** App-scoped latest bound EngineSessionState for sessions that have crossed to A-C ownership. */
 internal class AndroidComponentsSessionStatePersistenceState {
     private val mutableSnapshots =

@@ -9,10 +9,13 @@ import com.artt.minibrowser.engine.ExternalAppRequestHandler
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.bindTabManagerToBrowserStore
 import com.artt.minibrowser.engine.closeBrowserSessionsForFinalActivityDestroy
+import com.artt.minibrowser.engine.requestPersistForAndroidComponentsSessionStateChange
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import mozilla.components.browser.state.action.AppLifecycleAction
 
 /** Keeps Gecko tab visibility, persistence, and background trimming aligned with host lifecycle. */
@@ -33,6 +36,13 @@ internal class BrowserTabLifecycleController(
                 store = browserApp.browserStore,
                 engine = browserApp.engine,
             )
+            androidComponentsBridgeScope.launch {
+                // The current value may have been seeded from the cold-process restore snapshot.
+                // Only later A-C callback updates/invalidation should wake the debounced disk writer.
+                browserApp.sessionStatePersistence.snapshots
+                    .drop(1)
+                    .collect { tabManager.requestPersistForAndroidComponentsSessionStateChange() }
+            }
         }
         // Lifecycle.addObserver() brings this observer up to the owner's current state, so an
         // asynchronously-created controller still receives any required onStart/onResume callbacks.
