@@ -25,13 +25,14 @@ internal fun Tab.captureAndroidComponentsHandoffAndRelinquish(
     check(ownsRawSession(expectedSession)) {
         "Raw GeckoSession must still be owned at Android Components handoff"
     }
-    val mediaSessionHandoff = rawMediaSessionDelegate?.handoffSnapshot()
-    val uiCompatibilityHandoff = androidComponentsUiCompatibilityHandoff()
-
-    relinquishRawSessionOwnership(expectedSession)
-    return AndroidComponentsRawSessionRelinquishHandoff(
+    val handoff = AndroidComponentsRawSessionRelinquishHandoff(
         rawSession = expectedSession,
-        mediaSessionHandoff = mediaSessionHandoff,
-        uiCompatibilityHandoff = uiCompatibilityHandoff,
+        mediaSessionHandoff = rawMediaSessionDelegate?.handoffSnapshot(),
+        uiCompatibilityHandoff = androidComponentsUiCompatibilityHandoff(),
     )
+
+    // Keep this transition as the final potentially failing operation. Once it succeeds, callers may
+    // immediately treat any later failure as terminal without a gap after Relinquished.
+    relinquishRawSessionOwnership(expectedSession)
+    return handoff
 }
