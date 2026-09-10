@@ -4,9 +4,11 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
 /**
- * The narrow GeckoView callbacks that Android Components 154 cannot represent without losing
- * MiniBrowser semantics. Implementations may delegate back to the existing raw controllers while
- * BrowserStore owns the surrounding EngineSession.
+ * GeckoView callbacks retained by MiniBrowser while BrowserStore owns the surrounding EngineSession.
+ *
+ * WEEK and linked-media context menus are lossy in A-C 154. Permission callbacks intentionally stay
+ * on MiniBrowser's existing policy/UI until a BrowserStore permission feature is introduced with
+ * equivalent policy and ActivityResult semantics.
  */
 internal interface AndroidComponentsGeckoCompatibilityHandler {
     fun onWeekPrompt(
@@ -14,10 +16,24 @@ internal interface AndroidComponentsGeckoCompatibilityHandler {
         prompt: GeckoSession.PromptDelegate.DateTimePrompt,
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?
 
-    fun onXrPermission(
+    fun onAndroidPermissionsRequest(
+        session: GeckoSession,
+        permissions: Array<String>?,
+        callback: GeckoSession.PermissionDelegate.Callback,
+    )
+
+    fun onContentPermissionRequest(
         session: GeckoSession,
         permission: GeckoSession.PermissionDelegate.ContentPermission,
-    ): GeckoResult<Int>?
+    ): GeckoResult<Int>
+
+    fun onMediaPermissionRequest(
+        session: GeckoSession,
+        uri: String,
+        video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        callback: GeckoSession.PermissionDelegate.MediaCallback,
+    )
 
     /** Returns true when the raw-compatible context menu consumed the event. */
     fun onLinkedMediaContextMenu(
@@ -28,9 +44,6 @@ internal interface AndroidComponentsGeckoCompatibilityHandler {
 
 internal fun shouldUseRawWeekPrompt(type: Int): Boolean =
     type == GeckoSession.PromptDelegate.DateTimePrompt.Type.WEEK
-
-internal fun shouldUseRawXrPermission(permission: Int): Boolean =
-    permission == GeckoSession.PermissionDelegate.PERMISSION_XR
 
 internal fun shouldUseRawLinkedMediaContextMenu(
     elementType: Int,
@@ -63,23 +76,36 @@ internal class AndroidComponentsPromptCompatibilityDelegate(
 }
 
 /**
- * Keeps stock A-C permission ownership except for XR. A-C 154 has no XR entry in
- * GeckoPermissionRequest.Content.permissionsMap, so PERMISSION_XR becomes a generic permission and
- * cannot retain MiniBrowser's XR-specific policy/UI contract.
+ * Retains MiniBrowser's permission policy/UI across the EngineSession ownership boundary.
+ *
+ * A-C's stock Gecko permission delegate produces BrowserStore PermissionRequests, but this migration
+ * intentionally has no second SitePermissionsFeature consumer yet. Forwarding there would leave
+ * requests pending and would also bypass MiniBrowser's current site-policy and serialized
+ * ActivityResult handling. All three Gecko permission callback families therefore stay on the
+ * Activity-scoped compatibility host and fail closed if that host is unavailable.
  */
 internal class AndroidComponentsPermissionCompatibilityDelegate(
     private val delegate: GeckoSession.PermissionDelegate,
     private val compatibility: AndroidComponentsGeckoCompatibilityHandler,
 ) : GeckoSession.PermissionDelegate by delegate {
+    override fun onAndroidPermissionsRequest(
+        session: GeckoSession,
+        permissions: Array<String>?,
+        callback: GeckoSession.PermissionDelegate.Callback,
+    ) = compatibility.onAndroidPermissionsRequest(session, permissions, callback)
+
     override fun onContentPermissionRequest(
         session: GeckoSession,
         perm: GeckoSession.PermissionDelegate.ContentPermission,
-    ): GeckoResult<Int>? {
-        if (shouldUseRawXrPermission(perm.permission)) {
-            compatibility.onXrPermission(session, perm)?.let { return it }
-        }
-        return delegate.onContentPermissionRequest(session, perm)
-    }
+    ): GeckoResult<Int> = compatibility.onContentPermissionRequest(session, perm)
+
+    override fun onMediaPermissionRequest(
+        session: GeckoSession,
+        uri: String,
+        video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        callback: GeckoSession.PermissionDelegate.MediaCallback,
+    ) = compatibility.onMediaPermissionRequest(session, uri, video, audio, callback)
 }
 
 /**

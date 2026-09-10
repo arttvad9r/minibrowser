@@ -13,9 +13,9 @@ internal data class AndroidComponentsGeckoSessionContext(
 }
 
 /**
- * Activity-scoped implementation of the small compatibility surface that A-C 154 cannot represent
- * losslessly. The session context is supplied by the future A-C-owned session factory rather than
- * rediscovered from a raw GeckoSession or a retained TabManager.
+ * Activity-scoped implementation of compatibility UI retained across the A-C ownership boundary.
+ * The session context is supplied by the A-C-owned session factory rather than rediscovered from a
+ * raw GeckoSession or retained TabManager.
  */
 internal interface AndroidComponentsGeckoCompatibilityHost {
     fun onWeekPrompt(
@@ -24,11 +24,27 @@ internal interface AndroidComponentsGeckoCompatibilityHost {
         prompt: GeckoSession.PromptDelegate.DateTimePrompt,
     ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?
 
-    fun onXrPermission(
+    fun onAndroidPermissionsRequest(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        permissions: Array<String>?,
+        callback: GeckoSession.PermissionDelegate.Callback,
+    )
+
+    fun onContentPermissionRequest(
         context: AndroidComponentsGeckoSessionContext,
         session: GeckoSession,
         permission: GeckoSession.PermissionDelegate.ContentPermission,
-    ): GeckoResult<Int>?
+    ): GeckoResult<Int>
+
+    fun onMediaPermissionRequest(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        uri: String,
+        video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        callback: GeckoSession.PermissionDelegate.MediaCallback,
+    )
 
     fun onLinkedMediaContextMenu(
         context: AndroidComponentsGeckoSessionContext,
@@ -38,7 +54,7 @@ internal interface AndroidComponentsGeckoCompatibilityHost {
 }
 
 /**
- * App-scoped indirection for the compatibility UI host.
+ * App-scoped indirection for compatibility UI.
  *
  * EngineSessions keep a session-bound handler created by [forSession]. That handler captures only
  * immutable tab metadata and resolves the currently bound Activity host on every callback. Closing
@@ -71,10 +87,31 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? =
                 current?.onWeekPrompt(context, session, prompt)
 
-            override fun onXrPermission(
+            override fun onAndroidPermissionsRequest(
+                session: GeckoSession,
+                permissions: Array<String>?,
+                callback: GeckoSession.PermissionDelegate.Callback,
+            ) {
+                current?.onAndroidPermissionsRequest(context, session, permissions, callback)
+                    ?: callback.reject()
+            }
+
+            override fun onContentPermissionRequest(
                 session: GeckoSession,
                 permission: GeckoSession.PermissionDelegate.ContentPermission,
-            ): GeckoResult<Int>? = current?.onXrPermission(context, session, permission)
+            ): GeckoResult<Int> = current?.onContentPermissionRequest(context, session, permission)
+                ?: GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+
+            override fun onMediaPermissionRequest(
+                session: GeckoSession,
+                uri: String,
+                video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+                audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+                callback: GeckoSession.PermissionDelegate.MediaCallback,
+            ) {
+                current?.onMediaPermissionRequest(context, session, uri, video, audio, callback)
+                    ?: callback.reject()
+            }
 
             override fun onLinkedMediaContextMenu(
                 session: GeckoSession,
@@ -85,8 +122,8 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
 
 /**
  * Wraps the stock delegates installed by GeckoEngineSession after construction. This function is
- * intentionally not wired into the current shadow/raw ownership path; it is the cutover hook for a
- * future A-C-owned session factory that can capture the underlying GeckoSession through the public
+ * intentionally not wired into the current shadow/raw ownership path; it is the cutover hook for an
+ * A-C-owned session factory that captures the underlying GeckoSession through the public
  * geckoSessionProvider constructor argument.
  */
 internal fun installAndroidComponentsGeckoCompatibilityDelegates(

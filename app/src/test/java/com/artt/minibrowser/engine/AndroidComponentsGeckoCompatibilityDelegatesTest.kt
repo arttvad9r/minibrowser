@@ -24,25 +24,6 @@ class AndroidComponentsGeckoCompatibilityDelegatesTest {
     }
 
     @Test
-    fun onlyXrContentPermissionUsesRawCompatibility() {
-        assertTrue(
-            shouldUseRawXrPermission(
-                GeckoSession.PermissionDelegate.PERMISSION_XR,
-            ),
-        )
-        assertFalse(
-            shouldUseRawXrPermission(
-                GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION,
-            ),
-        )
-        assertFalse(
-            shouldUseRawXrPermission(
-                GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION,
-            ),
-        )
-    }
-
-    @Test
     fun linkedAudioAndVideoUseRawContextMenuCompatibility() {
         assertTrue(
             shouldUseRawLinkedMediaContextMenu(

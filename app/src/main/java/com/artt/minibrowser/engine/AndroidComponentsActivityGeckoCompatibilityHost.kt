@@ -6,11 +6,10 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
 /**
- * Activity-scoped UI implementation for the three lossy GeckoView callbacks retained at cutover.
+ * Activity-scoped compatibility UI retained while BrowserStore owns transferred EngineSessions.
  *
- * Tab/session ownership stays outside this class. Callers provide BrowserStore selection and tab
- * opening functions, so linked-media actions do not fall back to MainActivity/TabManager once the
- * surrounding EngineSession is A-C-owned.
+ * Tab/session lifetime ownership stays outside this class. Callers provide BrowserStore selection
+ * and tab-opening functions, so compatibility actions never rediscover or reclaim raw ownership.
  */
 internal class AndroidComponentsActivityGeckoCompatibilityHost(
     private val activity: Activity,
@@ -24,7 +23,7 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         GeckoPromptController(activity, pickFiles)
     }
     private val permissionController by lazy(LazyThreadSafetyMode.NONE) {
-        // The A-C compatibility path supplies its own BrowserStore session-id predicate below.
+        // Every transferred-session permission callback supplies BrowserStore identity explicitly.
         GeckoPermissionController(activity, requestPermissions) { false }
     }
     private val contextMenuController by lazy(LazyThreadSafetyMode.NONE) {
@@ -44,11 +43,31 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         return promptController.onDateTimePrompt(session, prompt)
     }
 
-    override fun onXrPermission(
+    override fun onAndroidPermissionsRequest(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        permissions: Array<String>?,
+        callback: GeckoSession.PermissionDelegate.Callback,
+    ) = permissionController.handleAndroidPermissionsRequest(permissions, callback) {
+        context.isSelected(selectedSessionId())
+    }
+
+    override fun onContentPermissionRequest(
         context: AndroidComponentsGeckoSessionContext,
         session: GeckoSession,
         permission: GeckoSession.PermissionDelegate.ContentPermission,
     ): GeckoResult<Int> = permissionController.handleContentPermissionRequest(permission) {
+        context.isSelected(selectedSessionId())
+    }
+
+    override fun onMediaPermissionRequest(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        uri: String,
+        video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        callback: GeckoSession.PermissionDelegate.MediaCallback,
+    ) = permissionController.handleMediaPermissionRequest(uri, video, audio, callback) {
         context.isSelected(selectedSessionId())
     }
 

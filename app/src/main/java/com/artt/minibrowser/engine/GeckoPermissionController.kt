@@ -93,8 +93,15 @@ class GeckoPermissionController(
         session: GeckoSession,
         permissions: Array<String>?,
         callback: GeckoSession.PermissionDelegate.Callback,
+    ) = handleAndroidPermissionsRequest(permissions, callback) { isSessionCurrent(session) }
+
+    /** Reuses raw Android-permission policy with a caller-owned BrowserStore identity predicate. */
+    internal fun handleAndroidPermissionsRequest(
+        permissions: Array<String>?,
+        callback: GeckoSession.PermissionDelegate.Callback,
+        isSessionEligible: () -> Boolean,
     ) {
-        if (!canHandle(session)) {
+        if (!canHandleRequest(isSessionEligible)) {
             callback.reject()
             return
         }
@@ -116,7 +123,7 @@ class GeckoPermissionController(
             return
         }
         requestPermissions?.invoke(missing) { granted ->
-            if (granted && canHandle(session)) callback.grant() else callback.reject()
+            if (granted && canHandleRequest(isSessionEligible)) callback.grant() else callback.reject()
         } ?: callback.reject()
     }
 
@@ -128,8 +135,8 @@ class GeckoPermissionController(
 
     /**
      * Reuses the exact raw content-permission policy/UI with a caller-owned session identity check.
-     * Future A-C-owned sessions can therefore validate BrowserStore session ids without retaining or
-     * rediscovering the old raw GeckoSession -> Tab mapping.
+     * A-C-owned sessions therefore validate BrowserStore session ids without rediscovering the old
+     * raw GeckoSession -> Tab mapping.
      */
     @SuppressLint("UnsafeOptInUsageError")
     internal fun handleContentPermissionRequest(
@@ -141,8 +148,7 @@ class GeckoPermissionController(
         if (resolvedValue != GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT) {
             return GeckoResult.fromValue(resolvedValue)
         }
-        fun canHandleRequest(): Boolean = canShowUi() && isSessionEligible()
-        if (!canHandleRequest()) {
+        if (!canHandleRequest(isSessionEligible)) {
             return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
         }
         val result = GeckoResult<Int>()
@@ -183,7 +189,7 @@ class GeckoPermissionController(
                 runCatching { result.complete(value) }.onSuccess { completed = true }
             }
 
-            if (!canHandleRequest()) {
+            if (!canHandleRequest(isSessionEligible)) {
                 complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
                 return@runOnUiThread
             }
@@ -196,7 +202,7 @@ class GeckoPermissionController(
                     }
                     .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
                         complete(
-                            if (canHandleRequest()) {
+                            if (canHandleRequest(isSessionEligible)) {
                                 GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
                             } else {
                                 GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
@@ -225,8 +231,17 @@ class GeckoPermissionController(
         video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
+    ) = handleMediaPermissionRequest(uri, video, audio, callback) { isSessionCurrent(session) }
+
+    /** Reuses raw camera/microphone policy with a caller-owned BrowserStore identity predicate. */
+    internal fun handleMediaPermissionRequest(
+        uri: String,
+        video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
+        callback: GeckoSession.PermissionDelegate.MediaCallback,
+        isSessionEligible: () -> Boolean,
     ) {
-        if (!canHandle(session)) {
+        if (!canHandleRequest(isSessionEligible)) {
             callback.reject()
             return
         }
@@ -257,7 +272,7 @@ class GeckoPermissionController(
             else -> activity.getString(R.string.permission_microphone_message)
         }
         activity.runOnUiThread {
-            if (!canHandle(session)) {
+            if (!canHandleRequest(isSessionEligible)) {
                 callback.reject()
                 return@runOnUiThread
             }
@@ -272,7 +287,7 @@ class GeckoPermissionController(
                     }
                     .setPositiveButton(activity.getString(R.string.action_allow)) { _, _ ->
                         actionTaken = true
-                        requestAndroidMediaPermissions(session, camera, microphone, callback)
+                        requestAndroidMediaPermissions(camera, microphone, callback, isSessionEligible)
                     }
                     .setOnCancelListener {
                         actionTaken = true
@@ -290,12 +305,12 @@ class GeckoPermissionController(
     }
 
     private fun requestAndroidMediaPermissions(
-        session: GeckoSession,
         camera: GeckoSession.PermissionDelegate.MediaSource?,
         microphone: GeckoSession.PermissionDelegate.MediaSource?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
+        isSessionEligible: () -> Boolean,
     ) {
-        if (!canHandle(session)) {
+        if (!canHandleRequest(isSessionEligible)) {
             callback.reject()
             return
         }
@@ -309,12 +324,19 @@ class GeckoPermissionController(
             callback.grant(camera, microphone)
         } else {
             requestPermissions?.invoke(needed) { granted ->
-                if (granted && canHandle(session)) callback.grant(camera, microphone) else callback.reject()
+                if (granted && canHandleRequest(isSessionEligible)) {
+                    callback.grant(camera, microphone)
+                } else {
+                    callback.reject()
+                }
             } ?: callback.reject()
         }
     }
 
-    private fun canHandle(session: GeckoSession): Boolean = canShowUi() && isSessionCurrent(session)
+    private fun canHandle(session: GeckoSession): Boolean = canHandleRequest { isSessionCurrent(session) }
+
+    private fun canHandleRequest(isSessionEligible: () -> Boolean): Boolean =
+        canShowUi() && isSessionEligible()
 
     private fun canShowUi(): Boolean = !activity.isFinishing && !activity.isDestroyed
 }
