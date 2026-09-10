@@ -301,6 +301,8 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var fullscreen by mutableStateOf(false)
     var securityState by mutableStateOf(SecurityState.Unknown)
     var loadError by mutableStateOf<PageLoadError?>(null)
+    internal var rawSessionOwnership by mutableStateOf(RawSessionOwnership.Owned)
+        private set
     internal var mediaPlaybackState by mutableStateOf(TabMediaPlaybackState())
     internal var rawMediaSessionDelegate: AndroidComponentsRawMediaSessionDelegate? = null
     internal val progressGate = ProgressGate()
@@ -313,6 +315,14 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     internal var persistedEngineSessionStateUrl: String? = null
     internal var historyTitleUrl: String? = null
     internal var lastAccess = System.currentTimeMillis()
+
+    internal fun relinquishRawSessionOwnership(expectedSession: GeckoSession) {
+        rawSessionOwnership = rawSessionOwnershipAfterRelinquish(
+            current = rawSessionOwnership,
+            actualSession = session,
+            expectedSession = expectedSession,
+        )
+    }
 }
 
 data class ClosedTabSnapshot(
@@ -919,9 +929,11 @@ class TabManager(
         val mediaOwnerSession = tab.session
         val rawMediaSessionDelegate = AndroidComponentsRawMediaSessionDelegate(
             ownerSession = mediaOwnerSession,
-            stillOwnsSession = { tab.session === mediaOwnerSession },
+            stillOwnsSession = {
+                tab.rawSessionOwnership == RawSessionOwnership.Owned && tab.session === mediaOwnerSession
+            },
             onPlaybackSnapshotChanged = { state ->
-                if (tab.session === mediaOwnerSession) {
+                if (tab.rawSessionOwnership == RawSessionOwnership.Owned && tab.session === mediaOwnerSession) {
                     tab.mediaPlaybackState = state
                 }
             },

@@ -68,6 +68,7 @@ private fun Tab.toBrowserStoreTabSnapshot(): BrowserStoreTabSnapshot {
         canGoForward = canGoForward,
         fullscreen = fullscreen,
         securityState = securityState,
+        rawSessionOwnership = rawSessionOwnership,
         persistedEngineSessionState = persistedEngineSessionState,
         persistedEngineSessionStateUrl = persistedEngineSessionStateUrl,
     )
