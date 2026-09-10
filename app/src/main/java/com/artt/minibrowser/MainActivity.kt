@@ -36,7 +36,11 @@ import com.artt.minibrowser.engine.BackgroundTabHost
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
+import com.artt.minibrowser.engine.clearBrowserFindMatches
 import com.artt.minibrowser.engine.clearWebDataAcrossAndroidComponentsOwnership
+import com.artt.minibrowser.engine.exitBrowserFullscreen
+import com.artt.minibrowser.engine.goBrowserBack
+import com.artt.minibrowser.engine.loadBrowserUrl
 import java.io.File
 import java.util.ArrayDeque
 import kotlinx.coroutines.Dispatchers
@@ -98,7 +102,8 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
     private val browserIntents by lazy {
         BrowserIntentController(this) { fallback ->
             if (::tabManager.isInitialized) {
-                (tabManager.current() ?: tabManager.newTab(null)).session.loadUri(fallback)
+                val target = tabManager.current() ?: tabManager.newTab(null)
+                loadBrowserUrl(target, browserApp.browserStore, fallback)
             }
         }
     }
@@ -211,12 +216,12 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                         ui.showSwitcher -> browserViewModel.showSwitcher(false)
                         ui.showSiteInfo -> browserViewModel.showSiteInfo(false)
                         ui.showFind -> {
-                            current?.session?.finder?.clear()
+                            current?.let { tab -> clearBrowserFindMatches(tab, browserApp.browserStore) }
                             browserViewModel.showFind(false)
                         }
-                        inFullscreen -> current?.session?.exitFullScreen()
+                        inFullscreen -> current?.let { tab -> exitBrowserFullscreen(tab, browserApp.browserStore) }
                         ui.screen != BrowserScreen.Browser -> browserViewModel.screen(BrowserScreen.Browser)
-                        canGoBack -> current?.session?.goBack()
+                        canGoBack -> current?.let { tab -> goBrowserBack(tab, browserApp.browserStore) }
                         current != null && closeCurrentTabForSystemBack(current.id) -> Unit
                         else -> passThroughToSystem()
                     }
