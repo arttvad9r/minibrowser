@@ -31,6 +31,7 @@ import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.concept.engine.EngineSessionState
 import org.mozilla.geckoview.AllowOrDeny
@@ -438,6 +439,9 @@ data class ClosedTabSnapshot(
     val persistedSessionStateUrl: String?,
     val persistedEngineSessionState: EngineSessionStateEnvelope? = null,
     val persistedEngineSessionStateUrl: String? = null,
+    val sessionOwner: PersistedSessionOwner = PersistedSessionOwner.Raw,
+    val engineSessionState: EngineSessionState? = null,
+    val engineSessionStateUrl: String? = null,
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -637,14 +641,26 @@ class TabManager(
         val idx = _tabs.value.indexOfFirst { it.id == id }
         if (idx < 0) return null
         val dying = _tabs.value[idx]
+        val androidComponentsOwned = dying.rawSessionOwnership == RawSessionOwnership.Relinquished
+        val browserApp = if (androidComponentsOwned) context.applicationContext as? BrowserApp else null
+        val sessionId = id.toString()
+        val storeTab = browserApp?.browserStore?.state?.tabs?.firstOrNull { it.id == sessionId }
+        val androidComponentsCapture = if (browserApp != null && storeTab != null) {
+            androidComponentsClosedTabCapture(
+                tab = storeTab,
+                boundState = browserApp.sessionStatePersistence.snapshot(sessionId),
+            )
+        } else {
+            null
+        }
         val snapshot = ClosedTabSnapshot(
             id = dying.id,
             index = idx,
             wasCurrent = currentId.value == id,
-            isPrivate = dying.isPrivate,
-            url = dying.url,
-            title = dying.title,
-            desktop = dying.desktop,
+            isPrivate = androidComponentsCapture?.isPrivate ?: dying.isPrivate,
+            url = androidComponentsCapture?.url ?: dying.url,
+            title = androidComponentsCapture?.title ?: dying.title,
+            desktop = androidComponentsCapture?.desktop ?: dying.desktop,
             lastAccess = dying.lastAccess,
             latestSessionState = dying.latestSessionState,
             latestSessionStateUrl = dying.latestSessionStateUrl,
@@ -652,7 +668,19 @@ class TabManager(
             persistedSessionStateUrl = dying.persistedSessionStateUrl,
             persistedEngineSessionState = dying.persistedEngineSessionState,
             persistedEngineSessionStateUrl = dying.persistedEngineSessionStateUrl,
+            sessionOwner = if (androidComponentsOwned) {
+                PersistedSessionOwner.AndroidComponents
+            } else {
+                PersistedSessionOwner.Raw
+            },
+            engineSessionState = androidComponentsCapture?.engineSessionState,
+            engineSessionStateUrl = androidComponentsCapture?.engineSessionStateUrl,
         )
+        if (androidComponentsOwned && browserApp != null && storeTab != null) {
+            // BrowserStore removal must happen before the structural record disappears so
+            // TabsRemovedMiddleware remains the sole EngineSession close owner.
+            browserApp.browserStore.dispatch(TabListAction.RemoveTabAction(sessionId))
+        }
         if (dying.hasRawSessionAuthority) {
             runtime.webExtensionController.setTabActive(dying.session, false)
             dying.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
@@ -674,6 +702,41 @@ class TabManager(
 
     fun restoreClosedTab(snapshot: ClosedTabSnapshot): Tab? {
         if (closed || _tabs.value.any { it.id == snapshot.id }) return null
+        if (snapshot.sessionOwner == PersistedSessionOwner.AndroidComponents) {
+            val browserApp = context.applicationContext as? BrowserApp ?: return null
+            val plan = androidComponentsClosedTabRestorePlan(snapshot) ?: return null
+            val sessionId = snapshot.id.toString()
+            if (browserApp.browserStore.state.tabs.any { it.id == sessionId }) return null
+
+            // Restore A-C state before publishing the structural record. The bridge never recreates
+            // relinquished tabs from raw state, so this is the only EngineSessionState source.
+            browserApp.browserStore.dispatch(
+                TabListAction.AddMultipleTabsAction(listOf(plan.storeTab)),
+            )
+            plan.engineSessionState?.let { state ->
+                browserApp.sessionStatePersistence.bind(
+                    sessionId = sessionId,
+                    stateUrl = snapshot.url,
+                    state = state,
+                )
+            }
+
+            val tab = plan.structuralTab
+            seq = maxOf(seq, tab.id)
+            val restoredTabs = _tabs.value.toMutableList()
+            restoredTabs.add(snapshot.index.coerceIn(0, restoredTabs.size), tab)
+            _tabs.value = restoredTabs
+
+            if (snapshot.wasCurrent || currentId.value == null) {
+                deactivateOthers(tab.id)
+                currentId.value = tab.id
+                browserApp.browserStore.dispatch(TabListAction.SelectTabAction(sessionId))
+            }
+            persist()
+            enforceHotTabBudget()
+            return tab
+        }
+
         val tab = Tab(GeckoSession(sessionSettings(snapshot.isPrivate)), snapshot.id, snapshot.isPrivate).apply {
             url = snapshot.url
             title = snapshot.title
