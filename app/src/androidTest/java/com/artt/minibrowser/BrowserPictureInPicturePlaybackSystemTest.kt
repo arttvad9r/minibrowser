@@ -8,14 +8,18 @@ import android.view.MotionEvent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.artt.minibrowser.data.PersistedBrowserState
+import com.artt.minibrowser.data.TabStore
 import com.artt.minibrowser.engine.BrowserApp
 import java.io.Closeable
+import java.io.File
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import mozilla.components.browser.state.action.TabListAction
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,63 +31,85 @@ class BrowserPictureInPicturePlaybackSystemTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val testContext = instrumentation.context
         val targetContext = instrumentation.targetContext
+        val browserApp = targetContext.applicationContext as BrowserApp
         val video = testContext.assets.open(TEST_VIDEO_ASSET).use { it.readBytes() }
 
-        LocalMediaServer(video).use { server ->
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(server.pageUrl)).apply {
-                setClass(targetContext, MainActivity::class.java)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        resetBrowserState(instrumentation, browserApp)
+        try {
+            LocalMediaServer(video).use { server ->
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(server.pageUrl)).apply {
+                    setClass(targetContext, MainActivity::class.java)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                val scenario = ActivityScenario.launch<MainActivity>(intent)
+                try {
+                    waitFor("The local Gecko media page became selected") {
+                        selectedContent(browserApp)?.url == server.pageUrl
+                    }
+
+                    val tapPoint = AtomicReference<Pair<Float, Float>>()
+                    scenario.onActivity { activity ->
+                        val decor = activity.window.decorView
+                        tapPoint.set(decor.width * 0.5f to decor.height * 0.45f)
+                    }
+                    SystemClock.sleep(PAGE_SETTLE_MS)
+                    sendTap(instrumentation, tapPoint.get())
+
+                    waitFor("Gecko reported content fullscreen from the real video element") {
+                        selectedContent(browserApp)?.fullScreen == true
+                    }
+
+                    val requested = AtomicBoolean(false)
+                    val requestDeadline = SystemClock.uptimeMillis() + MEDIA_READY_TIMEOUT_MS
+                    while (!requested.get() && SystemClock.uptimeMillis() < requestDeadline) {
+                        scenario.onActivity { activity -> requested.set(activity.onPictureInPictureRequested()) }
+                        if (!requested.get()) SystemClock.sleep(POLL_INTERVAL_MS)
+                    }
+                    assertTrue(
+                        "Real Gecko media playback made MainActivity PiP-eligible",
+                        requested.get(),
+                    )
+
+                    waitFor("MainActivity entered system picture-in-picture") {
+                        val inPip = AtomicBoolean(false)
+                        scenario.onActivity { activity -> inPip.set(activity.isInPictureInPictureMode) }
+                        inPip.get()
+                    }
+
+                    waitFor("The platform PiP callback was mirrored into BrowserStore") {
+                        selectedContent(browserApp)?.pictureInPictureEnabled == true
+                    }
+                } finally {
+                    scenario.close()
+                }
             }
-            val scenario = ActivityScenario.launch<MainActivity>(intent)
-            try {
-                val activityRef = AtomicReference<MainActivity>()
-                scenario.onActivity(activityRef::set)
-                val browserApp = targetContext.applicationContext as BrowserApp
-
-                waitFor("The local Gecko media page became selected") {
-                    selectedContent(browserApp)?.url == server.pageUrl
-                }
-
-                val tapPoint = AtomicReference<Pair<Float, Float>>()
-                scenario.onActivity { activity ->
-                    val decor = activity.window.decorView
-                    tapPoint.set(decor.width * 0.5f to decor.height * 0.45f)
-                }
-                SystemClock.sleep(PAGE_SETTLE_MS)
-                sendTap(instrumentation, tapPoint.get())
-
-                waitFor("Gecko reported content fullscreen from the real video element") {
-                    selectedContent(browserApp)?.fullScreen == true
-                }
-
-                val requested = AtomicBoolean(false)
-                val requestDeadline = SystemClock.uptimeMillis() + MEDIA_READY_TIMEOUT_MS
-                while (!requested.get() && SystemClock.uptimeMillis() < requestDeadline) {
-                    scenario.onActivity { activity -> requested.set(activity.onPictureInPictureRequested()) }
-                    if (!requested.get()) SystemClock.sleep(POLL_INTERVAL_MS)
-                }
-                assertTrue(
-                    "Real Gecko media playback made MainActivity PiP-eligible",
-                    requested.get(),
-                )
-
-                waitFor("MainActivity entered system picture-in-picture") {
-                    val inPip = AtomicBoolean(false)
-                    scenario.onActivity { activity -> inPip.set(activity.isInPictureInPictureMode) }
-                    inPip.get()
-                }
-
-                waitFor("The platform PiP callback was mirrored into BrowserStore") {
-                    selectedContent(browserApp)?.pictureInPictureEnabled == true
-                }
-            } finally {
-                scenario.close()
-            }
+        } finally {
+            resetBrowserState(instrumentation, browserApp)
         }
     }
 
     private fun selectedContent(browserApp: BrowserApp) = browserApp.browserStore.state.let { state ->
         state.tabs.firstOrNull { it.id == state.selectedTabId }?.content
+    }
+
+    private fun resetBrowserState(
+        instrumentation: android.app.Instrumentation,
+        browserApp: BrowserApp,
+    ) {
+        val targetContext = instrumentation.targetContext
+        instrumentation.runOnMainSync {
+            val tabIds = browserApp.browserStore.state.tabs.map { it.id }
+            if (tabIds.isNotEmpty()) {
+                browserApp.browserStore.dispatch(TabListAction.RemoveTabsAction(tabIds))
+            }
+        }
+
+        val deadline = SystemClock.uptimeMillis() + RESET_TIMEOUT_MS
+        while (browserApp.browserStore.state.tabs.isNotEmpty() && SystemClock.uptimeMillis() < deadline) {
+            SystemClock.sleep(25L)
+        }
+        check(browserApp.browserStore.state.tabs.isEmpty()) { "BrowserStore did not reset before PiP test" }
+        TabStore.saveState(File(targetContext.filesDir, "tabs"), PersistedBrowserState())
     }
 
     private fun sendTap(
@@ -271,6 +297,7 @@ class BrowserPictureInPicturePlaybackSystemTest {
         const val TAP_DURATION_MS = 50L
         const val SERVER_JOIN_TIMEOUT_MS = 1_000L
         const val SOCKET_TIMEOUT_MS = 5_000
+        const val RESET_TIMEOUT_MS = 5_000L
 
         val PAGE_BYTES = """
             <!doctype html>
