@@ -1,5 +1,6 @@
 package com.artt.minibrowser.engine
 
+import mozilla.components.browser.state.action.ContentAction
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
 import org.mozilla.geckoview.GeckoSession
@@ -88,4 +89,25 @@ internal fun clearBrowserFindMatches(tab: Tab, browserStore: BrowserStore) {
         is BrowserCommandTarget.Linked -> target.session.clearFindMatches()
         null -> Unit
     }
+}
+
+internal fun notifyBrowserPictureInPictureModeChanged(
+    tab: Tab,
+    browserStore: BrowserStore,
+    enabled: Boolean,
+) {
+    when (val target = browserCommandTargetForTab(tab, browserStore)) {
+        is BrowserCommandTarget.Raw -> target.session.compositorController.onPipModeChanged(enabled)
+        is BrowserCommandTarget.Linked -> target.session.onPipModeChanged(enabled)
+        null -> Unit
+    }
+
+    // Match Android Components' PictureInPictureFeature state contract even in the narrow
+    // relinquished-before-link interval, while never falling back to the raw GeckoSession.
+    browserStore.dispatch(
+        ContentAction.PictureInPictureChangedAction(
+            sessionId = tab.id.toString(),
+            pipEnabled = enabled,
+        ),
+    )
 }
