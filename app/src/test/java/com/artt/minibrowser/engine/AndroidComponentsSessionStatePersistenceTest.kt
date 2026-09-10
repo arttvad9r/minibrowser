@@ -40,7 +40,10 @@ class AndroidComponentsSessionStatePersistenceTest {
             observer.onStateUpdated(TestEngineSessionState())
         }
 
-        assertEquals(listOf("7" to "https://example.com/page"), changes)
+        assertEquals(
+            listOf<Pair<String, String?>>("7" to "https://example.com/page"),
+            changes,
+        )
     }
 
     @Test
@@ -95,7 +98,7 @@ class AndroidComponentsSessionStatePersistenceTest {
         }
 
         assertNull(persistence.snapshot("7"))
-        assertEquals(listOf("7" to null), changes)
+        assertEquals(listOf<Pair<String, String?>>("7" to null), changes)
     }
 
     @Test
@@ -112,7 +115,7 @@ class AndroidComponentsSessionStatePersistenceTest {
         observer.onStateUpdated(TestEngineSessionState())
 
         assertNull(persistence.snapshot("7"))
-        assertEquals(listOf("7" to null), changes)
+        assertEquals(listOf<Pair<String, String?>>("7" to null), changes)
     }
 
     @Test
