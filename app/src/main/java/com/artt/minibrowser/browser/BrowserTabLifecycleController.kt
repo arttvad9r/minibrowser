@@ -46,6 +46,17 @@ internal class BrowserTabLifecycleController(
                     .drop(1)
                     .collect { tabManager.requestPersistForAndroidComponentsSessionStateChange() }
             }
+            androidComponentsBridgeScope.launch {
+                // The initial current tab is handled by onResume. Later selections cross ownership
+                // only while the Activity is resumed; a paused selection is handled on next resume.
+                tabManager.currentId
+                    .drop(1)
+                    .collect {
+                        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                            transferCurrentRawTabWhenMirrored(browserApp)
+                        }
+                    }
+            }
         }
         // Lifecycle.addObserver() brings this observer up to the owner's current state, so an
         // asynchronously-created controller still receives any required onStart/onResume callbacks.
