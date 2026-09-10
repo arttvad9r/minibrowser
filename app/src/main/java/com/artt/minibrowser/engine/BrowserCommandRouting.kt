@@ -73,3 +73,19 @@ internal fun toggleBrowserDesktopMode(
         null -> Unit
     }
 }
+
+internal fun exitBrowserFullscreen(tab: Tab, browserStore: BrowserStore) {
+    when (val target = browserCommandTargetForTab(tab, browserStore)) {
+        is BrowserCommandTarget.Raw -> target.session.exitFullScreen()
+        is BrowserCommandTarget.Linked -> target.session.exitFullScreenMode()
+        null -> Unit
+    }
+}
+
+internal fun clearBrowserFindMatches(tab: Tab, browserStore: BrowserStore) {
+    when (val target = browserCommandTargetForTab(tab, browserStore)) {
+        is BrowserCommandTarget.Raw -> target.session.finder.clear()
+        is BrowserCommandTarget.Linked -> target.session.clearFindMatches()
+        null -> Unit
+    }
+}
