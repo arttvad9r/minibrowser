@@ -5,7 +5,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
-import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.state.createTab
 
@@ -20,7 +19,7 @@ class AndroidComponentsProcessRestoreActionsTest {
     }
 
     @Test
-    fun selectedAndroidComponentsTabIsAddedSelectedAndMaterialized() {
+    fun selectedAndroidComponentsTabIsAddedAndSelectedButStaysStateOnly() {
         val first = createTab(url = "https://one.example/", id = "1")
         val selected = createTab(url = "https://two.example/", id = "2")
         val actions = androidComponentsProcessRestoreActions(
@@ -35,8 +34,7 @@ class AndroidComponentsProcessRestoreActionsTest {
         assertSame(first, add.tabs[0])
         assertSame(selected, add.tabs[1])
         assertEquals(TabListAction.SelectTabAction("2"), actions[1])
-        assertEquals("2", assertIs<EngineAction.CreateEngineSessionAction>(actions[2]).tabId)
-        assertEquals(3, actions.size)
+        assertEquals(2, actions.size)
     }
 
     @Test

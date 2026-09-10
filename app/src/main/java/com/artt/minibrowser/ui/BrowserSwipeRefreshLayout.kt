@@ -22,9 +22,10 @@ import org.mozilla.geckoview.GeckoSession
  * Pull-to-refresh shell around Android Components' GeckoEngineView.
  *
  * Raw-owned tabs render through a temporary GeckoEngineSession facade that borrows the exact raw
- * GeckoSession. Relinquished tabs are rendered by A-C's lifecycle-aware SessionFeature from their
- * BrowserStore-linked EngineSession; this view never creates a second facade around an A-C-owned
- * session and SessionFeature is never started for a raw-owned tab.
+ * GeckoSession. Android Components-owned tabs render through A-C's lifecycle-aware SessionFeature;
+ * for a state-only restored tab the feature asks EngineMiddleware to create the missing EngineSession.
+ * This view never creates its own A-C EngineSession and SessionFeature is never started for a
+ * raw-owned tab or during the relinquished-before-link transfer interval.
  */
 internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(context) {
     val engineView = GeckoEngineView(context)
@@ -71,6 +72,7 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         tabId: String?,
         target: BrowserCommandTarget<GeckoSession, EngineSession>?,
         privateMode: Boolean,
+        allowAndroidComponentsSessionCreation: Boolean = false,
     ) {
         when (target) {
             is BrowserCommandTarget.Raw -> bindRawSession(
@@ -79,12 +81,27 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
                 privateMode = privateMode,
             )
 
-            is BrowserCommandTarget.Linked -> bindLinkedSession(
-                store = store,
-                tabId = checkNotNull(tabId) { "Linked render target requires a BrowserStore tab id" },
-                session = target.session,
-            )
-            null -> releaseRenderedSession()
+            is BrowserCommandTarget.Linked -> {
+                val linkedTabId = checkNotNull(tabId) {
+                    "Linked render target requires a BrowserStore tab id"
+                }
+                val storeSession = store.state.tabs
+                    .firstOrNull { it.id == linkedTabId }
+                    ?.engineState
+                    ?.engineSession
+                check(storeSession === target.session) {
+                    "Linked render target must be the exact BrowserStore EngineSession"
+                }
+                bindAndroidComponentsSession(store = store, tabId = linkedTabId)
+            }
+
+            null -> {
+                if (allowAndroidComponentsSessionCreation && tabId != null) {
+                    bindAndroidComponentsSession(store = store, tabId = tabId)
+                } else {
+                    releaseRenderedSession()
+                }
+            }
         }
     }
 
@@ -104,30 +121,27 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         ).also(engineView::render)
     }
 
-    private fun bindLinkedSession(
+    private fun bindAndroidComponentsSession(
         store: BrowserStore,
         tabId: String,
-        session: EngineSession,
     ) {
-        val storeSession = store.state.tabs
-            .firstOrNull { it.id == tabId }
-            ?.engineState
-            ?.engineSession
-        check(storeSession === session) {
-            "Linked render target must be the exact BrowserStore EngineSession"
+        val storeTab = checkNotNull(store.state.tabs.firstOrNull { it.id == tabId }) {
+            "Android Components render target requires a BrowserStore tab"
         }
+        val storeSession = storeTab.engineState.engineSession
 
         if (
-            renderedLinkedSession === session &&
             renderedLinkedTabId == tabId &&
-            renderedRawSession == null
+            renderedRawSession == null &&
+            linkedSessionFeature != null
         ) {
+            renderedLinkedSession = storeSession
             attachLinkedSessionFeatureToLifecycle()
             return
         }
 
         releaseRenderedSession()
-        renderedLinkedSession = session
+        renderedLinkedSession = storeSession
         renderedLinkedTabId = tabId
         val sessionUseCases = SessionUseCases(store)
         linkedSessionFeature = SessionFeature(

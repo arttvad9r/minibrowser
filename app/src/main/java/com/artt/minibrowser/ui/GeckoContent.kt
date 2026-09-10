@@ -14,6 +14,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.BrowserCommandTarget
+import com.artt.minibrowser.engine.RawSessionOwnership
 import com.artt.minibrowser.engine.Tab
 import com.artt.minibrowser.engine.browserCommandTargetForTab
 import com.artt.minibrowser.engine.reloadOrStopBrowser
@@ -76,12 +77,17 @@ internal fun GeckoContent(
                     }
                 }
             }
+            val allowAndroidComponentsSessionCreation = tab?.let { currentTab ->
+                currentTab.rawSessionOwnership == RawSessionOwnership.Relinquished &&
+                    currentTab.rawSessionOrNull == null
+            } == true
             container.bindSession(
                 runtime = app.runtime,
                 store = app.browserStore,
                 tabId = tabId?.toString(),
                 target = renderTarget,
                 privateMode = isPrivate,
+                allowAndroidComponentsSessionCreation = allowAndroidComponentsSessionCreation,
             )
             container.configurePullToRefresh(
                 pageSupportsRefresh = pageSupportsRefresh,

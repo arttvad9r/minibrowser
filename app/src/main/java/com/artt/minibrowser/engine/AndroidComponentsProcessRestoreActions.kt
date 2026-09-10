@@ -1,14 +1,14 @@
 package com.artt.minibrowser.engine
 
 import mozilla.components.browser.state.action.BrowserAction
-import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.action.TabListAction
 
 /**
- * Materializes the persisted A-C tab structure before TabManager may create any raw GeckoSession.
+ * Restores the persisted A-C tab structure before TabManager may create any raw GeckoSession.
  *
- * Only the selected A-C tab gets a live EngineSession during startup. Background tabs keep their
- * optional EngineSessionState in BrowserStore and can be materialized lazily when they are selected.
+ * EngineSession materialization stays lazy. The selected A-C tab is marked selected here, then A-C's
+ * lifecycle-aware SessionFeature requests CreateEngineSessionAction when the tab is actually rendered.
+ * This keeps startup free of live A-C sessions until the Activity compatibility host is bound.
  */
 internal fun androidComponentsProcessRestoreActions(
     plan: AndroidComponentsProcessRestorePlan,
@@ -18,6 +18,5 @@ internal fun androidComponentsProcessRestoreActions(
     add(TabListAction.AddMultipleTabsAction(plan.tabs))
     plan.selectedTabId?.let { selectedTabId ->
         add(TabListAction.SelectTabAction(selectedTabId))
-        add(EngineAction.CreateEngineSessionAction(tabId = selectedTabId))
     }
 }
