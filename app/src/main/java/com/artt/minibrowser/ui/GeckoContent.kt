@@ -78,6 +78,8 @@ internal fun GeckoContent(
             }
             container.bindSession(
                 runtime = app.runtime,
+                store = app.browserStore,
+                tabId = tabId?.toString(),
                 target = renderTarget,
                 privateMode = isPrivate,
             )
