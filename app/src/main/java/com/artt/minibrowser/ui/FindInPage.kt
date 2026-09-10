@@ -170,7 +170,7 @@ internal fun FindInPageRoute(
     val stepFind: (Boolean) -> Unit = { forward ->
         if (query.isNotBlank()) {
             when (val target = browserCommandTargetForTab(tab, browserStore)) {
-                is BrowserCommandTarget.Raw -> rawFind(target.session, backward = !forward)
+                is BrowserCommandTarget.Raw -> rawFind(target.session, !forward)
                 is BrowserCommandTarget.Linked -> target.session.findNext(forward)
                 null -> Unit
             }
