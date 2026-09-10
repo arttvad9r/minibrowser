@@ -4,8 +4,10 @@ import android.util.JsonWriter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import mozilla.components.concept.engine.EngineSessionState
 
 class AndroidComponentsSessionStatePersistenceTest {
@@ -39,6 +41,28 @@ class AndroidComponentsSessionStatePersistenceTest {
         }
 
         assertEquals(listOf("7" to "https://example.com/page"), changes)
+    }
+
+    @Test
+    fun persistenceWakeupPolicyOnlyAllowsNonPrivateRelinquishedTabs() {
+        assertTrue(
+            shouldRequestAndroidComponentsSessionStatePersist(
+                isPrivate = false,
+                ownership = RawSessionOwnership.Relinquished,
+            ),
+        )
+        assertFalse(
+            shouldRequestAndroidComponentsSessionStatePersist(
+                isPrivate = true,
+                ownership = RawSessionOwnership.Relinquished,
+            ),
+        )
+        assertFalse(
+            shouldRequestAndroidComponentsSessionStatePersist(
+                isPrivate = false,
+                ownership = RawSessionOwnership.Owned,
+            ),
+        )
     }
 
     @Test
