@@ -1,0 +1,32 @@
+name: Validate SessionFeature API
+
+on:
+  push:
+    branches: [tmp-fix-session-feature-154-api]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android SDK
+        run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
+      - name: Unit tests and screenshots
+        run: ./gradlew :app:testDebugUnitTest :app:verifyRoborazziDebug --stacktrace
+      - name: Lint
+        run: ./gradlew :app:lintDebug --stacktrace
