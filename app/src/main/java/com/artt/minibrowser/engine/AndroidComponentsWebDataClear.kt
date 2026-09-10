@@ -12,6 +12,15 @@ internal data class AndroidComponentsWebDataClearTarget(
     val close: () -> Unit,
 )
 
+internal fun validateAndroidComponentsWebDataClearOwnership(
+    relinquishedSessionIds: Set<String>,
+    linkedSessionIds: Set<String>,
+) {
+    check(linkedSessionIds == relinquishedSessionIds) {
+        "Relinquished TabManager sessions must exactly match linked BrowserStore EngineSessions before web-data clear"
+    }
+}
+
 /**
  * Validates the ownership boundary before a destructive web-data clear starts.
  *
@@ -31,10 +40,10 @@ internal fun prepareAndroidComponentsWebDataClearTargets(
             )
         }
     }
-    val linkedIds = linked.mapTo(mutableSetOf()) { it.sessionId }
-    check(linkedIds == relinquishedSessionIds) {
-        "Relinquished TabManager sessions must exactly match linked BrowserStore EngineSessions before web-data clear"
-    }
+    validateAndroidComponentsWebDataClearOwnership(
+        relinquishedSessionIds = relinquishedSessionIds,
+        linkedSessionIds = linked.mapTo(mutableSetOf()) { it.sessionId },
+    )
     return linked
 }
 
