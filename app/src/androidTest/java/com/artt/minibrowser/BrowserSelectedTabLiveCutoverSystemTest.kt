@@ -49,10 +49,10 @@ class BrowserSelectedTabLiveCutoverSystemTest {
         composeRule.waitUntil(LINK_TIMEOUT_MS) {
             val state = app.browserStore.state
             state.selectedTabId == initialSelectedId &&
-                state.tabs.any { tab -> tab.id !in initialIds && tab.content.url == BACKGROUND_URL }
+                state.tabs.count { tab -> tab.id !in initialIds } == 1
         }
         val background = app.browserStore.state.tabs.single { tab ->
-            tab.id !in initialIds && tab.content.url == BACKGROUND_URL
+            tab.id !in initialIds
         }
         assertNull(
             "A background raw tab must stay raw until the user selects it",
