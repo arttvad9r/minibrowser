@@ -88,6 +88,9 @@ dependencies {
     implementation("org.mozilla.geckoview:geckoview-omni:154.0.20260824154132")
     implementation("org.mozilla.components:browser-state:154.0.1")
     implementation("org.mozilla.components:browser-engine-gecko:154.0.1")
+    // Linked A-C-owned tabs use Mozilla's SessionFeature for lifecycle-aware EngineView rendering.
+    // Raw-owned tabs remain on the temporary borrowed-session bridge until ownership crosses over.
+    implementation("org.mozilla.components:feature-session:154.0.1")
     // EngineMiddleware's public API accepts concept-engine.Engine. browser-engine-gecko keeps that
     // dependency internal, so consumers wiring the middleware directly must expose it themselves.
     implementation("org.mozilla.components:concept-engine:154.0.1")
