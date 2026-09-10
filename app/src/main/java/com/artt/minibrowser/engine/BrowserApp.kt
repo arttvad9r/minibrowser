@@ -7,12 +7,20 @@ import android.content.Context
 import android.os.Build
 import android.os.Process
 import android.os.Trace
+import androidx.annotation.MainThread
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.ui.TabPreviewStore
+import mozilla.components.browser.engine.gecko.GeckoEngine
+import mozilla.components.browser.engine.gecko.GeckoEngineSession
+import mozilla.components.browser.state.engine.EngineMiddleware
+import mozilla.components.browser.state.engine.middleware.SessionPrioritizationMiddleware
+import mozilla.components.browser.state.store.BrowserStore
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import java.io.File
 
 internal const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
@@ -22,10 +30,92 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
 
 class BrowserApp : Application() {
     internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
+    internal val externalAppNavigationPolicyRegistry = ExternalAppNavigationPolicyRegistry()
+    internal val geckoCompatibilityRegistry = AndroidComponentsGeckoCompatibilityRegistry()
+    internal val uiCompatibilityState = AndroidComponentsUiCompatibilityState()
+    internal val sessionStatePersistence = AndroidComponentsSessionStatePersistenceState()
     internal lateinit var runtime: GeckoRuntime
         private set
+    internal val engine by lazy(LazyThreadSafetyMode.NONE) {
+        GeckoEngine(
+            context = this,
+            runtime = runtime,
+        )
+    }
+    private val browserStoreSessionConfigurator by lazy(LazyThreadSafetyMode.NONE) {
+        AndroidComponentsOwnedSessionConfigurator(
+            externalNavigationPolicy = externalAppNavigationPolicyRegistry,
+        )
+    }
+    private val browserStoreEngine by lazy(LazyThreadSafetyMode.NONE) {
+        AndroidComponentsSessionConfiguringEngine(
+            delegate = engine,
+            configurator = browserStoreSessionConfigurator,
+            freshGeckoSessionFactory = { privateMode, contextId ->
+                // GeckoEngine.createSession() does not expose the GeckoSession identity needed by
+                // MiniBrowser's selective compatibility delegates. Reproduce GeckoEngine's stock
+                // GeckoEngineSession construction only for BrowserStore-owned sessions; every other
+                // Engine operation still delegates to the single application-scoped GeckoEngine.
+                val rawSession = GeckoSession(
+                    GeckoSessionSettings.Builder()
+                        .usePrivateMode(privateMode)
+                        .contextId(contextId)
+                        .build(),
+                )
+                GeckoEngineSession(
+                    runtime = runtime,
+                    privateMode = privateMode,
+                    geckoSessionProvider = { rawSession },
+                ) to rawSession
+            },
+        )
+    }
+    internal val browserStore by lazy(LazyThreadSafetyMode.NONE) {
+        BrowserStore(
+            middleware = listOf(
+                androidComponentsSessionSettingsMiddleware(
+                    configurator = browserStoreSessionConfigurator,
+                    freshSessionEngine = browserStoreEngine,
+                    compatibilityRegistry = geckoCompatibilityRegistry,
+                    uiCompatibilityState = uiCompatibilityState,
+                    sessionStatePersistence = sessionStatePersistence,
+                ),
+                androidComponentsUiCompatibilityCleanupMiddleware(uiCompatibilityState),
+                androidComponentsSessionStatePersistenceCleanupMiddleware(sessionStatePersistence),
+                // Firefox installs this outside EngineMiddleware.create(). Keep linked sessions on
+                // the same selected-session priority policy instead of reproducing raw Gecko hints.
+                SessionPrioritizationMiddleware(),
+            ) + EngineMiddleware.create(
+                engine = browserStoreEngine,
+                // TabManager still owns the current hot-tab/session memory policy during this
+                // bridge. Do not let Android Components independently suspend raw GeckoSessions.
+                trimMemoryAutomatically = false,
+            ),
+        )
+    }
     internal val extensionLoader by lazy(LazyThreadSafetyMode.NONE) { ExtensionLoader(runtime) }
     private var mainProcess = false
+
+    /**
+     * Single app-scoped entry point for the irreversible raw -> A-C ownership transfer.
+     *
+     * Keeping the configurator and compatibility/persistence registries private to BrowserApp makes
+     * it impossible for a future Activity caller to accidentally omit one part of the cutover.
+     */
+    @MainThread
+    internal fun transferExistingTabToAndroidComponents(
+        tabManager: TabManager,
+        tab: Tab,
+    ): GeckoEngineSession = transferTabToAndroidComponents(
+        tabManager = tabManager,
+        tab = tab,
+        runtime = runtime,
+        store = browserStore,
+        configurator = browserStoreSessionConfigurator,
+        compatibilityRegistry = geckoCompatibilityRegistry,
+        uiCompatibilityState = uiCompatibilityState,
+        sessionStatePersistence = sessionStatePersistence,
+    )
 
     override fun onCreate() {
         super.onCreate()

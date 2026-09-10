@@ -1,0 +1,196 @@
+package com.artt.minibrowser.engine
+
+import androidx.annotation.MainThread
+import mozilla.components.browser.engine.gecko.GeckoEngineSession
+import mozilla.components.browser.state.store.BrowserStore
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+
+/**
+ * Result of the cutover-only wrapping step for an already-open GeckoSession.
+ *
+ * Creating this object has already transferred Gecko delegate authority to GeckoEngineSession. The
+ * caller must immediately apply [transferPlan] to BrowserStore and must never return close/replace
+ * authority to TabManager.
+ */
+internal data class AndroidComponentsPreparedExistingSessionTransfer(
+    val engineSession: GeckoEngineSession,
+    val transferPlan: AndroidComponentsExistingSessionTransferPlan,
+)
+
+/**
+ * Validated BrowserStore target and raw-session identity for an existing-session ownership transfer.
+ *
+ * The raw owner must obtain this token while it still owns the GeckoSession. Only after preflight
+ * succeeds may it capture media/UI state and relinquish delegate/close/replace authority. Session
+ * metadata is derived from BrowserStore instead of being supplied independently by the caller.
+ */
+internal class AndroidComponentsExistingSessionTransferPreflight private constructor(
+    internal val rawSession: GeckoSession,
+    private val store: BrowserStore,
+    internal val sessionContext: AndroidComponentsGeckoSessionContext,
+) {
+    internal fun revalidateAfterRawRelinquish() {
+        validateExistingSessionTransfer(
+            rawSession = rawSession,
+            store = store,
+            sessionContext = sessionContext,
+        )
+    }
+
+    internal companion object {
+        fun validate(
+            rawSession: GeckoSession,
+            store: BrowserStore,
+            tabId: String,
+        ): AndroidComponentsExistingSessionTransferPreflight {
+            val target = checkNotNull(store.state.tabs.firstOrNull { it.id == tabId }) {
+                "BrowserStore tab $tabId does not exist"
+            }
+            check(target.engineState.engineSession == null) {
+                "BrowserStore tab $tabId already has an EngineSession"
+            }
+            val sessionContext = AndroidComponentsGeckoSessionContext(
+                sessionId = target.id,
+                privateMode = target.content.private,
+            )
+            validateExistingSessionTransfer(
+                rawSession = rawSession,
+                store = store,
+                sessionContext = sessionContext,
+            )
+            return AndroidComponentsExistingSessionTransferPreflight(
+                rawSession = rawSession,
+                store = store,
+                sessionContext = sessionContext,
+            )
+        }
+    }
+}
+
+private fun validateExistingSessionTransfer(
+    rawSession: GeckoSession,
+    store: BrowserStore,
+    sessionContext: AndroidComponentsGeckoSessionContext,
+) {
+    val target = checkNotNull(store.state.tabs.firstOrNull { it.id == sessionContext.sessionId }) {
+        "BrowserStore tab ${sessionContext.sessionId} disappeared before ownership transfer"
+    }
+    check(target.engineState.engineSession == null) {
+        "BrowserStore tab ${sessionContext.sessionId} gained an EngineSession before ownership transfer"
+    }
+    check(target.content.private == sessionContext.privateMode) {
+        "BrowserStore tab ${sessionContext.sessionId} changed private mode before ownership transfer"
+    }
+    check(rawSession.isOpen) { "Existing-session ownership transfer requires an open GeckoSession" }
+    check(rawSession.settings.usePrivateMode == sessionContext.privateMode) {
+        "Existing GeckoSession private mode must match BrowserStore session metadata"
+    }
+}
+
+/**
+ * Performs the transfer preflight while raw GeckoSession ownership is still intact.
+ *
+ * This must run before the raw owner drops any delegates or close/replace authority. The target tab,
+ * its private-mode metadata and lack of a linked EngineSession are read directly from [store], so a
+ * failed preflight leaves the raw owner fully usable.
+ */
+@MainThread
+internal fun preflightAndroidComponentsExistingSessionTransfer(
+    rawSession: GeckoSession,
+    store: BrowserStore,
+    tabId: String,
+): AndroidComponentsExistingSessionTransferPreflight =
+    AndroidComponentsExistingSessionTransferPreflight.validate(
+        rawSession = rawSession,
+        store = store,
+        tabId = tabId,
+    )
+
+/**
+ * Cutover hook for preserving the identity of an already-open raw GeckoSession.
+ *
+ * Call this immediately after the raw owner has atomically relinquished delegate and close/replace
+ * authority and captured active media plus MiniBrowser-only UI state. [preflight] must have been
+ * obtained before that relinquish.
+ *
+ * The UI sidecar is seeded before GeckoEngineSession construction because replacing Gecko delegates
+ * does not replay the current page state. GeckoEngineSession's constructor immediately installs A-C
+ * Gecko delegates on the existing session; compatibility wrappers are installed only after those
+ * stock delegates exist. Any failure after constructor takeover is fail-closed by closing the new
+ * EngineSession rather than returning a partially-owned raw session to TabManager.
+ *
+ * The current raw/shadow runtime never calls this function.
+ */
+@MainThread
+internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
+    runtime: GeckoRuntime,
+    preflight: AndroidComponentsExistingSessionTransferPreflight,
+    configurator: AndroidComponentsOwnedSessionConfigurator,
+    compatibilityRegistry: AndroidComponentsGeckoCompatibilityRegistry,
+    uiCompatibilityState: AndroidComponentsUiCompatibilityState,
+    uiCompatibilityHandoff: AndroidComponentsUiCompatibilityHandoff,
+    mediaSessionHandoff: AndroidComponentsMediaSessionHandoff?,
+    sessionStatePersistence: AndroidComponentsSessionStatePersistenceState? = null,
+    onSessionStatePersistenceChanged: (sessionId: String, stateUrl: String?) -> Unit = { _, _ -> },
+): AndroidComponentsPreparedExistingSessionTransfer {
+    // Recheck both BrowserStore and GeckoSession after the ownership boundary. Normal callers execute
+    // both phases synchronously on the main thread, so any failure here indicates a broken cutover.
+    preflight.revalidateAfterRawRelinquish()
+    val rawSession = preflight.rawSession
+    val sessionContext = preflight.sessionContext
+    val sessionId = sessionContext.sessionId
+
+    sessionStatePersistence?.let { persistenceState ->
+        persistenceState.remove(sessionId)
+        onSessionStatePersistenceChanged(sessionId, null)
+    }
+    uiCompatibilityState.seed(sessionId, uiCompatibilityHandoff)
+    val engineSession = try {
+        GeckoEngineSession(
+            runtime = runtime,
+            privateMode = sessionContext.privateMode,
+            geckoSessionProvider = { rawSession },
+            openGeckoSession = false,
+        )
+    } catch (throwable: Throwable) {
+        sessionStatePersistence?.remove(sessionId)
+        uiCompatibilityState.remove(sessionId)
+        throw throwable
+    }
+
+    try {
+        configurator.configure(engineSession.settings)
+        installAndroidComponentsGeckoCompatibilityDelegates(
+            session = rawSession,
+            compatibility = compatibilityRegistry.forSession(sessionContext),
+        )
+        sessionStatePersistence?.let { persistenceState ->
+            installAndroidComponentsSessionStatePersistence(
+                session = rawSession,
+                engineSession = engineSession,
+                sessionId = sessionId,
+                persistenceState = persistenceState,
+                onPersistenceStateChanged = onSessionStatePersistenceChanged,
+            )
+        }
+        installAndroidComponentsUiCompatibilityDelegates(
+            session = rawSession,
+            sessionId = sessionId,
+            compatibilityState = uiCompatibilityState,
+        )
+
+        return AndroidComponentsPreparedExistingSessionTransfer(
+            engineSession = engineSession,
+            transferPlan = androidComponentsExistingSessionTransferPlan(
+                tabId = sessionId,
+                mediaSessionHandoff = mediaSessionHandoff,
+            ),
+        )
+    } catch (throwable: Throwable) {
+        sessionStatePersistence?.remove(sessionId)
+        uiCompatibilityState.remove(sessionId)
+        runCatching { engineSession.close() }
+        throw throwable
+    }
+}

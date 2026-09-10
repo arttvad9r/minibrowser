@@ -138,6 +138,31 @@ jobs:
             -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
             -camera-back none -camera-front none -no-snapshot -no-metrics
           script: ./gradlew :app:connectedDebugAndroidTest -PminibrowserAbi=x86_64 --stacktrace
+      - name: Print instrumentation failure reports
+        if: failure()
+        shell: bash
+        run: |
+          found=0
+          while IFS= read -r -d '' report; do
+            found=1
+            echo "::group::$report"
+            cat "$report"
+            echo "::endgroup::"
+          done < <(find app/build/outputs/androidTest-results -type f -name '*.xml' -print0 2>/dev/null || true)
+          if (( found == 0 )); then
+            echo "::warning::No instrumentation XML result files found"
+            find app/build -type f \( -path '*androidTest*' -o -path '*androidTests*' \) -print 2>/dev/null || true
+          fi
+      - name: Upload instrumentation failure reports
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: instrumentation-results-api-36
+          path: |
+            app/build/outputs/androidTest-results
+            app/build/reports/androidTests
+          if-no-files-found: ignore
+          retention-days: 7
 
   minimum-api:
     runs-on: ubuntu-latest
