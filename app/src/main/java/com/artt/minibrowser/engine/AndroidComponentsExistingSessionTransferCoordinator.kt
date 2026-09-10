@@ -71,6 +71,7 @@ internal fun transferTabToAndroidComponents(
     configurator: AndroidComponentsOwnedSessionConfigurator,
     compatibilityRegistry: AndroidComponentsGeckoCompatibilityRegistry,
     uiCompatibilityState: AndroidComponentsUiCompatibilityState,
+    sessionStatePersistence: AndroidComponentsSessionStatePersistenceState,
 ): GeckoEngineSession {
     val prepared = runIrreversibleExistingSessionTransfer(
         preflight = {
@@ -96,6 +97,7 @@ internal fun transferTabToAndroidComponents(
                 uiCompatibilityState = uiCompatibilityState,
                 uiCompatibilityHandoff = handoff.uiCompatibilityHandoff,
                 mediaSessionHandoff = handoff.mediaSessionHandoff,
+                sessionStatePersistence = sessionStatePersistence,
             )
         },
         linkAndReplay = { transfer ->
@@ -107,6 +109,7 @@ internal fun transferTabToAndroidComponents(
                 tab = tab,
                 store = store,
                 uiCompatibilityState = uiCompatibilityState,
+                sessionStatePersistence = sessionStatePersistence,
                 rawHandoff = handoff,
                 prepared = transfer,
             )
@@ -128,6 +131,7 @@ private fun terminallyCleanupFailedAndroidComponentsTransfer(
     tab: Tab,
     store: BrowserStore,
     uiCompatibilityState: AndroidComponentsUiCompatibilityState,
+    sessionStatePersistence: AndroidComponentsSessionStatePersistenceState,
     rawHandoff: AndroidComponentsRawSessionRelinquishHandoff,
     prepared: AndroidComponentsPreparedExistingSessionTransfer?,
 ) {
@@ -139,6 +143,7 @@ private fun terminallyCleanupFailedAndroidComponentsTransfer(
     var storeRemovalFailed = false
 
     runAllTerminalCleanupSteps(
+        { sessionStatePersistence.remove(sessionId) },
         { uiCompatibilityState.remove(sessionId) },
         {
             try {

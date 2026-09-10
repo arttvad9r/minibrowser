@@ -131,6 +131,7 @@ internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
     uiCompatibilityState: AndroidComponentsUiCompatibilityState,
     uiCompatibilityHandoff: AndroidComponentsUiCompatibilityHandoff,
     mediaSessionHandoff: AndroidComponentsMediaSessionHandoff?,
+    sessionStatePersistence: AndroidComponentsSessionStatePersistenceState? = null,
 ): AndroidComponentsPreparedExistingSessionTransfer {
     // Recheck both BrowserStore and GeckoSession after the ownership boundary. Normal callers execute
     // both phases synchronously on the main thread, so any failure here indicates a broken cutover.
@@ -139,6 +140,7 @@ internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
     val sessionContext = preflight.sessionContext
     val sessionId = sessionContext.sessionId
 
+    sessionStatePersistence?.remove(sessionId)
     uiCompatibilityState.seed(sessionId, uiCompatibilityHandoff)
     val engineSession = try {
         GeckoEngineSession(
@@ -148,6 +150,7 @@ internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
             openGeckoSession = false,
         )
     } catch (throwable: Throwable) {
+        sessionStatePersistence?.remove(sessionId)
         uiCompatibilityState.remove(sessionId)
         throw throwable
     }
@@ -158,6 +161,14 @@ internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
             session = rawSession,
             compatibility = compatibilityRegistry.forSession(sessionContext),
         )
+        sessionStatePersistence?.let { persistenceState ->
+            installAndroidComponentsSessionStatePersistence(
+                session = rawSession,
+                engineSession = engineSession,
+                sessionId = sessionId,
+                persistenceState = persistenceState,
+            )
+        }
         installAndroidComponentsUiCompatibilityDelegates(
             session = rawSession,
             sessionId = sessionId,
@@ -172,6 +183,7 @@ internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
             ),
         )
     } catch (throwable: Throwable) {
+        sessionStatePersistence?.remove(sessionId)
         uiCompatibilityState.remove(sessionId)
         runCatching { engineSession.close() }
         throw throwable

@@ -28,6 +28,7 @@ class BrowserApp : Application() {
     internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
     internal val externalAppNavigationPolicyRegistry = ExternalAppNavigationPolicyRegistry()
     internal val uiCompatibilityState = AndroidComponentsUiCompatibilityState()
+    internal val sessionStatePersistence = AndroidComponentsSessionStatePersistenceState()
     internal lateinit var runtime: GeckoRuntime
         private set
     internal val engine by lazy(LazyThreadSafetyMode.NONE) {
@@ -49,6 +50,7 @@ class BrowserApp : Application() {
             middleware = listOf(
                 androidComponentsSessionSettingsMiddleware(browserStoreSessionConfigurator),
                 androidComponentsUiCompatibilityCleanupMiddleware(uiCompatibilityState),
+                androidComponentsSessionStatePersistenceCleanupMiddleware(sessionStatePersistence),
                 // Firefox installs this outside EngineMiddleware.create(). Keep linked sessions on
                 // the same selected-session priority policy instead of reproducing raw Gecko hints.
                 SessionPrioritizationMiddleware(),
