@@ -1,5 +1,6 @@
 package com.artt.minibrowser.engine
 
+import androidx.annotation.MainThread
 import java.io.File
 
 /**
@@ -26,7 +27,19 @@ internal object TabManagerRecreationHandoffRegistry {
     private val lock = Any()
     private val pendingByStore = mutableMapOf<String, TabManagerRecreationHandoff>()
 
+    @MainThread
     fun publish(storeDir: File, handoff: TabManagerRecreationHandoff) {
+        // GeckoEngineView installs a BasicSelectionActionDelegate backed by its Activity directly on
+        // raw GeckoSession. It is view-owned rather than TabManager-owned, so remove it explicitly before
+        // a configuration handoff can retain the destroyed Activity. The replacement EngineView will
+        // install a fresh delegate when it renders the same raw session.
+        handoff.tabs
+            .asSequence()
+            .filter { it.hasRawSessionAuthority }
+            .map { it.session }
+            .filter { it.selectionActionDelegate != null }
+            .forEach { it.selectionActionDelegate = null }
+
         val key = storeDir.absolutePath
         synchronized(lock) {
             check(key !in pendingByStore) {
