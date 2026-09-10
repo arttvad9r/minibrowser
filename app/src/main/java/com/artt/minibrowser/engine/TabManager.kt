@@ -719,11 +719,30 @@ class TabManager(
 
     suspend fun clearWebData() {
         if (closed) return
-        check(_tabs.value.all { it.hasRawSessionAuthority }) {
-            "clearWebData requires BrowserStore removal of relinquished sessions before Gecko storage clear"
+        val tabsToClear = _tabs.value
+        val browserApp = checkNotNull(context.applicationContext as? BrowserApp) {
+            "clearWebData requires the application-scoped BrowserStore"
         }
+        val relinquishedSessionIds = tabsToClear
+            .asSequence()
+            .filter { it.rawSessionOwnership == RawSessionOwnership.Relinquished }
+            .mapTo(mutableSetOf()) { it.id.toString() }
+        val androidComponentsTargets = prepareAndroidComponentsWebDataClearTargets(
+            browserState = browserApp.browserStore.state,
+            relinquishedSessionIds = relinquishedSessionIds,
+        )
         val clearRequest = clearGeneration.incrementAndGet()
-        _tabs.value.forEach { tab ->
+
+        // Remove A-C ownership first. Unlinking before synchronous close prevents A-C's asynchronous
+        // TabsRemovedMiddleware close from racing Gecko storage clearing.
+        clearAndroidComponentsTabsBeforeWebDataClear(
+            store = browserApp.browserStore,
+            targets = androidComponentsTargets,
+        )
+
+        // Raw-owned sessions keep the existing direct close path. Relinquished sessions were closed
+        // above through their linked EngineSession and must never be touched as raw Gecko owners.
+        tabsToClear.filter { it.hasRawSessionAuthority }.forEach { tab ->
             runtime.webExtensionController.setTabActive(tab.session, false)
             tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
             resetMediaPlaybackState(tab)
