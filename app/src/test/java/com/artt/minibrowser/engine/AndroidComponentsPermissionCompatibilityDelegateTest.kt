@@ -1,5 +1,6 @@
 package com.artt.minibrowser.engine
 
+import android.app.Application
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoResult
@@ -9,7 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 @RunWith(AndroidJUnit4::class)
-@Config(sdk = [35])
+@Config(sdk = [35], application = Application::class)
 class AndroidComponentsPermissionCompatibilityDelegateTest {
     @Test
     fun allPermissionCallbacksStayOnMiniBrowserCompatibilityOwner() {
