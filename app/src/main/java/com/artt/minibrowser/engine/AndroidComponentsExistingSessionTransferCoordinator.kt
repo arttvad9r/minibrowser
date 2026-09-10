@@ -62,9 +62,9 @@ internal fun runAllTerminalCleanupSteps(vararg steps: () -> Unit) {
  * cleanup for the interval after [Tab.captureAndroidComponentsHandoffAndRelinquish] has made raw
  * ownership irreversible.
  *
- * [onSessionStatePersistenceChanged] is deliberately required here. A future live caller must route
- * every URL-bound opaque-state update/invalidation into MiniBrowser's one persistence writer instead
- * of silently relying on the stale raw Gecko callback path after ownership has been relinquished.
+ * A-C session-state changes are routed here into TabManager's existing dirty persistence queue. The
+ * coordinator owns that wiring so a future live caller cannot accidentally link an EngineSession
+ * while leaving the post-relinquish persistence path asleep.
  */
 @MainThread
 internal fun transferTabToAndroidComponents(
@@ -76,7 +76,6 @@ internal fun transferTabToAndroidComponents(
     compatibilityRegistry: AndroidComponentsGeckoCompatibilityRegistry,
     uiCompatibilityState: AndroidComponentsUiCompatibilityState,
     sessionStatePersistence: AndroidComponentsSessionStatePersistenceState,
-    onSessionStatePersistenceChanged: (sessionId: String, stateUrl: String?) -> Unit,
 ): GeckoEngineSession {
     val prepared = runIrreversibleExistingSessionTransfer(
         preflight = {
@@ -103,7 +102,9 @@ internal fun transferTabToAndroidComponents(
                 uiCompatibilityHandoff = handoff.uiCompatibilityHandoff,
                 mediaSessionHandoff = handoff.mediaSessionHandoff,
                 sessionStatePersistence = sessionStatePersistence,
-                onSessionStatePersistenceChanged = onSessionStatePersistenceChanged,
+                onSessionStatePersistenceChanged = { sessionId, _ ->
+                    tabManager.requestPersistFromAndroidComponentsSessionState(sessionId)
+                },
             )
         },
         linkAndReplay = { transfer ->
