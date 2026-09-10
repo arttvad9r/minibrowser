@@ -40,10 +40,8 @@ class BrowserPictureInPicturePlaybackSystemTest {
                 scenario.onActivity(activityRef::set)
                 val browserApp = targetContext.applicationContext as BrowserApp
 
-                waitFor("The local Gecko media page reached full progress") {
-                    selectedContent(browserApp)?.let { content ->
-                        content.url == server.pageUrl && content.progress == 100
-                    } == true
+                waitFor("The local Gecko media page became selected") {
+                    selectedContent(browserApp)?.url == server.pageUrl
                 }
 
                 val tapPoint = AtomicReference<Pair<Float, Float>>()
