@@ -2,7 +2,6 @@ package com.artt.minibrowser.engine
 
 import android.app.Application
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import java.io.File
 import java.nio.file.Files
 import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoSession
