@@ -32,6 +32,7 @@ import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
 import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.data.TabStore
+import com.artt.minibrowser.engine.AndroidComponentsActivityGeckoCompatibilityHost
 import com.artt.minibrowser.engine.BackgroundTabHost
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.FaviconRepository
@@ -42,6 +43,7 @@ import com.artt.minibrowser.engine.exitBrowserFullscreen
 import com.artt.minibrowser.engine.goBrowserBack
 import com.artt.minibrowser.engine.loadBrowserUrl
 import com.artt.minibrowser.engine.notifyBrowserPictureInPictureModeChanged
+import java.io.Closeable
 import java.io.File
 import java.util.ArrayDeque
 import kotlinx.coroutines.Dispatchers
@@ -62,6 +64,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
     private val backgroundTabOpened = MutableSharedFlow<Long>(extraBufferCapacity = 1)
     private val pendingIntents = ArrayDeque<Intent>()
     private lateinit var tabManager: TabManager
+    private var androidComponentsCompatibilityHostLease: Closeable? = null
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
         ViewModelProvider(
@@ -144,6 +147,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
             permissionRequester = activityRequests::requestPermissions,
             filePicker = activityRequests::pickFiles,
         )
+        bindAndroidComponentsCompatibilityHost()
         BrowserTabLifecycleController(this, tabManager)
         val lifecycleState = lifecycle.currentState
         val browserVisible = lifecycleState.isAtLeast(Lifecycle.State.RESUMED) || isInPictureInPictureMode
@@ -187,6 +191,24 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
         while (pendingIntents.isNotEmpty()) {
             handleIncomingIntent(pendingIntents.removeFirst())
         }
+    }
+
+    private fun bindAndroidComponentsCompatibilityHost() {
+        androidComponentsCompatibilityHostLease?.close()
+        androidComponentsCompatibilityHostLease = browserApp.geckoCompatibilityRegistry.bind(
+            AndroidComponentsActivityGeckoCompatibilityHost(
+                activity = this,
+                selectedSessionId = { browserApp.browserStore.state.selectedTabId },
+                requestPermissions = activityRequests::requestPermissions,
+                pickFiles = activityRequests::pickFiles,
+                openTab = { uri, private ->
+                    if (::tabManager.isInitialized) {
+                        tabManager.newTab(uri, private)
+                    }
+                },
+                openBackgroundTab = ::openBackgroundTab,
+            ),
+        )
     }
 
     private fun handleIncomingIntent(intent: Intent) {
@@ -311,14 +333,16 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                 )
             }
             if (isInPictureInPictureMode) {
-                // Preserve the current raw-owner PiP lifecycle behavior. Relinquished sessions are
-                // ownership-gated here; linked EngineSession lifecycle is a separate cutover seam.
+                // GeckoView owns linked-session activation via its display surface. TabManager only
+                // keeps the current raw-owned GeckoSession active across the PiP transition.
                 tabManager.setAppVisible(true)
             }
         }
     }
 
     override fun onDestroy() {
+        androidComponentsCompatibilityHostLease?.close()
+        androidComponentsCompatibilityHostLease = null
         activityRequests.cancelAll()
         super.onDestroy()
     }

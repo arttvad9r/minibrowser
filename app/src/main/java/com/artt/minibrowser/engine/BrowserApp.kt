@@ -27,6 +27,7 @@ internal fun isMainApplicationProcess(currentProcess: String?, mainProcess: Stri
 class BrowserApp : Application() {
     internal val tabPreviewStore by lazy(LazyThreadSafetyMode.NONE) { TabPreviewStore() }
     internal val externalAppNavigationPolicyRegistry = ExternalAppNavigationPolicyRegistry()
+    internal val geckoCompatibilityRegistry = AndroidComponentsGeckoCompatibilityRegistry()
     internal val uiCompatibilityState = AndroidComponentsUiCompatibilityState()
     internal val sessionStatePersistence = AndroidComponentsSessionStatePersistenceState()
     internal lateinit var runtime: GeckoRuntime
