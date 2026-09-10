@@ -3,8 +3,11 @@ package com.artt.minibrowser.engine
 import android.util.JsonWriter
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import mozilla.components.concept.engine.EngineSessionState
 
 class AndroidComponentsSessionStatePersistenceTest {
@@ -24,6 +27,45 @@ class AndroidComponentsSessionStatePersistenceTest {
     }
 
     @Test
+    fun correlatedStateReportsExactBoundUrlForPersistenceWakeup() {
+        val persistence = AndroidComponentsSessionStatePersistenceState()
+        val changes = mutableListOf<Pair<String, String?>>()
+        val observer = AndroidComponentsSessionStatePersistenceObserver(
+            sessionId = "7",
+            persistenceState = persistence,
+            onPersistenceStateChanged = { sessionId, stateUrl -> changes += sessionId to stateUrl },
+        )
+
+        observer.withRawSessionStateUrl("https://example.com/page") {
+            observer.onStateUpdated(TestEngineSessionState())
+        }
+
+        assertEquals(listOf("7" to "https://example.com/page"), changes)
+    }
+
+    @Test
+    fun persistenceWakeupPolicyOnlyAllowsNonPrivateRelinquishedTabs() {
+        assertTrue(
+            shouldRequestAndroidComponentsSessionStatePersist(
+                isPrivate = false,
+                ownership = RawSessionOwnership.Relinquished,
+            ),
+        )
+        assertFalse(
+            shouldRequestAndroidComponentsSessionStatePersist(
+                isPrivate = true,
+                ownership = RawSessionOwnership.Relinquished,
+            ),
+        )
+        assertFalse(
+            shouldRequestAndroidComponentsSessionStatePersist(
+                isPrivate = false,
+                ownership = RawSessionOwnership.Owned,
+            ),
+        )
+    }
+
+    @Test
     fun missingOrBlankUrlFailsClosedInsteadOfKeepingState() {
         val persistence = AndroidComponentsSessionStatePersistenceState()
         val observer = AndroidComponentsSessionStatePersistenceObserver("7", persistence)
@@ -38,9 +80,14 @@ class AndroidComponentsSessionStatePersistenceTest {
     }
 
     @Test
-    fun missingCorrelatedStateClearsPreviousSnapshot() {
+    fun missingCorrelatedStateClearsPreviousSnapshotAndReportsInvalidation() {
         val persistence = AndroidComponentsSessionStatePersistenceState()
-        val observer = AndroidComponentsSessionStatePersistenceObserver("7", persistence)
+        val changes = mutableListOf<Pair<String, String?>>()
+        val observer = AndroidComponentsSessionStatePersistenceObserver(
+            sessionId = "7",
+            persistenceState = persistence,
+            onPersistenceStateChanged = { sessionId, stateUrl -> changes += sessionId to stateUrl },
+        )
         persistence.bind("7", "https://example.com/old", TestEngineSessionState())
 
         observer.withRawSessionStateUrl("https://example.com/new") {
@@ -48,16 +95,44 @@ class AndroidComponentsSessionStatePersistenceTest {
         }
 
         assertNull(persistence.snapshot("7"))
+        assertEquals(listOf("7" to null), changes)
     }
 
     @Test
-    fun uncorrelatedEngineStateClearsPreviousSnapshot() {
+    fun uncorrelatedEngineStateClearsPreviousSnapshotAndReportsInvalidation() {
         val persistence = AndroidComponentsSessionStatePersistenceState()
-        val observer = AndroidComponentsSessionStatePersistenceObserver("7", persistence)
+        val changes = mutableListOf<Pair<String, String?>>()
+        val observer = AndroidComponentsSessionStatePersistenceObserver(
+            sessionId = "7",
+            persistenceState = persistence,
+            onPersistenceStateChanged = { sessionId, stateUrl -> changes += sessionId to stateUrl },
+        )
         persistence.bind("7", "https://example.com/old", TestEngineSessionState())
 
         observer.onStateUpdated(TestEngineSessionState())
 
+        assertNull(persistence.snapshot("7"))
+        assertEquals(listOf("7" to null), changes)
+    }
+
+    @Test
+    fun throwingInvalidationCallbackDoesNotLeakCorrelationContext() {
+        val persistence = AndroidComponentsSessionStatePersistenceState()
+        val observer = AndroidComponentsSessionStatePersistenceObserver(
+            sessionId = "7",
+            persistenceState = persistence,
+            onPersistenceStateChanged = { _, _ -> error("persist signal failed") },
+        )
+
+        assertFailsWith<IllegalStateException> {
+            observer.withRawSessionStateUrl("https://example.com/first") {
+                // Force fail-closed invalidation and a throwing external signal callback.
+            }
+        }
+
+        assertFailsWith<IllegalStateException> {
+            observer.onStateUpdated(TestEngineSessionState())
+        }
         assertNull(persistence.snapshot("7"))
     }
 

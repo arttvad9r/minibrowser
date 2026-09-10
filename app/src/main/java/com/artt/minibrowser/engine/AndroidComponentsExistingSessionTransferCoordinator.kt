@@ -61,6 +61,10 @@ internal fun runAllTerminalCleanupSteps(vararg steps: () -> Unit) {
  * exact main-thread ordering needed by the eventual live cutover and, critically, owns terminal
  * cleanup for the interval after [Tab.captureAndroidComponentsHandoffAndRelinquish] has made raw
  * ownership irreversible.
+ *
+ * A-C session-state changes are routed here into TabManager's existing dirty persistence queue. The
+ * coordinator owns that wiring so a future live caller cannot accidentally link an EngineSession
+ * while leaving the post-relinquish persistence path asleep.
  */
 @MainThread
 internal fun transferTabToAndroidComponents(
@@ -98,6 +102,9 @@ internal fun transferTabToAndroidComponents(
                 uiCompatibilityHandoff = handoff.uiCompatibilityHandoff,
                 mediaSessionHandoff = handoff.mediaSessionHandoff,
                 sessionStatePersistence = sessionStatePersistence,
+                onSessionStatePersistenceChanged = { sessionId, _ ->
+                    tabManager.requestPersistFromAndroidComponentsSessionState(sessionId)
+                },
             )
         },
         linkAndReplay = { transfer ->

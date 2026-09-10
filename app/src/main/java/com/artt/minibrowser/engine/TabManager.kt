@@ -769,6 +769,12 @@ class TabManager(
         requestPersist(immediate = true)
     }
 
+    internal fun requestPersistFromAndroidComponentsSessionState(sessionId: String) {
+        val tab = _tabs.value.firstOrNull { it.id.toString() == sessionId } ?: return
+        if (!shouldRequestAndroidComponentsSessionStatePersist(tab.isPrivate, tab.rawSessionOwnership)) return
+        requestPersist(immediate = false)
+    }
+
     fun close() {
         if (closed) return
         val finalSnapshot = capturePersistenceSnapshot()

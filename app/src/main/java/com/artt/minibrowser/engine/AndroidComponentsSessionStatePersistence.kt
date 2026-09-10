@@ -23,6 +23,11 @@ internal data class AndroidComponentsBoundEngineSessionState(
     val stateUrl: String,
 )
 
+internal fun shouldRequestAndroidComponentsSessionStatePersist(
+    isPrivate: Boolean,
+    ownership: RawSessionOwnership,
+): Boolean = !isPrivate && ownership == RawSessionOwnership.Relinquished
+
 /** App-scoped latest bound EngineSessionState for sessions that have crossed to A-C ownership. */
 internal class AndroidComponentsSessionStatePersistenceState {
     private val mutableSnapshots =
@@ -71,10 +76,15 @@ internal class AndroidComponentsSessionStatePersistenceState {
  * asynchronously, so reading BrowserStore after forwarding the raw callback would race. This
  * observer instead runs inside the same stock notifyObservers call while [withRawSessionStateUrl]
  * keeps the source Gecko history URL on the stack.
+ *
+ * [onPersistenceStateChanged] reports the exact session id plus the currently safe bound URL after
+ * every opaque-state update or fail-closed invalidation. It intentionally does not persist itself:
+ * the ownership coordinator must route this signal into the app's single persistence writer.
  */
 internal class AndroidComponentsSessionStatePersistenceObserver(
     private val sessionId: String,
     private val persistenceState: AndroidComponentsSessionStatePersistenceState,
+    private val onPersistenceStateChanged: (sessionId: String, stateUrl: String?) -> Unit = { _, _ -> },
 ) : EngineSession.Observer {
     private data class Capture(
         val stateUrl: String?,
@@ -93,12 +103,15 @@ internal class AndroidComponentsSessionStatePersistenceObserver(
         try {
             forward()
         } finally {
+            // Restore correlation context before invoking external persistence signaling. A throwing
+            // signal callback must never leave a stale capture installed for a later engine update.
+            currentCapture = previous
             // If the stock A-C delegate did not emit a matching opaque state, retaining an older
             // snapshot would incorrectly bind it to a later document. Fail closed instead.
             if (!capture.observed) {
                 persistenceState.remove(sessionId)
+                notifyPersistenceStateChanged()
             }
-            currentCapture = previous
         }
     }
 
@@ -107,6 +120,7 @@ internal class AndroidComponentsSessionStatePersistenceObserver(
         if (capture == null) {
             // An uncorrelated state cannot be safely associated with a URL.
             persistenceState.remove(sessionId)
+            notifyPersistenceStateChanged()
             return
         }
 
@@ -115,6 +129,14 @@ internal class AndroidComponentsSessionStatePersistenceObserver(
             sessionId = sessionId,
             stateUrl = capture.stateUrl,
             state = state,
+        )
+        notifyPersistenceStateChanged()
+    }
+
+    private fun notifyPersistenceStateChanged() {
+        onPersistenceStateChanged(
+            sessionId,
+            persistenceState.snapshot(sessionId)?.stateUrl,
         )
     }
 }
@@ -145,6 +167,7 @@ internal fun installAndroidComponentsSessionStatePersistence(
     engineSession: EngineSession,
     sessionId: String,
     persistenceState: AndroidComponentsSessionStatePersistenceState,
+    onPersistenceStateChanged: (sessionId: String, stateUrl: String?) -> Unit = { _, _ -> },
 ) {
     val delegate = checkNotNull(session.progressDelegate) {
         "GeckoEngineSession must install its ProgressDelegate before persistence binding"
@@ -154,6 +177,7 @@ internal fun installAndroidComponentsSessionStatePersistence(
     val observer = AndroidComponentsSessionStatePersistenceObserver(
         sessionId = sessionId,
         persistenceState = persistenceState,
+        onPersistenceStateChanged = onPersistenceStateChanged,
     )
     engineSession.register(observer)
     try {
