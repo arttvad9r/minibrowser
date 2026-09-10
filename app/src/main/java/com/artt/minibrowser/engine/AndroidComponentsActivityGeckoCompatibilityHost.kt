@@ -4,6 +4,7 @@ import android.app.Activity
 import android.net.Uri
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.WebResponse
 
 /**
  * Activity-scoped compatibility UI retained while BrowserStore owns transferred EngineSessions.
@@ -25,6 +26,9 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
     private val permissionController by lazy(LazyThreadSafetyMode.NONE) {
         // Every transferred-session permission callback supplies BrowserStore identity explicitly.
         GeckoPermissionController(activity, requestPermissions) { false }
+    }
+    private val downloadController by lazy(LazyThreadSafetyMode.NONE) {
+        GeckoDownloadController(activity, requestPermissions)
     }
     private val contextMenuController by lazy(LazyThreadSafetyMode.NONE) {
         GeckoContextMenuController(
@@ -68,6 +72,17 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     ) = permissionController.handleMediaPermissionRequest(uri, video, audio, callback) {
         context.isSelected(selectedSessionId())
+    }
+
+    override fun onExternalResponse(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        response: WebResponse,
+    ): Boolean {
+        // GeckoDownloadController owns/always closes the authenticated body once handle() begins.
+        // This intentionally matches the raw path, where downloads are not selected-tab gated.
+        downloadController.handle(response, context.privateMode)
+        return true
     }
 
     override fun onLinkedMediaContextMenu(

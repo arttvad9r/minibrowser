@@ -2,6 +2,7 @@ package com.artt.minibrowser.engine
 
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.WebResponse
 
 /**
  * GeckoView callbacks retained by MiniBrowser while BrowserStore owns the surrounding EngineSession.
@@ -10,8 +11,9 @@ import org.mozilla.geckoview.GeckoSession
  * ownership moves away from TabManager. A-C's PromptFeature can open tabs through TabsUseCases, which
  * would otherwise create BrowserStore-only tabs during this transitional ownership phase. Permission
  * callbacks likewise stay on MiniBrowser's existing policy/UI until an equivalent BrowserStore
- * permission feature is introduced. Linked-media context menus remain here because A-C 154 drops the
- * wrapping link URI for audio/video hit results.
+ * permission feature is introduced. Downloads keep ownership of Gecko's authenticated WebResponse
+ * stream instead of emitting an unconsumed A-C external-resource event. Linked-media context menus
+ * remain here because A-C 154 drops the wrapping link URI for audio/video hit results.
  */
 internal interface AndroidComponentsGeckoCompatibilityHandler {
     /** Resolves the current Activity-scoped raw-compatible prompt owner, or null between hosts. */
@@ -34,6 +36,12 @@ internal interface AndroidComponentsGeckoCompatibilityHandler {
         video: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
+    )
+
+    /** Takes ownership of [response.body], closing it if no Activity host can consume the response. */
+    fun onExternalResponse(
+        session: GeckoSession,
+        response: WebResponse,
     )
 
     /** Returns true when the raw-compatible context menu consumed the event. */
@@ -172,14 +180,18 @@ internal class AndroidComponentsPermissionCompatibilityDelegate(
 }
 
 /**
- * Keeps stock A-C content ownership except for linked audio/video context menus. A-C 154 maps
- * TYPE_AUDIO/TYPE_VIDEO to HitResult using srcUri only, dropping linkUri; MiniBrowser needs both to
- * offer distinct link and media actions. Plain media and all other context menus remain stock A-C.
+ * Keeps stock A-C content ownership except for the two semantics that are not yet safely consumable
+ * after transfer: authenticated download responses and linked audio/video context menus.
  */
 internal class AndroidComponentsContentCompatibilityDelegate(
     private val delegate: GeckoSession.ContentDelegate,
     private val compatibility: AndroidComponentsGeckoCompatibilityHandler,
 ) : GeckoSession.ContentDelegate by delegate {
+    override fun onExternalResponse(
+        session: GeckoSession,
+        response: WebResponse,
+    ) = compatibility.onExternalResponse(session, response)
+
     override fun onContextMenu(
         session: GeckoSession,
         screenX: Int,

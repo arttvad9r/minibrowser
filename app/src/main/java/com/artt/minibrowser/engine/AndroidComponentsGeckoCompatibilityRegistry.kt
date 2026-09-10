@@ -3,6 +3,7 @@ package com.artt.minibrowser.engine
 import java.io.Closeable
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.WebResponse
 
 /** Immutable metadata that remains valid when the Activity hosting compatibility UI is recreated. */
 internal data class AndroidComponentsGeckoSessionContext(
@@ -43,6 +44,13 @@ internal interface AndroidComponentsGeckoCompatibilityHost {
         audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     )
+
+    /** Returns true after taking ownership of [response.body]. */
+    fun onExternalResponse(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        response: WebResponse,
+    ): Boolean
 
     fun onLinkedMediaContextMenu(
         context: AndroidComponentsGeckoSessionContext,
@@ -106,6 +114,16 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
             ) {
                 current?.onMediaPermissionRequest(context, session, uri, video, audio, callback)
                     ?: callback.reject()
+            }
+
+            override fun onExternalResponse(
+                session: GeckoSession,
+                response: WebResponse,
+            ) {
+                val consumed = current?.onExternalResponse(context, session, response) == true
+                if (!consumed) {
+                    runCatching { response.body?.close() }
+                }
             }
 
             override fun onLinkedMediaContextMenu(
