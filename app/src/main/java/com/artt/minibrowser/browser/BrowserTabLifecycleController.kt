@@ -1,6 +1,7 @@
 package com.artt.minibrowser.browser
 
 import android.app.Activity
+import android.util.Log
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import mozilla.components.browser.state.action.AppLifecycleAction
 
@@ -54,8 +56,10 @@ internal class BrowserTabLifecycleController(
     }
 
     override fun onResume(owner: LifecycleOwner) {
-        app?.browserStore?.dispatch(AppLifecycleAction.ResumeAction)
+        val browserApp = app
+        browserApp?.browserStore?.dispatch(AppLifecycleAction.ResumeAction)
         tabManager.setAppVisible(true)
+        if (browserApp != null) transferCurrentRawTabWhenMirrored(browserApp)
     }
 
     override fun onPause(owner: LifecycleOwner) {
@@ -94,6 +98,33 @@ internal class BrowserTabLifecycleController(
         }
 
         lifecycle.removeObserver(this)
+    }
+
+    private fun transferCurrentRawTabWhenMirrored(browserApp: BrowserApp) {
+        androidComponentsBridgeScope.launch {
+            browserApp.browserStore.stateFlow.first { state ->
+                val currentId = tabManager.currentId.value?.toString()
+                currentId != null &&
+                    state.selectedTabId == currentId &&
+                    state.tabs.any { it.id == currentId }
+            }
+
+            val tab = tabManager.current() ?: return@launch
+            if (!tab.hasRawSessionAuthority) return@launch
+            val rawSession = tab.rawSessionOrNull ?: return@launch
+            if (!rawSession.isOpen) return@launch
+
+            val storeTab = browserApp.browserStore.state.tabs
+                .firstOrNull { it.id == tab.id.toString() }
+                ?: return@launch
+            if (storeTab.engineState.engineSession != null) return@launch
+
+            runCatching {
+                browserApp.transferExistingTabToAndroidComponents(tabManager, tab)
+            }.onFailure { error ->
+                Log.e("MinibrowserTabs", "Failed to transfer selected tab to Android Components", error)
+            }
+        }
     }
 
     private fun bindExternalNavigationPolicy() {
