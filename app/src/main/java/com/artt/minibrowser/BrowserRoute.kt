@@ -61,8 +61,12 @@ import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
 import com.artt.minibrowser.engine.effectiveUiPageLoadError
 import com.artt.minibrowser.engine.effectiveUiSecurityState
+import com.artt.minibrowser.engine.goBrowserBack
+import com.artt.minibrowser.engine.goBrowserForward
+import com.artt.minibrowser.engine.loadBrowserUrl
+import com.artt.minibrowser.engine.reloadOrStopBrowser
 import com.artt.minibrowser.engine.resolveNavigation
-import com.artt.minibrowser.engine.toggleDesktopMode
+import com.artt.minibrowser.engine.toggleBrowserDesktopMode
 import com.artt.minibrowser.net.isValidWebUri
 import com.artt.minibrowser.ui.BrowserChromeUiState
 import com.artt.minibrowser.ui.BrowserExtensionUiState
@@ -178,7 +182,9 @@ internal fun BrowserRoute(
             externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
         },
         onSyncBookmark = pageBookmarkViewModel::sync,
-        onGoBack = { currentSession?.goBack() },
+        onGoBack = {
+            currentTab?.let { tab -> goBrowserBack(tab, browserStore) }
+        },
         onExitFullscreen = { currentSession?.exitFullScreen() },
         onCloseFind = {
             currentSession?.finder?.clear()
@@ -273,18 +279,24 @@ internal fun BrowserRoute(
                 is NavigationTarget.Web,
                 is NavigationTarget.Internal,
                 is NavigationTarget.Search,
-                -> (currentTab ?: tabManager.newTab(null)).session.loadUri(
+                -> loadBrowserUrl(
+                    currentTab ?: tabManager.newTab(null),
+                    browserStore,
                     buildLoadUri(query, prefs.searchEngine),
                 )
             }
         },
         onNavigate = { uri ->
-            (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+            loadBrowserUrl(currentTab ?: tabManager.newTab(null), browserStore, uri)
         },
-        onBack = { currentSession?.goBack() },
-        onForward = { currentSession?.goForward() },
+        onBack = {
+            currentTab?.let { tab -> goBrowserBack(tab, browserStore) }
+        },
+        onForward = {
+            currentTab?.let { tab -> goBrowserForward(tab, browserStore) }
+        },
         onReload = {
-            if (isLoading) currentSession?.stop() else currentSession?.reload()
+            currentTab?.let { tab -> reloadOrStopBrowser(tab, browserStore, isLoading) }
         },
         onSiteInfo = { browserViewModel.showSiteInfo(true) },
         onSwitcher = { browserViewModel.showSwitcher(true) },
@@ -307,11 +319,15 @@ internal fun BrowserRoute(
         onRetryAdblock = retryAdblock,
         onTranslate = {
             if (currentTab != null) {
-                buildTranslateUri(currentUrl, prefs.translateTarget)?.let(currentTab.session::loadUri)
+                buildTranslateUri(currentUrl, prefs.translateTarget)?.let { uri ->
+                    loadBrowserUrl(currentTab, browserStore, uri)
+                }
             }
         },
         onToggleDesktop = {
-            currentTab?.let(::toggleDesktopMode)
+            currentTab?.let { tab ->
+                toggleBrowserDesktopMode(tab, browserStore, enable = !currentDesktop)
+            }
         },
         onOpenExternal = { browserIntents.openInExternalApp(currentUrl) },
     )
@@ -412,7 +428,7 @@ internal fun BrowserRoute(
                                 iconsDir = iconsDir,
                                 recent = emptyList(),
                                 isPrivate = true,
-                                onOpen = { uri -> currentTab.session.loadUri(uri) },
+                                onOpen = { uri -> loadBrowserUrl(currentTab, browserStore, uri) },
                                 onAllBookmarks = {},
                                 onAllHistory = {},
                                 onRefreshRecent = {},
@@ -427,7 +443,7 @@ internal fun BrowserRoute(
                                 iconsDir = iconsDir,
                                 refreshKey = currentTab?.id,
                                 onOpen = { uri ->
-                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                    loadBrowserUrl(currentTab ?: tabManager.newTab(null), browserStore, uri)
                                 },
                                 onAllBookmarks = { browserViewModel.screen(BrowserScreen.Bookmarks) },
                                 onAllHistory = { browserViewModel.screen(BrowserScreen.History) },
@@ -511,7 +527,7 @@ internal fun BrowserRoute(
                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                 onOpen = { uri ->
                                     browserViewModel.screen(BrowserScreen.Browser)
-                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                    loadBrowserUrl(currentTab ?: tabManager.newTab(null), browserStore, uri)
                                 },
                             )
                         }
@@ -525,7 +541,7 @@ internal fun BrowserRoute(
                                 onBack = { browserViewModel.screen(BrowserScreen.Browser) },
                                 onOpen = { uri ->
                                     browserViewModel.screen(BrowserScreen.Browser)
-                                    (currentTab ?: tabManager.newTab(null)).session.loadUri(uri)
+                                    loadBrowserUrl(currentTab ?: tabManager.newTab(null), browserStore, uri)
                                 },
                             )
                         }
