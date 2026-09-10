@@ -48,6 +48,21 @@ class TabManagerRecreationOwnershipSystemTest {
                 retainedMediaDelegate = publicTab.rawMediaSessionDelegate
                 assertNotNull("Raw owner installs media delegate", retainedMediaDelegate)
 
+                val viewOwnedSelectionDelegate = object : GeckoSession.SelectionActionDelegate {
+                    override fun onShowActionRequest(
+                        session: GeckoSession,
+                        selection: GeckoSession.SelectionActionDelegate.Selection,
+                    ) = Unit
+
+                    override fun onHideAction(session: GeckoSession, reason: Int) = Unit
+                }
+                publicSession.selectionActionDelegate = viewOwnedSelectionDelegate
+                assertSame(
+                    "Raw render view installs an Activity-bound selection delegate",
+                    viewOwnedSelectionDelegate,
+                    publicSession.selectionActionDelegate,
+                )
+
                 privateTab = manager.newTab(null, private = true)
                 val closedHighTab = manager.newTab(null, private = false)
                 closedHighId = closedHighTab.id
@@ -60,7 +75,16 @@ class TabManagerRecreationOwnershipSystemTest {
                 assertNull("Old navigation delegate releases Activity-owned manager", publicSession.navigationDelegate)
                 assertNull("Old content delegate releases Activity-owned manager", publicSession.contentDelegate)
                 assertNull("Old history delegate releases Activity-owned manager", publicSession.historyDelegate)
+                assertSame(
+                    "TabManager detach does not own the view-installed selection delegate",
+                    viewOwnedSelectionDelegate,
+                    publicSession.selectionActionDelegate,
+                )
                 TabManagerRecreationHandoffRegistry.publish(storeDir, handoff)
+                assertNull(
+                    "Retention boundary releases the old view/Activity selection delegate",
+                    publicSession.selectionActionDelegate,
+                )
             }
 
             // MainActivity preloads the versioned disk snapshot before constructing TabManager.
@@ -86,6 +110,10 @@ class TabManagerRecreationOwnershipSystemTest {
                 assertNotNull("Replacement manager rebinds navigation delegate", publicSession.navigationDelegate)
                 assertNotNull("Replacement manager rebinds content delegate", publicSession.contentDelegate)
                 assertNotNull("Replacement manager rebinds history delegate", publicSession.historyDelegate)
+                assertNull(
+                    "New view owns installing a fresh selection delegate after recreation",
+                    publicSession.selectionActionDelegate,
+                )
 
                 val next = adopted.newTab(null, private = false)
                 assertTrue(
