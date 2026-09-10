@@ -30,6 +30,7 @@ import com.artt.minibrowser.browser.initialExternalNavigationUri
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
+import com.artt.minibrowser.data.PersistedBrowserState
 import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.data.TabStore
 import com.artt.minibrowser.engine.AndroidComponentsActivityGeckoCompatibilityHost
@@ -37,6 +38,8 @@ import com.artt.minibrowser.engine.BackgroundTabHost
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
+import com.artt.minibrowser.engine.androidComponentsProcessRestoreActions
+import com.artt.minibrowser.engine.androidComponentsProcessRestorePlan
 import com.artt.minibrowser.engine.clearBrowserFindMatches
 import com.artt.minibrowser.engine.clearWebDataAcrossAndroidComponentsOwnership
 import com.artt.minibrowser.engine.closeAndroidComponentsOwnedTabFromWindowRequest
@@ -127,20 +130,42 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
         enableEdgeToEdge()
 
         // TabStore may parse, sanitize and atomically rewrite legacy/corrupt metadata. Do that work
-        // on IO before TabManager is constructed; its synchronous restore() then consumes the
-        // one-shot in-memory handoff instead of touching disk on the Activity main thread.
+        // on IO before TabManager is constructed. Both BrowserStore and TabManager then consume the
+        // same sanitized snapshot without a second disk read on the Activity main thread.
         val launchIntent = intent
         val tabsDir = File(filesDir, "tabs")
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
+            val preloadedState = withContext(Dispatchers.IO) {
                 TabStore.preloadStateForNextRestore(tabsDir)
             }
             if (isFinishing || isDestroyed || ::tabManager.isInitialized) return@launch
-            initializeBrowser(savedInstanceState, launchIntent, tabsDir)
+            initializeBrowser(savedInstanceState, launchIntent, tabsDir, preloadedState)
         }
     }
 
-    private fun initializeBrowser(savedInstanceState: Bundle?, launchIntent: Intent?, tabsDir: File) {
+    private fun initializeBrowser(
+        savedInstanceState: Bundle?,
+        launchIntent: Intent?,
+        tabsDir: File,
+        preloadedState: PersistedBrowserState,
+    ) {
+        val browserStore = browserApp.browserStore
+        if (browserStore.state.tabs.isEmpty()) {
+            val restorePlan = androidComponentsProcessRestorePlan(preloadedState, browserApp.engine)
+            androidComponentsProcessRestoreActions(restorePlan).forEach(browserStore::dispatch)
+            // The planner decodes only URL-bound A-C state. Seed the same opaque objects before
+            // TabManager can publish a persistence snapshot; do not decode the envelope twice.
+            restorePlan.tabs.forEach { restoredTab ->
+                restoredTab.engineState.engineSessionState?.let { engineSessionState ->
+                    browserApp.sessionStatePersistence.bind(
+                        sessionId = restoredTab.id,
+                        stateUrl = restoredTab.content.url,
+                        state = engineSessionState,
+                    )
+                }
+            }
+        }
+
         tabManager = TabManager(
             runtime,
             tabsDir,

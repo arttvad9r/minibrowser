@@ -909,7 +909,19 @@ class TabManager(
         val saved = TabStore.loadState(storeDir)
         Trace.beginSection(TAB_RESTORE_MATERIALIZE_TRACE)
         val restoredTabs = try {
-            saved.tabs.map { createTab(private = false, persisted = it, publish = false) }
+            saved.tabs.map { persisted ->
+                if (persisted.sessionOwner == PersistedSessionOwner.AndroidComponents) {
+                    seq = maxOf(seq, persisted.id)
+                    Tab.androidComponentsOwned(persisted.id).apply {
+                        url = persisted.url
+                        title = persisted.title
+                        desktop = persisted.desktop
+                        lastAccess = persisted.lastAccess
+                    }
+                } else {
+                    createTab(private = false, persisted = persisted, publish = false)
+                }
+            }
         } finally {
             Trace.endSection()
         }
