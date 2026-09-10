@@ -71,12 +71,34 @@ class AndroidComponentsGeckoCompatibilityRegistryTest {
         val firstLease = registry.bind(unusedHost())
         firstLease.close()
         assertNull(registry.currentHost())
+        assertNull(handler.promptDelegate())
 
         val second = unusedHost()
         registry.bind(second)
         assertSame(second, registry.currentHost())
         // The same session-bound handler does not retain either Activity-scoped host.
         assertNotNull(handler)
+    }
+
+    @Test
+    fun promptDelegateFollowsLatestActivityLease() {
+        val registry = AndroidComponentsGeckoCompatibilityRegistry()
+        val handler = registry.forSession(
+            AndroidComponentsGeckoSessionContext(sessionId = "42", privateMode = false),
+        )
+        val firstPrompt = object : GeckoSession.PromptDelegate {}
+        val secondPrompt = object : GeckoSession.PromptDelegate {}
+        val firstLease = registry.bind(unusedHost(firstPrompt))
+
+        assertSame(firstPrompt, handler.promptDelegate())
+
+        val secondLease = registry.bind(unusedHost(secondPrompt))
+        assertSame(secondPrompt, handler.promptDelegate())
+        firstLease.close()
+        assertSame(secondPrompt, handler.promptDelegate())
+
+        secondLease.close()
+        assertNull(handler.promptDelegate())
     }
 
     @Test
@@ -120,12 +142,12 @@ class AndroidComponentsGeckoCompatibilityRegistryTest {
         )
     }
 
-    private fun unusedHost() = object : AndroidComponentsGeckoCompatibilityHost {
-        override fun onWeekPrompt(
+    private fun unusedHost(
+        promptDelegate: GeckoSession.PromptDelegate? = null,
+    ) = object : AndroidComponentsGeckoCompatibilityHost {
+        override fun promptDelegate(
             context: AndroidComponentsGeckoSessionContext,
-            session: GeckoSession,
-            prompt: GeckoSession.PromptDelegate.DateTimePrompt,
-        ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = error("Not used by registry lease tests")
+        ): GeckoSession.PromptDelegate? = promptDelegate
 
         override fun onAndroidPermissionsRequest(
             context: AndroidComponentsGeckoSessionContext,

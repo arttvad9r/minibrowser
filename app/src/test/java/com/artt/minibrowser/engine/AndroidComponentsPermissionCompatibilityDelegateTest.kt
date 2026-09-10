@@ -50,10 +50,7 @@ class AndroidComponentsPermissionCompatibilityDelegateTest {
             }
         }
         val compatibility = object : AndroidComponentsGeckoCompatibilityHandler {
-            override fun onWeekPrompt(
-                session: GeckoSession,
-                prompt: GeckoSession.PromptDelegate.DateTimePrompt,
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = null
+            override fun promptDelegate(): GeckoSession.PromptDelegate? = null
 
             override fun onAndroidPermissionsRequest(
                 session: GeckoSession,

@@ -6,15 +6,16 @@ import org.mozilla.geckoview.GeckoSession
 /**
  * GeckoView callbacks retained by MiniBrowser while BrowserStore owns the surrounding EngineSession.
  *
- * WEEK and linked-media context menus are lossy in A-C 154. Permission callbacks intentionally stay
- * on MiniBrowser's existing policy/UI until a BrowserStore permission feature is introduced with
- * equivalent policy and ActivityResult semantics.
+ * Prompt callbacks intentionally keep the existing MiniBrowser prompt policy/UI until structural tab
+ * ownership moves away from TabManager. A-C's PromptFeature can open tabs through TabsUseCases, which
+ * would otherwise create BrowserStore-only tabs during this transitional ownership phase. Permission
+ * callbacks likewise stay on MiniBrowser's existing policy/UI until an equivalent BrowserStore
+ * permission feature is introduced. Linked-media context menus remain here because A-C 154 drops the
+ * wrapping link URI for audio/video hit results.
  */
 internal interface AndroidComponentsGeckoCompatibilityHandler {
-    fun onWeekPrompt(
-        session: GeckoSession,
-        prompt: GeckoSession.PromptDelegate.DateTimePrompt,
-    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?
+    /** Resolves the current Activity-scoped raw-compatible prompt owner, or null between hosts. */
+    fun promptDelegate(): GeckoSession.PromptDelegate?
 
     fun onAndroidPermissionsRequest(
         session: GeckoSession,
@@ -42,9 +43,6 @@ internal interface AndroidComponentsGeckoCompatibilityHandler {
     ): Boolean
 }
 
-internal fun shouldUseRawWeekPrompt(type: Int): Boolean =
-    type == GeckoSession.PromptDelegate.DateTimePrompt.Type.WEEK
-
 internal fun shouldUseRawLinkedMediaContextMenu(
     elementType: Int,
     linkUri: String?,
@@ -56,23 +54,88 @@ internal fun shouldUseRawLinkedMediaContextMenu(
             elementType == GeckoSession.ContentDelegate.ContextElement.TYPE_VIDEO)
 
 /**
- * Keeps stock A-C prompt ownership except for WEEK. In A-C 154 GeckoPromptDelegate formats WEEK as
- * yyyy-'W'ww and then collapses it to PromptRequest.TimeSelection.Type.DATE, losing the original
- * HTML input type before PromptFeature can apply MiniBrowser's ISO week-year behavior.
+ * Retains the current MiniBrowser prompt owner across the EngineSession ownership boundary.
+ *
+ * GeckoPromptController overrides the same 14 callbacks below on the raw path. The remaining
+ * GeckoView PromptDelegate callbacks intentionally keep their interface defaults, matching the raw
+ * controller's current behavior for autocomplete, identity-credential and certificate requests.
+ * Returning null while no Activity host is bound also keeps those requests out of BrowserStore; it
+ * never falls through to A-C's stock GeckoPromptDelegate without a PromptFeature consumer.
  */
 internal class AndroidComponentsPromptCompatibilityDelegate(
-    private val delegate: GeckoSession.PromptDelegate,
     private val compatibility: AndroidComponentsGeckoCompatibilityHandler,
-) : GeckoSession.PromptDelegate by delegate {
+) : GeckoSession.PromptDelegate {
+    private fun current(): GeckoSession.PromptDelegate? = compatibility.promptDelegate()
+
+    override fun onAlertPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.AlertPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onAlertPrompt(session, prompt)
+
+    override fun onTextPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.TextPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onTextPrompt(session, prompt)
+
+    override fun onButtonPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.ButtonPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onButtonPrompt(session, prompt)
+
+    override fun onAuthPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.AuthPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onAuthPrompt(session, prompt)
+
+    override fun onChoicePrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.ChoicePrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onChoicePrompt(session, prompt)
+
+    override fun onBeforeUnloadPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onBeforeUnloadPrompt(session, prompt)
+
+    override fun onRepostConfirmPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.RepostConfirmPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onRepostConfirmPrompt(session, prompt)
+
+    override fun onFolderUploadPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.FolderUploadPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onFolderUploadPrompt(session, prompt)
+
+    override fun onRedirectPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.RedirectPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onRedirectPrompt(session, prompt)
+
+    override fun onSharePrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.SharePrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onSharePrompt(session, prompt)
+
     override fun onDateTimePrompt(
         session: GeckoSession,
         prompt: GeckoSession.PromptDelegate.DateTimePrompt,
-    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-        if (shouldUseRawWeekPrompt(prompt.type)) {
-            compatibility.onWeekPrompt(session, prompt)?.let { return it }
-        }
-        return delegate.onDateTimePrompt(session, prompt)
-    }
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onDateTimePrompt(session, prompt)
+
+    override fun onColorPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.ColorPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onColorPrompt(session, prompt)
+
+    override fun onPopupPrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.PopupPrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onPopupPrompt(session, prompt)
+
+    override fun onFilePrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.FilePrompt,
+    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? = current()?.onFilePrompt(session, prompt)
 }
 
 /**

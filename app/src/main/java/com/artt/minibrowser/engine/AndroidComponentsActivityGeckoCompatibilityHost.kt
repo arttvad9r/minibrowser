@@ -34,14 +34,13 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         )
     }
 
-    override fun onWeekPrompt(
+    override fun promptDelegate(
         context: AndroidComponentsGeckoSessionContext,
-        session: GeckoSession,
-        prompt: GeckoSession.PromptDelegate.DateTimePrompt,
-    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? {
-        if (!canShowUi()) return null
-        return promptController.onDateTimePrompt(session, prompt)
-    }
+    ): GeckoSession.PromptDelegate? =
+        // Raw TabManager installs one GeckoPromptController on every owned session without a
+        // selected-tab predicate. Keep that behavior across transfer; the registry supplies only
+        // the current Activity instance, never session lifetime authority.
+        promptController.takeIf { canShowUi() }
 
     override fun onAndroidPermissionsRequest(
         context: AndroidComponentsGeckoSessionContext,

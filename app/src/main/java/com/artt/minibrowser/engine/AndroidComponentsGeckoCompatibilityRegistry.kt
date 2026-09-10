@@ -18,11 +18,9 @@ internal data class AndroidComponentsGeckoSessionContext(
  * raw GeckoSession or retained TabManager.
  */
 internal interface AndroidComponentsGeckoCompatibilityHost {
-    fun onWeekPrompt(
+    fun promptDelegate(
         context: AndroidComponentsGeckoSessionContext,
-        session: GeckoSession,
-        prompt: GeckoSession.PromptDelegate.DateTimePrompt,
-    ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?
+    ): GeckoSession.PromptDelegate?
 
     fun onAndroidPermissionsRequest(
         context: AndroidComponentsGeckoSessionContext,
@@ -81,11 +79,8 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
 
     fun forSession(context: AndroidComponentsGeckoSessionContext): AndroidComponentsGeckoCompatibilityHandler =
         object : AndroidComponentsGeckoCompatibilityHandler {
-            override fun onWeekPrompt(
-                session: GeckoSession,
-                prompt: GeckoSession.PromptDelegate.DateTimePrompt,
-            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse>? =
-                current?.onWeekPrompt(context, session, prompt)
+            override fun promptDelegate(): GeckoSession.PromptDelegate? =
+                current?.promptDelegate(context)
 
             override fun onAndroidPermissionsRequest(
                 session: GeckoSession,
@@ -130,10 +125,11 @@ internal fun installAndroidComponentsGeckoCompatibilityDelegates(
     session: GeckoSession,
     compatibility: AndroidComponentsGeckoCompatibilityHandler,
 ) {
-    session.promptDelegate?.let { delegate ->
-        if (delegate !is AndroidComponentsPromptCompatibilityDelegate) {
-            session.promptDelegate = AndroidComponentsPromptCompatibilityDelegate(delegate, compatibility)
-        }
+    if (session.promptDelegate !is AndroidComponentsPromptCompatibilityDelegate) {
+        // Prompt ownership intentionally moves back to MiniBrowser's Activity-scoped controller.
+        // Do not retain A-C's stock delegate: without PromptFeature it would enqueue BrowserStore
+        // requests that have no consumer and TabsUseCases would violate current structural ownership.
+        session.promptDelegate = AndroidComponentsPromptCompatibilityDelegate(compatibility)
     }
     session.permissionDelegate?.let { delegate ->
         if (delegate !is AndroidComponentsPermissionCompatibilityDelegate) {
