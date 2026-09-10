@@ -5,12 +5,17 @@ import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.ViewGroup
 import androidx.annotation.ColorInt
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.artt.minibrowser.engine.BrowserCommandTarget
 import com.artt.minibrowser.engine.createGeckoEngineSessionSidecar
 import mozilla.components.browser.engine.gecko.GeckoEngineSession
 import mozilla.components.browser.engine.gecko.GeckoEngineView
+import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
+import mozilla.components.feature.session.SessionFeature
+import mozilla.components.feature.session.SessionUseCases
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -18,15 +23,19 @@ import org.mozilla.geckoview.GeckoSession
  * Pull-to-refresh shell around Android Components' GeckoEngineView.
  *
  * Raw-owned tabs render through a temporary GeckoEngineSession facade that borrows the exact raw
- * GeckoSession. Relinquished tabs render their BrowserStore-linked EngineSession directly; this
- * view never creates a second facade around a session whose lifetime has moved to EngineMiddleware.
+ * GeckoSession. Relinquished tabs are rendered by A-C's lifecycle-aware SessionFeature from their
+ * BrowserStore-linked EngineSession; this view never creates a second facade around an A-C-owned
+ * session and SessionFeature is never started for a raw-owned tab.
  */
 internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(context) {
     val engineView = GeckoEngineView(context)
 
     private var renderedRawSession: GeckoSession? = null
     private var renderedLinkedSession: EngineSession? = null
+    private var renderedLinkedTabId: String? = null
     private var engineSessionSidecar: GeckoEngineSession? = null
+    private var linkedSessionFeature: SessionFeature? = null
+    private var linkedSessionFeatureOwner: LifecycleOwner? = null
     private var pageSupportsRefresh = false
     private var pageLoading = false
     private var refreshAction: () -> Unit = {}
@@ -59,6 +68,8 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
 
     fun bindSession(
         runtime: GeckoRuntime,
+        store: BrowserStore,
+        tabId: String?,
         target: BrowserCommandTarget<GeckoSession, EngineSession>?,
         privateMode: Boolean,
     ) {
@@ -69,7 +80,11 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
                 privateMode = privateMode,
             )
 
-            is BrowserCommandTarget.Linked -> bindLinkedSession(target.session)
+            is BrowserCommandTarget.Linked -> bindLinkedSession(
+                store = store,
+                tabId = checkNotNull(tabId) { "Linked render target requires a BrowserStore tab id" },
+                session = target.session,
+            )
             null -> releaseRenderedSession()
         }
     }
@@ -90,12 +105,71 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         ).also(engineView::render)
     }
 
-    private fun bindLinkedSession(session: EngineSession) {
-        if (renderedLinkedSession === session && renderedRawSession == null) return
+    private fun bindLinkedSession(
+        store: BrowserStore,
+        tabId: String,
+        session: EngineSession,
+    ) {
+        val storeSession = store.state.tabs
+            .firstOrNull { it.id == tabId }
+            ?.engineState
+            ?.engineSession
+        check(storeSession === session) {
+            "Linked render target must be the exact BrowserStore EngineSession"
+        }
+
+        if (
+            renderedLinkedSession === session &&
+            renderedLinkedTabId == tabId &&
+            renderedRawSession == null
+        ) {
+            attachLinkedSessionFeatureToLifecycle()
+            return
+        }
 
         releaseRenderedSession()
         renderedLinkedSession = session
-        engineView.render(session)
+        renderedLinkedTabId = tabId
+        linkedSessionFeature = SessionFeature(
+            store = store,
+            goBackUseCase = SessionUseCases(store).goBack,
+            engineView = engineView,
+            tabId = tabId,
+        )
+        attachLinkedSessionFeatureToLifecycle()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        attachLinkedSessionFeatureToLifecycle()
+    }
+
+    override fun onDetachedFromWindow() {
+        detachLinkedSessionFeatureFromLifecycle()
+        super.onDetachedFromWindow()
+    }
+
+    private fun attachLinkedSessionFeatureToLifecycle() {
+        val feature = linkedSessionFeature ?: return
+        val owner = findViewTreeLifecycleOwner() ?: return
+        if (linkedSessionFeatureOwner === owner) return
+
+        detachLinkedSessionFeatureFromLifecycle()
+        linkedSessionFeatureOwner = owner
+        owner.lifecycle.addObserver(feature)
+    }
+
+    private fun detachLinkedSessionFeatureFromLifecycle() {
+        val feature = linkedSessionFeature ?: return
+        val owner = linkedSessionFeatureOwner ?: return
+        val wasStarted = owner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+        owner.lifecycle.removeObserver(feature)
+        linkedSessionFeatureOwner = null
+        if (wasStarted) {
+            // Removing an observer while STARTED does not synthesize onStop. SessionFeature.stop()
+            // releases the EngineView without closing its BrowserStore-owned EngineSession.
+            feature.stop()
+        }
     }
 
     fun configurePullToRefresh(
@@ -125,12 +199,22 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
     }
 
     private fun releaseRenderedSession() {
-        if (renderedRawSession == null && renderedLinkedSession == null && engineSessionSidecar == null) return
+        if (
+            renderedRawSession == null &&
+            renderedLinkedSession == null &&
+            engineSessionSidecar == null &&
+            linkedSessionFeature == null
+        ) {
+            return
+        }
 
         resetForSessionChange()
+        detachLinkedSessionFeatureFromLifecycle()
+        linkedSessionFeature = null
         engineView.release()
         renderedRawSession = null
         renderedLinkedSession = null
+        renderedLinkedTabId = null
         // Do not close either session here. Raw sidecars borrow TabManager-owned GeckoSessions;
         // linked EngineSessions are owned and closed by BrowserStore/EngineMiddleware.
         engineSessionSidecar = null
