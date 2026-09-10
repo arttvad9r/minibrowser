@@ -1,6 +1,7 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.data.EngineSessionStateEnvelope
+import com.artt.minibrowser.data.PersistedSessionOwner
 import com.artt.minibrowser.engine.PersistenceSnapshot
 import com.artt.minibrowser.engine.PersistenceTabSnapshot
 import com.artt.minibrowser.engine.serializePersistenceSnapshot
@@ -19,6 +20,7 @@ class EngineSessionStatePassthroughTest {
         val persisted = serializePersistenceSnapshot(snapshot(engineStateUrl = "https://example.com/page"))
             .tabs.single()
 
+        assertEquals(PersistedSessionOwner.Raw, persisted.sessionOwner)
         assertEquals(envelope, persisted.engineSessionState)
         assertEquals("https://example.com/page", persisted.engineSessionStateUrl)
     }
