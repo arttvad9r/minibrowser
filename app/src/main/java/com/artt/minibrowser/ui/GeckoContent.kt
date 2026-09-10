@@ -10,7 +10,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.viewinterop.AndroidView
 import com.artt.minibrowser.engine.BrowserApp
+import com.artt.minibrowser.engine.BrowserCommandTarget
 import com.artt.minibrowser.engine.Tab
+import com.artt.minibrowser.engine.browserCommandTargetForTab
+import com.artt.minibrowser.engine.reloadOrStopBrowser
 import org.mozilla.geckoview.BasicSelectionActionDelegate
 
 internal fun View.updateBrowserContentAccessibility(hidden: Boolean) {
@@ -34,7 +37,6 @@ internal fun GeckoContent(
     previewStore: TabPreviewStore,
     modifier: Modifier = Modifier,
 ) {
-    val session = tab?.session
     val tabId = tab?.id
     val url = tab?.url.orEmpty()
     val isPrivate = tab?.isPrivate == true
@@ -51,20 +53,23 @@ internal fun GeckoContent(
         update = { container ->
             val view = container.engineView
             view.updateBrowserContentAccessibility(hiddenFromAccessibility)
-            session?.let { nextSession ->
-                // Gecko does not install a text-selection action mode for embedders by default.
-                // Keep Android's standard contextual toolbar until selection is migrated to an
-                // Android Components SelectionActionDelegate.
-                if (nextSession.selectionActionDelegate == null) {
+            val app = view.context.applicationContext as BrowserApp
+            val renderTarget = tab?.let { currentTab ->
+                browserCommandTargetForTab(currentTab, app.browserStore)
+            }
+            if (renderTarget is BrowserCommandTarget.Raw) {
+                val rawSession = renderTarget.session
+                // Gecko does not install a text-selection action mode for raw embedders by default.
+                // Never mutate the raw session after ownership has been relinquished.
+                if (tab?.ownsRawSession(rawSession) == true && rawSession.selectionActionDelegate == null) {
                     view.context.findActivity()?.let { activity ->
-                        nextSession.setSelectionActionDelegate(BasicSelectionActionDelegate(activity))
+                        rawSession.setSelectionActionDelegate(BasicSelectionActionDelegate(activity))
                     }
                 }
             }
-            val app = view.context.applicationContext as BrowserApp
             container.bindSession(
                 runtime = app.runtime,
-                session = session,
+                target = renderTarget,
                 privateMode = isPrivate,
             )
             container.configurePullToRefresh(
@@ -73,7 +78,13 @@ internal fun GeckoContent(
                 indicatorColor = indicatorColor,
                 indicatorBackgroundColor = indicatorBackgroundColor,
                 onRefresh = {
-                    if (pageSupportsRefresh) session?.reload()
+                    if (pageSupportsRefresh && tab != null) {
+                        reloadOrStopBrowser(
+                            tab = tab,
+                            browserStore = app.browserStore,
+                            isLoading = false,
+                        )
+                    }
                 },
             )
             previewStore.maybeCapture(
