@@ -132,6 +132,7 @@ internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
     uiCompatibilityHandoff: AndroidComponentsUiCompatibilityHandoff,
     mediaSessionHandoff: AndroidComponentsMediaSessionHandoff?,
     sessionStatePersistence: AndroidComponentsSessionStatePersistenceState? = null,
+    onSessionStatePersistenceChanged: (sessionId: String, stateUrl: String?) -> Unit = { _, _ -> },
 ): AndroidComponentsPreparedExistingSessionTransfer {
     // Recheck both BrowserStore and GeckoSession after the ownership boundary. Normal callers execute
     // both phases synchronously on the main thread, so any failure here indicates a broken cutover.
@@ -140,7 +141,10 @@ internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
     val sessionContext = preflight.sessionContext
     val sessionId = sessionContext.sessionId
 
-    sessionStatePersistence?.remove(sessionId)
+    sessionStatePersistence?.let { persistenceState ->
+        persistenceState.remove(sessionId)
+        onSessionStatePersistenceChanged(sessionId, null)
+    }
     uiCompatibilityState.seed(sessionId, uiCompatibilityHandoff)
     val engineSession = try {
         GeckoEngineSession(
@@ -167,6 +171,7 @@ internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
                 engineSession = engineSession,
                 sessionId = sessionId,
                 persistenceState = persistenceState,
+                onPersistenceStateChanged = onSessionStatePersistenceChanged,
             )
         }
         installAndroidComponentsUiCompatibilityDelegates(
