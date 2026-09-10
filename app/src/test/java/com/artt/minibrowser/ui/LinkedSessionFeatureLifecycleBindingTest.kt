@@ -60,7 +60,9 @@ class LinkedSessionFeatureLifecycleBindingTest {
     }
 
     private class TestLifecycleOwner : LifecycleOwner {
-        val registry = LifecycleRegistry(this)
+        // This synthetic owner is mutated only by the calling test thread. Lifecycle 2.11 enforces
+        // main-thread access by default; createUnsafe is the documented opt-out for such owners.
+        val registry = LifecycleRegistry.createUnsafe(this)
         override val lifecycle: Lifecycle = registry
     }
 
