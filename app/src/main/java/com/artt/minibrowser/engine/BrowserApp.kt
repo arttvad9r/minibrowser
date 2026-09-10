@@ -12,6 +12,7 @@ import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.ui.TabPreviewStore
 import mozilla.components.browser.engine.gecko.GeckoEngine
 import mozilla.components.browser.state.engine.EngineMiddleware
+import mozilla.components.browser.state.engine.middleware.SessionPrioritizationMiddleware
 import mozilla.components.browser.state.store.BrowserStore
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
@@ -48,6 +49,9 @@ class BrowserApp : Application() {
             middleware = listOf(
                 androidComponentsSessionSettingsMiddleware(browserStoreSessionConfigurator),
                 androidComponentsUiCompatibilityCleanupMiddleware(uiCompatibilityState),
+                // Firefox installs this outside EngineMiddleware.create(). Keep linked sessions on
+                // the same selected-session priority policy instead of reproducing raw Gecko hints.
+                SessionPrioritizationMiddleware(),
             ) + EngineMiddleware.create(
                 engine = browserStoreEngine,
                 // TabManager still owns the current hot-tab/session memory policy during this

@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import mozilla.components.browser.state.action.AppLifecycleAction
 
 /** Keeps Gecko tab visibility, persistence, and background trimming aligned with host lifecycle. */
 internal class BrowserTabLifecycleController(
@@ -25,7 +26,6 @@ internal class BrowserTabLifecycleController(
     private val androidComponentsBridgeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     init {
-        lifecycle.addObserver(this)
         app?.let { browserApp ->
             androidComponentsBridgeScope.bindTabManagerToBrowserStore(
                 tabManager = tabManager,
@@ -33,11 +33,9 @@ internal class BrowserTabLifecycleController(
                 engine = browserApp.engine,
             )
         }
-        // This observer is created after asynchronous tab-state preload. The Activity may already be
-        // STARTED/RESUMED, so bind immediately instead of waiting for a lifecycle event that already ran.
-        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-            bindExternalNavigationPolicy()
-        }
+        // Lifecycle.addObserver() brings this observer up to the owner's current state, so an
+        // asynchronously-created controller still receives any required onStart/onResume callbacks.
+        lifecycle.addObserver(this)
     }
 
     override fun onStart(owner: LifecycleOwner) {
@@ -45,10 +43,12 @@ internal class BrowserTabLifecycleController(
     }
 
     override fun onResume(owner: LifecycleOwner) {
+        app?.browserStore?.dispatch(AppLifecycleAction.ResumeAction)
         tabManager.setAppVisible(true)
     }
 
     override fun onPause(owner: LifecycleOwner) {
+        app?.browserStore?.dispatch(AppLifecycleAction.PauseAction)
         val inPictureInPicture = (owner as? Activity)?.isInPictureInPictureMode == true
         tabManager.setAppVisible(inPictureInPicture)
         tabManager.persist()
