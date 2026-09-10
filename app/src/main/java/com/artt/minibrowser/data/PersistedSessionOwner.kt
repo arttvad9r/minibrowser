@@ -9,7 +9,7 @@ import kotlinx.serialization.Serializable
  * raw-owned shadow tabs may already carry compatible A-C restore state during migration.
  */
 @Serializable
-internal enum class PersistedSessionOwner {
+enum class PersistedSessionOwner {
     @SerialName("raw")
     Raw,
 
