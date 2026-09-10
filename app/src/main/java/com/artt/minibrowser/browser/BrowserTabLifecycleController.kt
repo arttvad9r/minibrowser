@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import mozilla.components.browser.state.action.AppLifecycleAction
+import mozilla.components.lib.state.ext.flow
 
 /** Keeps Gecko tab visibility, persistence, and background trimming aligned with host lifecycle. */
 internal class BrowserTabLifecycleController(
@@ -102,7 +103,7 @@ internal class BrowserTabLifecycleController(
 
     private fun transferCurrentRawTabWhenMirrored(browserApp: BrowserApp) {
         androidComponentsBridgeScope.launch {
-            browserApp.browserStore.stateFlow.first { state ->
+            browserApp.browserStore.flow().first { state ->
                 val currentId = tabManager.currentId.value?.toString()
                 currentId != null &&
                     state.selectedTabId == currentId &&
