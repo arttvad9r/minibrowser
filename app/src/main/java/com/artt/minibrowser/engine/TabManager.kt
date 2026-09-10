@@ -16,6 +16,7 @@ import com.artt.minibrowser.browser.isCurrentPermissionRequestTab
 import com.artt.minibrowser.data.EngineSessionStateEnvelope
 import com.artt.minibrowser.data.HistorySink
 import com.artt.minibrowser.data.PersistedBrowserState
+import com.artt.minibrowser.data.PersistedSessionOwner
 import com.artt.minibrowser.data.PersistedTab
 import com.artt.minibrowser.data.TabStore
 import com.artt.minibrowser.data.encodeEngineSessionStateEnvelope
@@ -241,6 +242,7 @@ internal data class PersistenceTabSnapshot(
     val serializedSessionState: String?,
     val serializedSessionStateUrl: String?,
     val isPrivate: Boolean,
+    val sessionOwner: PersistedSessionOwner = PersistedSessionOwner.Raw,
     val serializedEngineSessionState: EngineSessionStateEnvelope? = null,
     val serializedEngineSessionStateUrl: String? = null,
     val engineSessionState: EngineSessionState? = null,
@@ -272,6 +274,7 @@ internal fun persistenceTabSnapshotAfterRelinquish(
         serializedSessionState = null,
         serializedSessionStateUrl = null,
         isPrivate = browserTab.content.private,
+        sessionOwner = PersistedSessionOwner.AndroidComponents,
         serializedEngineSessionState = null,
         serializedEngineSessionStateUrl = null,
         engineSessionState = boundState?.state,
@@ -325,6 +328,7 @@ internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): Persis
             sessionStateUrl = selectedState.stateUrl,
             engineSessionState = selectedEngineState.state,
             engineSessionStateUrl = selectedEngineState.stateUrl,
+            sessionOwner = it.sessionOwner,
         )
     },
 )

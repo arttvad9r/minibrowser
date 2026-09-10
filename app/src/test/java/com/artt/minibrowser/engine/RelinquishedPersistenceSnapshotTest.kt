@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.JsonWriter
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artt.minibrowser.data.EngineSessionStateEnvelope
+import com.artt.minibrowser.data.PersistedSessionOwner
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -44,6 +45,7 @@ class RelinquishedPersistenceSnapshotTest {
         assertEquals(true, snapshot.desktop)
         assertEquals(42L, snapshot.lastAccess)
         assertFalse(snapshot.isPrivate)
+        assertEquals(PersistedSessionOwner.AndroidComponents, snapshot.sessionOwner)
         assertNull(snapshot.latestSessionState)
         assertNull(snapshot.latestSessionStateUrl)
         assertNull(snapshot.serializedSessionState)
@@ -57,6 +59,7 @@ class RelinquishedPersistenceSnapshotTest {
             PersistenceSnapshot(selectedId = 7L, tabs = listOf(snapshot)),
         ).tabs.single()
 
+        assertEquals(PersistedSessionOwner.AndroidComponents, persisted.sessionOwner)
         assertNull(persisted.sessionState)
         assertNull(persisted.sessionStateUrl)
         assertEquals(
@@ -85,6 +88,7 @@ class RelinquishedPersistenceSnapshotTest {
         )
 
         assertEquals("https://live.example/page", snapshot.url)
+        assertEquals(PersistedSessionOwner.AndroidComponents, snapshot.sessionOwner)
         assertNull(snapshot.latestSessionState)
         assertNull(snapshot.serializedSessionState)
         assertNull(snapshot.engineSessionState)
@@ -94,6 +98,7 @@ class RelinquishedPersistenceSnapshotTest {
             PersistenceSnapshot(selectedId = 7L, tabs = listOf(snapshot)),
         ).tabs.single()
 
+        assertEquals(PersistedSessionOwner.AndroidComponents, persisted.sessionOwner)
         assertNull(persisted.sessionState)
         assertNull(persisted.sessionStateUrl)
         assertNull(persisted.engineSessionState)
