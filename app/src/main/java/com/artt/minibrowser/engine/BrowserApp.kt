@@ -7,10 +7,12 @@ import android.content.Context
 import android.os.Build
 import android.os.Process
 import android.os.Trace
+import androidx.annotation.MainThread
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.ui.TabPreviewStore
 import mozilla.components.browser.engine.gecko.GeckoEngine
+import mozilla.components.browser.engine.gecko.GeckoEngineSession
 import mozilla.components.browser.state.engine.EngineMiddleware
 import mozilla.components.browser.state.engine.middleware.SessionPrioritizationMiddleware
 import mozilla.components.browser.state.store.BrowserStore
@@ -65,6 +67,27 @@ class BrowserApp : Application() {
     }
     internal val extensionLoader by lazy(LazyThreadSafetyMode.NONE) { ExtensionLoader(runtime) }
     private var mainProcess = false
+
+    /**
+     * Single app-scoped entry point for the irreversible raw -> A-C ownership transfer.
+     *
+     * Keeping the configurator and compatibility/persistence registries private to BrowserApp makes
+     * it impossible for a future Activity caller to accidentally omit one part of the cutover.
+     */
+    @MainThread
+    internal fun transferExistingTabToAndroidComponents(
+        tabManager: TabManager,
+        tab: Tab,
+    ): GeckoEngineSession = transferTabToAndroidComponents(
+        tabManager = tabManager,
+        tab = tab,
+        runtime = runtime,
+        store = browserStore,
+        configurator = browserStoreSessionConfigurator,
+        compatibilityRegistry = geckoCompatibilityRegistry,
+        uiCompatibilityState = uiCompatibilityState,
+        sessionStatePersistence = sessionStatePersistence,
+    )
 
     override fun onCreate() {
         super.onCreate()
