@@ -1,8 +1,9 @@
 package com.artt.minibrowser.engine
 
+import androidx.annotation.MainThread
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.yield
+import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.store.BrowserStore
 
@@ -29,18 +30,19 @@ internal fun androidComponentsWebDataClearStoreTabIds(
 }
 
 /**
- * Clears Gecko web data without crossing raw/A-C close ownership.
+ * Deterministically closes every A-C-owned session before Gecko storage clearing can begin.
  *
- * A-C-owned sessions are removed from BrowserStore first, allowing TabsRemovedMiddleware to unlink
- * and close their EngineSessions. Their TabManager records are then dropped without a raw close. One
- * main-loop turn lets the middleware's close coroutine run before the underlying GeckoSession state
- * is verified. Only after that boundary does TabManager clear the remaining raw-owned sessions and
- * invoke GeckoRuntime.storageController.clearData().
+ * A-C's TabsRemovedMiddleware unlinks synchronously but schedules EngineSession.close() on its scope.
+ * Waiting one main-loop turn is not an ownership guarantee. Capture the linked sessions, unlink them
+ * first so normal tab removal cannot schedule a second close, close those captured owners directly,
+ * verify the supplied GeckoSessions crossed the close boundary, and only then remove BrowserStore
+ * and TabManager structural records.
  */
-internal suspend fun clearWebDataAcrossAndroidComponentsOwnership(
+@MainThread
+internal fun closeAndroidComponentsOwnedTabsBeforeWebDataClear(
     tabManager: TabManager,
     store: BrowserStore,
-) = withContext(Dispatchers.Main.immediate) {
+) {
     val tabsBeforeClear = tabManager.tabs.value
     val rawOwnedTabIds = tabsBeforeClear
         .filter { it.hasRawSessionAuthority }
@@ -50,9 +52,8 @@ internal suspend fun clearWebDataAcrossAndroidComponentsOwnership(
     val openRelinquishedTabIds = relinquishedTabs
         .filter { it.session.isOpen }
         .mapTo(mutableSetOf()) { it.id.toString() }
-    val linkedStoreTabIds = store.state.tabs
-        .filter { it.engineState.engineSession != null }
-        .mapTo(mutableSetOf()) { it.id }
+    val linkedStoreTabs = store.state.tabs.filter { it.engineState.engineSession != null }
+    val linkedStoreTabIds = linkedStoreTabs.mapTo(mutableSetOf()) { it.id }
 
     val storeTabIdsToRemove = androidComponentsWebDataClearStoreTabIds(
         rawOwnedTabIds = rawOwnedTabIds,
@@ -60,22 +61,45 @@ internal suspend fun clearWebDataAcrossAndroidComponentsOwnership(
         openRelinquishedTabIds = openRelinquishedTabIds,
         linkedStoreTabIds = linkedStoreTabIds,
     )
+    val storeTabIdsToRemoveSet = storeTabIdsToRemove.toSet()
+    val linkedSessionsToClose = linkedStoreTabs
+        .filter { it.id in storeTabIdsToRemoveSet }
+        .map { tab -> tab.id to checkNotNull(tab.engineState.engineSession) }
+
+    // LinkingMiddleware unregisters the EngineSession observer and EngineStateReducer clears the
+    // link synchronously. TabsRemovedMiddleware therefore sees no EngineSession later and cannot
+    // race a second asynchronous close against GeckoRuntime.storageController.clearData().
+    linkedSessionsToClose.forEach { (sessionId, _) ->
+        store.dispatch(EngineAction.UnlinkEngineSessionAction(sessionId))
+    }
+    linkedSessionsToClose.forEach { (_, engineSession) ->
+        engineSession.close()
+    }
+
+    check(relinquishedTabs.none { it.session.isOpen }) {
+        "Android Components EngineSessions must close before Gecko storage data is cleared"
+    }
+
     if (storeTabIdsToRemove.isNotEmpty()) {
         store.dispatch(TabListAction.RemoveTabsAction(storeTabIdsToRemove))
     }
 
-    // closeTab() removes only TabManager's structural record for relinquished tabs. Its ownership
-    // guard deliberately leaves the supplied raw GeckoSession to BrowserStore/EngineMiddleware.
+    // closeTab() now removes only TabManager's structural record. Its ownership guard deliberately
+    // cannot close the already-relinquished raw GeckoSession a second time.
     relinquishedTabs.forEach { tabManager.closeTab(it.id) }
+}
 
-    if (openRelinquishedTabIds.isNotEmpty()) {
-        // TabsRemovedMiddleware closes EngineSessions from its MainScope. Give that queued close one
-        // turn before asserting the ownership boundary and entering Gecko storage clearing.
-        yield()
-        check(relinquishedTabs.none { it.session.isOpen }) {
-            "Android Components EngineSessions must close before Gecko storage data is cleared"
-        }
-    }
-
+/**
+ * Clears Gecko web data without crossing raw/A-C close ownership.
+ *
+ * A-C-owned sessions are deterministically unlinked and closed before their structural records are
+ * removed. TabManager then sees only raw-owned tabs, so its existing fail-fast invariant remains a
+ * useful final guard around the GeckoRuntime storage clear path.
+ */
+internal suspend fun clearWebDataAcrossAndroidComponentsOwnership(
+    tabManager: TabManager,
+    store: BrowserStore,
+) = withContext(Dispatchers.Main.immediate) {
+    closeAndroidComponentsOwnedTabsBeforeWebDataClear(tabManager, store)
     tabManager.clearWebData()
 }
