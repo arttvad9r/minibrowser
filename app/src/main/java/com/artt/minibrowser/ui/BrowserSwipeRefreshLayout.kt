@@ -129,9 +129,11 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         releaseRenderedSession()
         renderedLinkedSession = session
         renderedLinkedTabId = tabId
+        val sessionUseCases = SessionUseCases(store)
         linkedSessionFeature = SessionFeature(
             store = store,
-            goBackUseCase = SessionUseCases(store).goBack,
+            goBackUseCase = sessionUseCases.goBack,
+            goForwardUseCase = sessionUseCases.goForward,
             engineView = engineView,
             tabId = tabId,
         ).also { feature ->
