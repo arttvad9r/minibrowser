@@ -33,8 +33,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.R
+import com.artt.minibrowser.engine.BrowserCommandTarget
+import com.artt.minibrowser.engine.Tab
+import com.artt.minibrowser.engine.browserCommandTargetForTab
+import com.artt.minibrowser.engine.clearBrowserFindMatches
 import kotlinx.coroutines.delay
+import mozilla.components.browser.state.state.content.FindResultState
+import mozilla.components.browser.state.store.BrowserStore
 import org.mozilla.geckoview.GeckoSession
 
 internal data class FindBarUiState(
@@ -59,22 +66,40 @@ internal class FindRequestTracker {
 internal fun formatFindCounter(current: Int, total: Int): String =
     if (current >= 0 && total >= 0) "$current/$total" else ""
 
-/** Owns Gecko finder interaction while keeping [FindBarContent] state/callback driven. */
+/** Matches Android Components' FindInPageBar zero-based -> human-readable result conversion. */
+internal fun androidComponentsFindPosition(result: FindResultState): Pair<Int, Int> {
+    val current = if (result.numberOfMatches > 0) {
+        result.activeMatchOrdinal + 1
+    } else {
+        result.activeMatchOrdinal
+    }
+    return current to result.numberOfMatches
+}
+
+/** Owns find interaction while routing commands to the tab's current session owner. */
 @Composable
 internal fun FindInPageRoute(
-    session: GeckoSession,
+    tab: Tab,
+    browserStore: BrowserStore,
     onClose: () -> Unit,
 ) {
     // BrowserPageContent keys this route by tab id. Keep the query/results stable if crash recovery
-    // swaps the GeckoSession inside the same logical tab, matching the pre-extraction behavior.
+    // swaps the raw GeckoSession inside the same logical tab, matching the pre-extraction behavior.
     var query by remember { mutableStateOf("") }
     var current by remember { mutableIntStateOf(0) }
     var total by remember { mutableIntStateOf(0) }
     var resultsReady by remember { mutableStateOf(false) }
     val requestTracker = remember { FindRequestTracker() }
-    val activeSession by rememberUpdatedState(session)
+    val browserStoreState by browserStore.stateFlow.collectAsStateWithLifecycle()
+    val commandTarget = browserCommandTargetForTab(tab, browserStore)
+    val activeTarget by rememberUpdatedState(commandTarget)
+    val linkedFindResults = browserStoreState.tabs
+        .firstOrNull { it.id == tab.id.toString() }
+        ?.content
+        ?.findResults
+        .orEmpty()
 
-    val find: (Boolean) -> Unit = { backward ->
+    val rawFind: (GeckoSession, Boolean) -> Unit = { session, backward ->
         if (query.isBlank()) {
             requestTracker.invalidate()
             session.finder.clear()
@@ -89,9 +114,10 @@ internal fun FindInPageRoute(
                 requestedQuery,
                 if (backward) GeckoSession.FINDER_FIND_BACKWARDS else GeckoSession.FINDER_FIND_FORWARD,
             ).accept { result ->
+                val currentRawSession = (activeTarget as? BrowserCommandTarget.Raw)?.session
                 if (
                     requestTracker.isCurrent(requestRevision) &&
-                    activeSession === requestedSession &&
+                    currentRawSession === requestedSession &&
                     query == requestedQuery
                 ) {
                     current = result?.current ?: 0
@@ -102,9 +128,53 @@ internal fun FindInPageRoute(
         }
     }
 
-    LaunchedEffect(query, session) {
+    LaunchedEffect(query, commandTarget) {
         if (query.isNotBlank()) delay(70)
-        find(false)
+        when (val target = activeTarget) {
+            is BrowserCommandTarget.Raw -> rawFind(target.session, false)
+            is BrowserCommandTarget.Linked -> {
+                requestTracker.invalidate()
+                if (query.isBlank()) {
+                    target.session.clearFindMatches()
+                    current = 0
+                    total = 0
+                    resultsReady = false
+                } else {
+                    target.session.findAll(query)
+                }
+            }
+            null -> {
+                requestTracker.invalidate()
+                current = 0
+                total = 0
+                resultsReady = false
+            }
+        }
+    }
+
+    LaunchedEffect(commandTarget, linkedFindResults) {
+        if (commandTarget !is BrowserCommandTarget.Linked || query.isBlank()) return@LaunchedEffect
+        val result = linkedFindResults.lastOrNull()
+        if (result == null) {
+            current = 0
+            total = 0
+            resultsReady = false
+        } else {
+            val position = androidComponentsFindPosition(result)
+            current = position.first
+            total = position.second
+            resultsReady = true
+        }
+    }
+
+    val stepFind: (Boolean) -> Unit = { forward ->
+        if (query.isNotBlank()) {
+            when (val target = browserCommandTargetForTab(tab, browserStore)) {
+                is BrowserCommandTarget.Raw -> rawFind(target.session, backward = !forward)
+                is BrowserCommandTarget.Linked -> target.session.findNext(forward)
+                null -> Unit
+            }
+        }
     }
 
     FindBarContent(
@@ -121,11 +191,11 @@ internal fun FindInPageRoute(
             total = 0
             resultsReady = false
         },
-        onPrevious = { find(true) },
-        onNext = { find(false) },
+        onPrevious = { stepFind(false) },
+        onNext = { stepFind(true) },
         onClose = {
             requestTracker.invalidate()
-            session.finder.clear()
+            clearBrowserFindMatches(tab, browserStore)
             onClose()
         },
     )
