@@ -13,8 +13,16 @@ internal enum class RawSessionOwnership {
     Relinquished,
 }
 
-internal val RawSessionOwnership.mirrorsRawContent: Boolean
+internal val RawSessionOwnership.allowsRawSessionMutation: Boolean
     get() = this == RawSessionOwnership.Owned
+
+internal val RawSessionOwnership.mirrorsRawContent: Boolean
+    get() = allowsRawSessionMutation
+
+internal fun <T : Any> RawSessionOwnership.ownsRawSession(
+    actualSession: T,
+    candidateSession: T,
+): Boolean = allowsRawSessionMutation && actualSession === candidateSession
 
 /**
  * Validates the irreversible raw-session ownership boundary without depending on GeckoView in JVM

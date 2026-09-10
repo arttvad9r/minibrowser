@@ -8,9 +8,36 @@ import kotlin.test.assertTrue
 
 class RawSessionOwnershipTest {
     @Test
-    fun ownedStateMirrorsRawContentUntilRelinquished() {
+    fun ownedStateAllowsRawMutationAndMirroringUntilRelinquished() {
+        assertTrue(RawSessionOwnership.Owned.allowsRawSessionMutation)
         assertTrue(RawSessionOwnership.Owned.mirrorsRawContent)
+        assertFalse(RawSessionOwnership.Relinquished.allowsRawSessionMutation)
         assertFalse(RawSessionOwnership.Relinquished.mirrorsRawContent)
+    }
+
+    @Test
+    fun rawMutationAuthorityAlsoRequiresExactSessionIdentity() {
+        val currentSession = Any()
+        val otherSession = Any()
+
+        assertTrue(
+            RawSessionOwnership.Owned.ownsRawSession(
+                actualSession = currentSession,
+                candidateSession = currentSession,
+            ),
+        )
+        assertFalse(
+            RawSessionOwnership.Owned.ownsRawSession(
+                actualSession = currentSession,
+                candidateSession = otherSession,
+            ),
+        )
+        assertFalse(
+            RawSessionOwnership.Relinquished.ownsRawSession(
+                actualSession = currentSession,
+                candidateSession = currentSession,
+            ),
+        )
     }
 
     @Test
