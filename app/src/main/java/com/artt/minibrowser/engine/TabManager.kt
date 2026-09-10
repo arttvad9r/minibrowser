@@ -348,8 +348,21 @@ internal fun snapshotPersistedState(selectedId: Long?, tabs: List<PersistTabCand
     },
 )
 
-class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
-    var session: GeckoSession by mutableStateOf(session)
+class Tab private constructor(
+    initialSession: GeckoSession?,
+    val id: Long,
+    val isPrivate: Boolean,
+    initialRawSessionOwnership: RawSessionOwnership,
+) {
+    constructor(session: GeckoSession, id: Long, isPrivate: Boolean) :
+        this(session, id, isPrivate, RawSessionOwnership.Owned)
+
+    private var rawSession: GeckoSession? by mutableStateOf(initialSession)
+    var session: GeckoSession
+        get() = checkNotNull(rawSession) { "Tab $id has no raw GeckoSession" }
+        set(value) {
+            rawSession = value
+        }
     var url by mutableStateOf("")
     var title by mutableStateOf("")
     var progress by mutableFloatStateOf(-1f)
@@ -359,7 +372,7 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var fullscreen by mutableStateOf(false)
     var securityState by mutableStateOf(SecurityState.Unknown)
     var loadError by mutableStateOf<PageLoadError?>(null)
-    internal var rawSessionOwnership by mutableStateOf(RawSessionOwnership.Owned)
+    internal var rawSessionOwnership by mutableStateOf(initialRawSessionOwnership)
         private set
     internal var mediaPlaybackState by mutableStateOf(TabMediaPlaybackState())
     internal var rawMediaSessionDelegate: AndroidComponentsRawMediaSessionDelegate? = null
@@ -374,21 +387,39 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     internal var historyTitleUrl: String? = null
     internal var lastAccess = System.currentTimeMillis()
 
-    internal val hasRawSessionAuthority: Boolean
-        get() = rawSessionOwnership.allowsRawSessionMutation
+    internal val rawSessionOrNull: GeckoSession?
+        get() = rawSession
 
-    internal fun ownsRawSession(candidateSession: GeckoSession): Boolean =
-        rawSessionOwnership.ownsRawSession(
-            actualSession = session,
+    internal val hasRawSessionAuthority: Boolean
+        get() = rawSession != null && rawSessionOwnership.allowsRawSessionMutation
+
+    internal fun ownsRawSession(candidateSession: GeckoSession): Boolean {
+        val actualSession = rawSession ?: return false
+        return rawSessionOwnership.ownsRawSession(
+            actualSession = actualSession,
             candidateSession = candidateSession,
         )
+    }
 
     internal fun relinquishRawSessionOwnership(expectedSession: GeckoSession) {
+        val actualSession = checkNotNull(rawSession) {
+            "Cannot relinquish a tab without a raw GeckoSession"
+        }
         rawSessionOwnership = rawSessionOwnershipAfterRelinquish(
             current = rawSessionOwnership,
-            actualSession = session,
+            actualSession = actualSession,
             expectedSession = expectedSession,
         )
+    }
+
+    internal companion object {
+        fun androidComponentsOwned(id: Long, isPrivate: Boolean = false): Tab =
+            Tab(
+                initialSession = null,
+                id = id,
+                isPrivate = isPrivate,
+                initialRawSessionOwnership = RawSessionOwnership.Relinquished,
+            )
     }
 }
 
