@@ -12,8 +12,9 @@ import org.mozilla.geckoview.WebResponse
  * would otherwise create BrowserStore-only tabs during this transitional ownership phase. Permission
  * callbacks likewise stay on MiniBrowser's existing policy/UI until an equivalent BrowserStore
  * permission feature is introduced. Downloads keep ownership of Gecko's authenticated WebResponse
- * stream instead of emitting an unconsumed A-C external-resource event. Linked-media context menus
- * remain here because A-C 154 drops the wrapping link URI for audio/video hit results.
+ * stream instead of emitting an unconsumed A-C external-resource event. New-window requests stay on
+ * TabManager's structural path so stock A-C cannot create an untracked EngineSession. Linked-media
+ * context menus remain here because A-C 154 drops the wrapping link URI for audio/video hit results.
  */
 internal interface AndroidComponentsGeckoCompatibilityHandler {
     /** Resolves the current Activity-scoped raw-compatible prompt owner, or null between hosts. */
@@ -43,6 +44,12 @@ internal interface AndroidComponentsGeckoCompatibilityHandler {
         session: GeckoSession,
         response: WebResponse,
     )
+
+    /** Returns a structurally-owned popup session, or null to fail the web-content request closed. */
+    fun onNewSession(
+        session: GeckoSession,
+        uri: String,
+    ): GeckoResult<GeckoSession>? = null
 
     /** Returns true when the raw-compatible context menu consumed the event. */
     fun onLinkedMediaContextMenu(
@@ -177,6 +184,20 @@ internal class AndroidComponentsPermissionCompatibilityDelegate(
         audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     ) = compatibility.onMediaPermissionRequest(session, uri, video, audio, callback)
+}
+
+/**
+ * Prevents stock GeckoEngineSession.onNewSession() from creating an EngineSession outside
+ * TabManager's structural ownership during the transitional live-transfer phase.
+ */
+internal class AndroidComponentsNewSessionCompatibilityDelegate(
+    private val delegate: GeckoSession.NavigationDelegate,
+    private val compatibility: AndroidComponentsGeckoCompatibilityHandler,
+) : GeckoSession.NavigationDelegate by delegate {
+    override fun onNewSession(
+        session: GeckoSession,
+        uri: String,
+    ): GeckoResult<GeckoSession>? = compatibility.onNewSession(session, uri)
 }
 
 /**

@@ -52,6 +52,13 @@ internal interface AndroidComponentsGeckoCompatibilityHost {
         response: WebResponse,
     ): Boolean
 
+    /** Returns a new TabManager-owned popup session, or null when the request must fail closed. */
+    fun onNewSession(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        uri: String,
+    ): GeckoResult<GeckoSession>? = null
+
     fun onLinkedMediaContextMenu(
         context: AndroidComponentsGeckoSessionContext,
         session: GeckoSession,
@@ -126,6 +133,11 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
                 }
             }
 
+            override fun onNewSession(
+                session: GeckoSession,
+                uri: String,
+            ): GeckoResult<GeckoSession>? = current?.onNewSession(context, session, uri)
+
             override fun onLinkedMediaContextMenu(
                 session: GeckoSession,
                 element: GeckoSession.ContentDelegate.ContextElement,
@@ -152,6 +164,11 @@ internal fun installAndroidComponentsGeckoCompatibilityDelegates(
     session.permissionDelegate?.let { delegate ->
         if (delegate !is AndroidComponentsPermissionCompatibilityDelegate) {
             session.permissionDelegate = AndroidComponentsPermissionCompatibilityDelegate(delegate, compatibility)
+        }
+    }
+    session.navigationDelegate?.let { delegate ->
+        if (delegate !is AndroidComponentsNewSessionCompatibilityDelegate) {
+            session.navigationDelegate = AndroidComponentsNewSessionCompatibilityDelegate(delegate, compatibility)
         }
     }
     session.contentDelegate?.let { delegate ->

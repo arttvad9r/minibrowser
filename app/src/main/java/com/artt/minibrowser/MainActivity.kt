@@ -207,6 +207,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                     }
                 },
                 openBackgroundTab = ::openBackgroundTab,
+                openWindowSession = tabManager::newWindowSession,
             ),
         )
     }

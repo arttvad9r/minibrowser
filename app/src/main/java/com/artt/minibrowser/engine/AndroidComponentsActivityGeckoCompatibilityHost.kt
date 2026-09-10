@@ -19,6 +19,7 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
     pickFiles: ((Int, Array<String>, (Array<Uri>) -> Unit) -> Unit)?,
     openTab: (String, Boolean) -> Unit,
     openBackgroundTab: (String, Boolean) -> Unit,
+    private val openWindowSession: (Boolean) -> GeckoSession,
 ) : AndroidComponentsGeckoCompatibilityHost {
     private val promptController by lazy(LazyThreadSafetyMode.NONE) {
         GeckoPromptController(activity, pickFiles)
@@ -83,6 +84,17 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         // This intentionally matches the raw path, where downloads are not selected-tab gated.
         downloadController.handle(response, context.privateMode)
         return true
+    }
+
+    override fun onNewSession(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+        uri: String,
+    ): GeckoResult<GeckoSession>? {
+        if (!canShowUi() || !isAllowedPopupTarget(uri)) return null
+        // Gecko itself loads uri into the newly-created session after this callback returns. Use the
+        // raw-compatible factory rather than newTab(uri) to avoid issuing a duplicate navigation.
+        return GeckoResult.fromValue(openWindowSession(context.privateMode))
     }
 
     override fun onLinkedMediaContextMenu(
