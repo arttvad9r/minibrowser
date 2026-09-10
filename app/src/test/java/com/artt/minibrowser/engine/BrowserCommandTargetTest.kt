@@ -23,13 +23,12 @@ class BrowserCommandTargetTest {
     }
 
     @Test
-    fun relinquishedTabUsesExactLinkedEngineSession() {
-        val rawSession = Any()
+    fun relinquishedTabUsesExactLinkedEngineSessionWithoutRawSession() {
         val linkedEngineSession = Any()
 
         val target = resolveBrowserCommandTarget(
             ownership = RawSessionOwnership.Relinquished,
-            rawSession = rawSession,
+            rawSession = null as Any?,
             linkedEngineSession = linkedEngineSession,
         )
 
@@ -39,14 +38,25 @@ class BrowserCommandTargetTest {
     }
 
     @Test
-    fun relinquishedTabNeverFallsBackToRawSessionWhileLinkIsMissing() {
+    fun relinquishedTabNeverFallsBackWhenBothSessionsAreMissing() {
         val target = resolveBrowserCommandTarget(
             ownership = RawSessionOwnership.Relinquished,
-            rawSession = Any(),
+            rawSession = null as Any?,
             linkedEngineSession = null as Any?,
         )
 
         assertNull(target)
+    }
+
+    @Test
+    fun ownedTabRequiresRawSession() {
+        assertFailsWith<IllegalStateException> {
+            resolveBrowserCommandTarget(
+                ownership = RawSessionOwnership.Owned,
+                rawSession = null as Any?,
+                linkedEngineSession = null as Any?,
+            )
+        }
     }
 
     @Test
