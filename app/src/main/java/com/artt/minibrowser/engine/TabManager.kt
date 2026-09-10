@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
+import androidx.annotation.MainThread
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -433,7 +434,11 @@ class TabManager(
     private val lifecycleOwner = context as? LifecycleOwner
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onDestroy(owner: LifecycleOwner) {
-            close()
+            if ((context as? Activity)?.isChangingConfigurations == true) {
+                TabManagerRecreationHandoffRegistry.publish(storeDir, detachForRecreation())
+            } else {
+                close()
+            }
         }
     }
     val tabs get() = _tabs
@@ -456,7 +461,16 @@ class TabManager(
                 }.onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
             }
         }
-        restore()
+        val recreationHandoff = TabManagerRecreationHandoffRegistry.consume(storeDir)
+        if (recreationHandoff != null) {
+            // MainActivity always preloads TabStore before constructing TabManager. Drain that one-shot
+            // snapshot even though exact in-process session identity wins for a configuration change;
+            // otherwise a later process-local restore could consume stale pre-rotation metadata.
+            TabStore.loadState(storeDir)
+            adoptRecreationHandoff(recreationHandoff)
+        } else {
+            restore()
+        }
     }
 
     fun newTab(url: String?, private: Boolean = false): Tab {
@@ -775,6 +789,30 @@ class TabManager(
         requestPersist(immediate = false)
     }
 
+    /**
+     * Stops this Activity-owned manager without closing any live tab session and returns exact ownership
+     * objects for the replacement Activity. Raw Activity-bound delegates are removed so the handoff cannot
+     * retain the destroyed host; the engine-only media delegate stays installed to preserve PiP/media state.
+     */
+    @MainThread
+    internal fun detachForRecreation(): TabManagerRecreationHandoff {
+        check(!closed) { "TabManager is already closed" }
+        val finalSnapshot = capturePersistenceSnapshot()
+        val finalRevision = TabStore.nextRevision(storeDir)
+        closed = true
+        persistJob.cancel()
+        runCatching {
+            TabStore.saveStateVersioned(storeDir, serializePersistenceSnapshot(finalSnapshot), finalRevision)
+        }.onFailure { Log.e("MinibrowserTabs", "Failed to persist recreation tab metadata", it) }
+        lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
+        _tabs.value.filter { it.hasRawSessionAuthority }.forEach(::detachRawActivityDelegatesForRecreation)
+        return TabManagerRecreationHandoff(
+            tabs = _tabs.value.toList(),
+            selectedId = currentId.value,
+            sequence = seq,
+        )
+    }
+
     fun close() {
         if (closed) return
         val finalSnapshot = capturePersistenceSnapshot()
@@ -856,7 +894,39 @@ class TabManager(
         }
     }
 
-    private fun attachDelegates(tab: Tab) {
+    private fun adoptRecreationHandoff(handoff: TabManagerRecreationHandoff) {
+        val ids = handoff.tabs.map { it.id }
+        check(ids.size == ids.toSet().size) { "Recreation handoff contains duplicate tab IDs" }
+        check(
+            (handoff.tabs.isEmpty() && handoff.selectedId == null) ||
+                (handoff.tabs.isNotEmpty() && handoff.selectedId in ids),
+        ) { "Recreation handoff selection does not belong to its tab set" }
+
+        seq = maxOf(handoff.sequence, ids.maxOrNull() ?: 0L)
+        _tabs.value = handoff.tabs
+        currentId.value = handoff.selectedId
+        handoff.tabs.filter { it.hasRawSessionAuthority }.forEach { tab ->
+            attachDelegates(tab, preserveRawMediaSessionDelegate = true)
+        }
+        if (handoff.tabs.isEmpty()) {
+            newTab(null)
+        }
+    }
+
+    private fun detachRawActivityDelegatesForRecreation(tab: Tab) {
+        if (!tab.hasRawSessionAuthority) return
+        tab.session.progressDelegate = null
+        tab.session.navigationDelegate = null
+        tab.session.contentDelegate = null
+        tab.session.historyDelegate = null
+        tab.session.promptDelegate = null
+        tab.session.permissionDelegate = null
+    }
+
+    private fun attachDelegates(
+        tab: Tab,
+        preserveRawMediaSessionDelegate: Boolean = false,
+    ) {
         check(tab.hasRawSessionAuthority) { "Raw delegates cannot be attached after ownership relinquish" }
         tab.session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
@@ -1036,19 +1106,27 @@ class TabManager(
             }
         }
 
-        val mediaOwnerSession = tab.session
-        val rawMediaSessionDelegate = AndroidComponentsRawMediaSessionDelegate(
-            ownerSession = mediaOwnerSession,
-            stillOwnsSession = { tab.ownsRawSession(mediaOwnerSession) },
-            onPlaybackSnapshotChanged = { state ->
-                if (tab.ownsRawSession(mediaOwnerSession)) {
-                    tab.mediaPlaybackState = state
-                }
-            },
-        )
-        tab.rawMediaSessionDelegate = rawMediaSessionDelegate
-        tab.mediaPlaybackState = rawMediaSessionDelegate.playbackSnapshot
-        tab.session.setMediaSessionDelegate(rawMediaSessionDelegate)
+        val retainedRawMediaSessionDelegate =
+            tab.rawMediaSessionDelegate.takeIf { preserveRawMediaSessionDelegate }
+        if (retainedRawMediaSessionDelegate != null) {
+            // This delegate captures only the exact Tab/GeckoSession ownership pair, not Activity UI.
+            // Keep its media controller/playback/fullscreen snapshot intact across configuration change.
+            tab.session.setMediaSessionDelegate(retainedRawMediaSessionDelegate)
+        } else {
+            val mediaOwnerSession = tab.session
+            val rawMediaSessionDelegate = AndroidComponentsRawMediaSessionDelegate(
+                ownerSession = mediaOwnerSession,
+                stillOwnsSession = { tab.ownsRawSession(mediaOwnerSession) },
+                onPlaybackSnapshotChanged = { state ->
+                    if (tab.ownsRawSession(mediaOwnerSession)) {
+                        tab.mediaPlaybackState = state
+                    }
+                },
+            )
+            tab.rawMediaSessionDelegate = rawMediaSessionDelegate
+            tab.mediaPlaybackState = rawMediaSessionDelegate.playbackSnapshot
+            tab.session.setMediaSessionDelegate(rawMediaSessionDelegate)
+        }
 
         tab.session.historyDelegate = object : GeckoSession.HistoryDelegate {
             override fun onVisited(
