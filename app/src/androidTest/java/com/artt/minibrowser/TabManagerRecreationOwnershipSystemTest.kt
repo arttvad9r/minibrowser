@@ -141,7 +141,7 @@ class TabManagerRecreationOwnershipSystemTest {
         var oldManager: TabManager? = null
         var replacement: TabManager? = null
         lateinit var transferredTab: Tab
-        lateinit var rawSession: GeckoSession
+        var rawSession: GeckoSession? = null
         var linkedEngineSession: Any? = null
 
         TabStore.saveState(
@@ -171,7 +171,8 @@ class TabManagerRecreationOwnershipSystemTest {
                 val manager = TabManager(app.runtime, storeDir, app)
                 oldManager = manager
                 transferredTab = checkNotNull(manager.current())
-                rawSession = transferredTab.session
+                val suppliedRawSession = transferredTab.session
+                rawSession = suppliedRawSession
                 val engineSession = app.transferExistingTabToAndroidComponents(manager, transferredTab)
                 linkedEngineSession = engineSession
 
@@ -181,7 +182,7 @@ class TabManagerRecreationOwnershipSystemTest {
                     engineSession,
                     store.state.tabs.single { it.id == sessionId }.engineState.engineSession,
                 )
-                assertTrue("Underlying GeckoSession stays open after transfer", rawSession.isOpen)
+                assertTrue("Underlying GeckoSession stays open after transfer", suppliedRawSession.isOpen)
 
                 val handoff = manager.detachForRecreation()
                 TabManagerRecreationHandoffRegistry.publish(storeDir, handoff)
@@ -193,16 +194,17 @@ class TabManagerRecreationOwnershipSystemTest {
                 val adopted = TabManager(app.runtime, storeDir, app)
                 replacement = adopted
                 val storeTab = app.browserStore.state.tabs.single { it.id == sessionId }
+                val suppliedRawSession = checkNotNull(rawSession)
 
                 assertSame("Relinquished structural Tab is adopted by identity", transferredTab, adopted.current())
                 assertEquals(RawSessionOwnership.Relinquished, transferredTab.rawSessionOwnership)
-                assertSame("Underlying supplied GeckoSession identity is unchanged", rawSession, transferredTab.session)
+                assertSame("Underlying supplied GeckoSession identity is unchanged", suppliedRawSession, transferredTab.session)
                 assertSame(
                     "App-scoped BrowserStore keeps the same linked EngineSession owner",
                     linkedEngineSession,
                     storeTab.engineState.engineSession,
                 )
-                assertTrue("Recreation does not close the A-C-owned GeckoSession", rawSession.isOpen)
+                assertTrue("Recreation does not close the A-C-owned GeckoSession", suppliedRawSession.isOpen)
             }
         } finally {
             instrumentation.runOnMainSync {
@@ -216,17 +218,17 @@ class TabManagerRecreationOwnershipSystemTest {
                 TabManagerRecreationHandoffRegistry.clearForTest(storeDir)
             }
 
-            if (::rawSession.isInitialized) {
+            rawSession?.let { suppliedRawSession ->
                 val deadline = SystemClock.uptimeMillis() + CLOSE_TIMEOUT_MS
                 while (
                     SystemClock.uptimeMillis() < deadline &&
-                    isSessionOpenOnMainThread(instrumentation, rawSession)
+                    isSessionOpenOnMainThread(instrumentation, suppliedRawSession)
                 ) {
                     SystemClock.sleep(POLL_INTERVAL_MS)
                 }
                 assertFalse(
                     "BrowserStore remains the close owner after recreation",
-                    isSessionOpenOnMainThread(instrumentation, rawSession),
+                    isSessionOpenOnMainThread(instrumentation, suppliedRawSession),
                 )
             }
             storeDir.deleteRecursively()
