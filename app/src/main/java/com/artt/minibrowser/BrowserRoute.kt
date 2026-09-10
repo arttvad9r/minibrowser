@@ -59,8 +59,10 @@ import com.artt.minibrowser.engine.SecurityState
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.buildLoadUri
 import com.artt.minibrowser.engine.buildTranslateUri
+import com.artt.minibrowser.engine.clearBrowserFindMatches
 import com.artt.minibrowser.engine.effectiveUiPageLoadError
 import com.artt.minibrowser.engine.effectiveUiSecurityState
+import com.artt.minibrowser.engine.exitBrowserFullscreen
 import com.artt.minibrowser.engine.goBrowserBack
 import com.artt.minibrowser.engine.goBrowserForward
 import com.artt.minibrowser.engine.loadBrowserUrl
@@ -148,7 +150,6 @@ internal fun BrowserRoute(
         .firstOrNull { it.id == currentId?.toString() }
         ?.content
     val currentUiCompatibility = currentId?.toString()?.let(uiCompatibilitySnapshots::get)
-    val currentSession = currentTab?.session
     val currentUrl = currentStoreContent?.url ?: currentTab?.url.orEmpty()
     val currentTitle = currentStoreContent?.title ?: currentTab?.title.orEmpty()
     val currentIsPrivate = currentStoreContent?.private ?: (currentTab?.isPrivate == true)
@@ -185,9 +186,11 @@ internal fun BrowserRoute(
         onGoBack = {
             currentTab?.let { tab -> goBrowserBack(tab, browserStore) }
         },
-        onExitFullscreen = { currentSession?.exitFullScreen() },
+        onExitFullscreen = {
+            currentTab?.let { tab -> exitBrowserFullscreen(tab, browserStore) }
+        },
         onCloseFind = {
-            currentSession?.finder?.clear()
+            currentTab?.let { tab -> clearBrowserFindMatches(tab, browserStore) }
             browserViewModel.showFind(false)
         },
     )
@@ -415,7 +418,7 @@ internal fun BrowserRoute(
                     findContent = if (currentTab != null) {
                         {
                             key(currentTab.id) {
-                                FindInPageRoute(currentTab.session, pageActions.onCloseFind)
+                                FindInPageRoute(currentTab, browserStore, pageActions.onCloseFind)
                             }
                         }
                     } else {
