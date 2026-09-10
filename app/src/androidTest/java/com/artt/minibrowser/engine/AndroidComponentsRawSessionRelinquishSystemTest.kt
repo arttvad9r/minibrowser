@@ -1,6 +1,7 @@
 package com.artt.minibrowser.engine
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -14,35 +15,39 @@ import org.mozilla.geckoview.GeckoSessionSettings
 class AndroidComponentsRawSessionRelinquishSystemTest {
     @Test
     fun capturesUiStateBeforeIrreversiblyRelinquishingExactRawSession() {
-        val rawSession = newRawSession()
-        val tab = Tab(rawSession, id = 42L, isPrivate = false).apply {
-            securityState = SecurityState.Exception
-            loadError = PageLoadError.Network
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val rawSession = newRawSession()
+            val tab = Tab(rawSession, id = 42L, isPrivate = false).apply {
+                securityState = SecurityState.Exception
+                loadError = PageLoadError.Network
+            }
+
+            val handoff = tab.captureAndroidComponentsHandoffAndRelinquish(rawSession)
+
+            assertSame(rawSession, handoff.rawSession)
+            assertNull(handoff.mediaSessionHandoff)
+            assertEquals(SecurityState.Exception, handoff.uiCompatibilityHandoff.securityState)
+            assertEquals(PageLoadError.Network, handoff.uiCompatibilityHandoff.pageLoadError)
+            assertEquals(RawSessionOwnership.Relinquished, tab.rawSessionOwnership)
         }
-
-        val handoff = tab.captureAndroidComponentsHandoffAndRelinquish(rawSession)
-
-        assertSame(rawSession, handoff.rawSession)
-        assertNull(handoff.mediaSessionHandoff)
-        assertEquals(SecurityState.Exception, handoff.uiCompatibilityHandoff.securityState)
-        assertEquals(PageLoadError.Network, handoff.uiCompatibilityHandoff.pageLoadError)
-        assertEquals(RawSessionOwnership.Relinquished, tab.rawSessionOwnership)
     }
 
     @Test
     fun differentSessionIdentityCannotRelinquishTab() {
-        val rawSession = newRawSession()
-        val otherSession = newRawSession()
-        val tab = Tab(rawSession, id = 43L, isPrivate = false)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val rawSession = newRawSession()
+            val otherSession = newRawSession()
+            val tab = Tab(rawSession, id = 43L, isPrivate = false)
 
-        try {
-            tab.captureAndroidComponentsHandoffAndRelinquish(otherSession)
-            fail("Different GeckoSession identity must not relinquish raw ownership")
-        } catch (_: IllegalStateException) {
-            // Expected.
+            try {
+                tab.captureAndroidComponentsHandoffAndRelinquish(otherSession)
+                fail("Different GeckoSession identity must not relinquish raw ownership")
+            } catch (_: IllegalStateException) {
+                // Expected.
+            }
+
+            assertEquals(RawSessionOwnership.Owned, tab.rawSessionOwnership)
         }
-
-        assertEquals(RawSessionOwnership.Owned, tab.rawSessionOwnership)
     }
 
     private fun newRawSession(): GeckoSession = GeckoSession(
