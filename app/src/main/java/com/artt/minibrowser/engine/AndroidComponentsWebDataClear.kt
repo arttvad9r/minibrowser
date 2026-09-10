@@ -50,7 +50,7 @@ internal fun closeAndroidComponentsOwnedTabsBeforeWebDataClear(
     val relinquishedTabs = tabsBeforeClear.filterNot { it.hasRawSessionAuthority }
     val relinquishedTabIds = relinquishedTabs.mapTo(mutableSetOf()) { it.id.toString() }
     val openRelinquishedTabIds = relinquishedTabs
-        .filter { it.session.isOpen }
+        .filter { it.rawSessionOrNull?.isOpen == true }
         .mapTo(mutableSetOf()) { it.id.toString() }
     val linkedStoreTabs = store.state.tabs.filter { it.engineState.engineSession != null }
     val linkedStoreTabIds = linkedStoreTabs.mapTo(mutableSetOf()) { it.id }
@@ -76,8 +76,8 @@ internal fun closeAndroidComponentsOwnedTabsBeforeWebDataClear(
         engineSession.close()
     }
 
-    check(relinquishedTabs.none { it.session.isOpen }) {
-        "Android Components EngineSessions must close before Gecko storage data is cleared"
+    check(relinquishedTabs.none { it.rawSessionOrNull?.isOpen == true }) {
+        "Relinquished raw GeckoSessions must close before Gecko storage data is cleared"
     }
 
     if (storeTabIdsToRemove.isNotEmpty()) {

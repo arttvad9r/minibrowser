@@ -16,7 +16,7 @@ internal fun browserCommandTargetForTab(
         ?.engineSession
     return resolveBrowserCommandTarget(
         ownership = tab.rawSessionOwnership,
-        rawSession = tab.session,
+        rawSession = tab.rawSessionOrNull,
         linkedEngineSession = linkedEngineSession,
     )
 }
