@@ -150,10 +150,12 @@ class BrowserFinalActivityDestroyOwnershipSystemTest {
             // SuspendMiddleware owns the already-unlinked EngineSession close. Let its main-thread
             // coroutine complete rather than taking close authority back through the stale raw ref.
             instrumentation.waitForIdleSync()
-            assertFalse(
-                "SuspendMiddleware eventually closes the underlying relinquished GeckoSession",
-                checkNotNull(rawSession).isOpen,
-            )
+            instrumentation.runOnMainSync {
+                assertFalse(
+                    "SuspendMiddleware eventually closes the underlying relinquished GeckoSession",
+                    checkNotNull(rawSession).isOpen,
+                )
+            }
         } finally {
             instrumentation.runOnMainSync {
                 val store = app.browserStore
