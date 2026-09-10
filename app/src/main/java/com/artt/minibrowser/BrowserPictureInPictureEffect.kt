@@ -1,102 +1,71 @@
 package com.artt.minibrowser
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.artt.minibrowser.browser.BrowserPictureInPictureController
-import com.artt.minibrowser.browser.BrowserPictureInPictureMediaState
+import com.artt.minibrowser.browser.BrowserPictureInPicturePlaybackState
+import com.artt.minibrowser.browser.pictureInPictureMediaStateForTab
+import com.artt.minibrowser.engine.RawSessionOwnership
 import com.artt.minibrowser.engine.TabManager
-import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.MediaSession
+import mozilla.components.browser.state.store.BrowserStore
+import mozilla.components.concept.engine.mediasession.MediaSession
+
+internal fun pictureInPicturePlaybackStateForOwnership(
+    ownership: RawSessionOwnership?,
+    rawPlayback: BrowserPictureInPicturePlaybackState,
+    linkedPlayback: BrowserPictureInPicturePlaybackState,
+): BrowserPictureInPicturePlaybackState = when (ownership) {
+    RawSessionOwnership.Owned -> rawPlayback
+    RawSessionOwnership.Relinquished -> linkedPlayback
+    null -> BrowserPictureInPicturePlaybackState()
+}
 
 /**
- * Bridges Gecko media-session callbacks into Android PiP without taking ownership of playback.
- * PiP is deliberately disabled for private tabs to preserve the app's FLAG_SECURE privacy model.
+ * Maps BrowserStore content state plus media state from the tab's current session owner into Android
+ * PiP without taking ownership of playback. PiP remains disabled for private tabs to preserve
+ * FLAG_SECURE. MiniBrowser keeps its custom platform controller so aspect ratio, source rect,
+ * seamless resize and auto-enter behavior remain unchanged across the ownership boundary.
  */
 @Composable
 internal fun BrowserPictureInPictureEffect(
     tabManager: TabManager,
+    browserStore: BrowserStore,
     controller: BrowserPictureInPictureController,
 ) {
     val tabs by tabManager.tabs.collectAsStateWithLifecycle()
     val currentId by tabManager.currentId.collectAsStateWithLifecycle()
+    val browserStoreState by browserStore.stateFlow.collectAsStateWithLifecycle()
     val currentTab = tabs.firstOrNull { it.id == currentId }
-    val session = currentTab?.session
-    val privateTab = currentTab?.isPrivate == true
-
-    var mediaState by remember(session, privateTab) {
-        mutableStateOf(BrowserPictureInPictureMediaState(privateTab = privateTab))
-    }
-
-    DisposableEffect(session, privateTab) {
-        if (session == null) {
-            controller.update(BrowserPictureInPictureMediaState(privateTab = privateTab))
-            onDispose { }
-        } else {
-            var disposed = false
-            var activeMediaSession: MediaSession? = null
-            val delegate = object : MediaSession.Delegate {
-                override fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
-                    if (disposed) return
-                    activeMediaSession = mediaSession
-                }
-
-                override fun onDeactivated(session: GeckoSession, mediaSession: MediaSession) {
-                    if (disposed || activeMediaSession !== mediaSession) return
-                    activeMediaSession = null
-                    mediaState = BrowserPictureInPictureMediaState(privateTab = privateTab)
-                }
-
-                override fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
-                    if (disposed) return
-                    activeMediaSession = mediaSession
-                    mediaState = mediaState.copy(playing = true)
-                }
-
-                override fun onPause(session: GeckoSession, mediaSession: MediaSession) {
-                    if (disposed || activeMediaSession !== mediaSession) return
-                    mediaState = mediaState.copy(playing = false)
-                }
-
-                override fun onStop(session: GeckoSession, mediaSession: MediaSession) {
-                    if (disposed || activeMediaSession !== mediaSession) return
-                    mediaState = mediaState.copy(playing = false)
-                }
-
-                override fun onFullscreen(
-                    session: GeckoSession,
-                    mediaSession: MediaSession,
-                    enabled: Boolean,
-                    meta: MediaSession.ElementMetadata?,
-                ) {
-                    if (disposed) return
-                    activeMediaSession = mediaSession
-                    val isVideo = enabled && (meta == null || meta.videoTrackCount > 0)
-                    mediaState = mediaState.copy(
-                        fullscreenVideo = isVideo,
-                        videoWidth = if (isVideo) meta?.width ?: 0L else 0L,
-                        videoHeight = if (isVideo) meta?.height ?: 0L else 0L,
-                    )
-                }
-            }
-
-            session.setMediaSessionDelegate(delegate)
-            onDispose {
-                disposed = true
-                if (session.getMediaSessionDelegate() === delegate) {
-                    session.setMediaSessionDelegate(null)
-                }
-                controller.update(BrowserPictureInPictureMediaState(privateTab = privateTab))
-            }
-        }
-    }
+    val currentStoreTab = browserStoreState.tabs
+        .firstOrNull { it.id == currentId?.toString() }
+    val currentContent = currentStoreTab?.content
+    val privateTab = currentContent?.private ?: (currentTab?.isPrivate == true)
+    val contentFullscreen = currentContent?.fullScreen ?: (currentTab?.fullscreen == true)
+    val rawMediaPlayback = currentTab?.mediaPlaybackState
+    val linkedMediaSession = currentStoreTab?.mediaSessionState
+    val mediaPlayback = pictureInPicturePlaybackStateForOwnership(
+        ownership = currentTab?.rawSessionOwnership,
+        rawPlayback = BrowserPictureInPicturePlaybackState(
+            playing = rawMediaPlayback?.playing == true,
+            videoWidth = rawMediaPlayback?.videoWidth ?: 0L,
+            videoHeight = rawMediaPlayback?.videoHeight ?: 0L,
+        ),
+        linkedPlayback = BrowserPictureInPicturePlaybackState(
+            playing = linkedMediaSession?.playbackState == MediaSession.PlaybackState.PLAYING,
+            videoWidth = linkedMediaSession?.elementMetadata?.width ?: 0L,
+            videoHeight = linkedMediaSession?.elementMetadata?.height ?: 0L,
+        ),
+    )
 
     SideEffect {
-        controller.update(mediaState)
+        controller.update(
+            pictureInPictureMediaStateForTab(
+                contentFullscreen = contentFullscreen,
+                privateTab = privateTab,
+                playback = mediaPlayback,
+            ),
+        )
     }
 }
