@@ -6,13 +6,36 @@ import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.store.BrowserStore
 
 /**
+ * Final Activity shutdown accepts both linked and already-suspended A-C-owned tabs.
+ *
+ * Unlike web-data clearing, shutdown does not need every still-open relinquished GeckoSession to be
+ * linked at this exact instant: A-C SuspendMiddleware unlinks synchronously and closes the captured
+ * EngineSession asynchronously. A relinquished structural tab must still have its BrowserStore record,
+ * while a raw-owned tab must never have a linked A-C owner.
+ */
+internal fun androidComponentsFinalActivityShutdownStoreTabIds(
+    rawOwnedTabIds: Set<String>,
+    relinquishedTabIds: Set<String>,
+    storeTabIds: Set<String>,
+    linkedStoreTabIds: Set<String>,
+): List<String> {
+    check(rawOwnedTabIds.intersect(linkedStoreTabIds).isEmpty()) {
+        "Raw-owned tabs cannot have linked Android Components EngineSessions during final Activity shutdown"
+    }
+    check(relinquishedTabIds.all(storeTabIds::contains)) {
+        "Relinquished tabs require BrowserStore records before final Activity shutdown"
+    }
+    return (linkedStoreTabIds + relinquishedTabIds).toList()
+}
+
+/**
  * Final Activity shutdown across the raw/A-C ownership boundary.
  *
  * Configuration changes use [TabManagerRecreationHandoff] instead. On a real final destroy, persist
  * the complete mixed-ownership snapshot first through TabManager, close raw-owned sessions there,
- * then deterministically unlink/close/remove every relinquished or otherwise linked A-C owner. This
- * keeps BrowserStore / EngineMiddleware as the only A-C close authority and prevents app-scoped
- * linked sessions from surviving after their Activity UI host is gone.
+ * then deterministically unlink/close every currently-linked A-C owner and remove all relinquished
+ * BrowserStore records. A-C sessions already unlinked by SuspendMiddleware retain its pending close
+ * ownership and must not be closed a second time through the stale raw GeckoSession reference.
  */
 @MainThread
 internal fun closeBrowserSessionsForFinalActivityDestroy(
@@ -25,27 +48,24 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
         .mapTo(mutableSetOf()) { it.id.toString() }
     val relinquishedTabs = tabsBeforeClose.filterNot { it.hasRawSessionAuthority }
     val relinquishedTabIds = relinquishedTabs.mapTo(mutableSetOf()) { it.id.toString() }
-    val openRelinquishedTabIds = relinquishedTabs
-        .filter { it.rawSessionOrNull?.isOpen == true }
-        .mapTo(mutableSetOf()) { it.id.toString() }
-    val linkedStoreTabs = store.state.tabs.filter { it.engineState.engineSession != null }
+    val storeTabs = store.state.tabs
+    val storeTabIds = storeTabs.mapTo(mutableSetOf()) { it.id }
+    val linkedStoreTabs = storeTabs.filter { it.engineState.engineSession != null }
     val linkedStoreTabIds = linkedStoreTabs.mapTo(mutableSetOf()) { it.id }
 
-    // Reuse the same ownership proof as web-data clearing: mixed raw+linked ownership is illegal,
-    // every still-open relinquished raw GeckoSession must have an A-C owner, while orphaned linked
-    // BrowserStore sessions are safe to close rather than leaving them alive after the Activity.
-    val storeTabIdsToRemove = androidComponentsWebDataClearStoreTabIds(
+    val storeTabIdsToRemove = androidComponentsFinalActivityShutdownStoreTabIds(
         rawOwnedTabIds = rawOwnedTabIds,
         relinquishedTabIds = relinquishedTabIds,
-        openRelinquishedTabIds = openRelinquishedTabIds,
+        storeTabIds = storeTabIds,
         linkedStoreTabIds = linkedStoreTabIds,
     )
     val storeTabIdsToRemoveSet = storeTabIdsToRemove.toSet()
     val linkedSessionsToClose = linkedStoreTabs
         .filter { it.id in storeTabIdsToRemoveSet }
         .map { tab -> tab.id to checkNotNull(tab.engineState.engineSession) }
+    val linkedRelinquishedTabIds = relinquishedTabIds.intersect(linkedStoreTabIds)
 
-    // capturePersistenceSnapshot() still sees BrowserStore-linked state here. This must happen before
+    // capturePersistenceSnapshot() still sees BrowserStore state here. This must happen before
     // unlink/removal, otherwise durable A-C EngineSessionState for relinquished tabs could be lost.
     // close() is idempotent, so lifecycle-observer ordering does not affect this boundary.
     tabManager.close()
@@ -59,8 +79,12 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
         engineSession.close()
     }
 
-    check(relinquishedTabs.none { it.rawSessionOrNull?.isOpen == true }) {
-        "Relinquished raw GeckoSessions must close before final Activity shutdown completes"
+    check(
+        relinquishedTabs.none { tab ->
+            tab.id.toString() in linkedRelinquishedTabIds && tab.rawSessionOrNull?.isOpen == true
+        },
+    ) {
+        "Linked relinquished GeckoSessions must close before final Activity shutdown completes"
     }
 
     if (storeTabIdsToRemove.isNotEmpty()) {
