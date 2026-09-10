@@ -19,6 +19,8 @@ import mozilla.components.browser.state.store.BrowserStore
 import org.mozilla.geckoview.ContentBlocking
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import java.io.File
 
 internal const val GECKO_RUNTIME_CREATE_TRACE = "GeckoRuntime.create"
@@ -46,12 +48,38 @@ class BrowserApp : Application() {
         )
     }
     private val browserStoreEngine by lazy(LazyThreadSafetyMode.NONE) {
-        AndroidComponentsSessionConfiguringEngine(engine, browserStoreSessionConfigurator)
+        AndroidComponentsSessionConfiguringEngine(
+            delegate = engine,
+            configurator = browserStoreSessionConfigurator,
+            freshGeckoSessionFactory = { privateMode, contextId ->
+                // GeckoEngine.createSession() does not expose the GeckoSession identity needed by
+                // MiniBrowser's selective compatibility delegates. Reproduce GeckoEngine's stock
+                // GeckoEngineSession construction only for BrowserStore-owned sessions; every other
+                // Engine operation still delegates to the single application-scoped GeckoEngine.
+                val rawSession = GeckoSession(
+                    GeckoSessionSettings.Builder()
+                        .usePrivateMode(privateMode)
+                        .contextId(contextId)
+                        .build(),
+                )
+                GeckoEngineSession(
+                    runtime = runtime,
+                    privateMode = privateMode,
+                    geckoSessionProvider = { rawSession },
+                ) to rawSession
+            },
+        )
     }
     internal val browserStore by lazy(LazyThreadSafetyMode.NONE) {
         BrowserStore(
             middleware = listOf(
-                androidComponentsSessionSettingsMiddleware(browserStoreSessionConfigurator),
+                androidComponentsSessionSettingsMiddleware(
+                    configurator = browserStoreSessionConfigurator,
+                    freshSessionEngine = browserStoreEngine,
+                    compatibilityRegistry = geckoCompatibilityRegistry,
+                    uiCompatibilityState = uiCompatibilityState,
+                    sessionStatePersistence = sessionStatePersistence,
+                ),
                 androidComponentsUiCompatibilityCleanupMiddleware(uiCompatibilityState),
                 androidComponentsSessionStatePersistenceCleanupMiddleware(sessionStatePersistence),
                 // Firefox installs this outside EngineMiddleware.create(). Keep linked sessions on
