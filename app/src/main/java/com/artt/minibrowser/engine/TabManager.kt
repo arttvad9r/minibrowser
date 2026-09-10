@@ -17,6 +17,7 @@ import com.artt.minibrowser.data.HistorySink
 import com.artt.minibrowser.data.PersistedBrowserState
 import com.artt.minibrowser.data.PersistedTab
 import com.artt.minibrowser.data.TabStore
+import com.artt.minibrowser.data.encodeEngineSessionStateEnvelope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +29,8 @@ import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import mozilla.components.browser.state.state.BrowserState
+import mozilla.components.concept.engine.EngineSessionState
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -239,7 +242,42 @@ internal data class PersistenceTabSnapshot(
     val isPrivate: Boolean,
     val serializedEngineSessionState: EngineSessionStateEnvelope? = null,
     val serializedEngineSessionStateUrl: String? = null,
+    val engineSessionState: EngineSessionState? = null,
+    val engineSessionStateUrl: String? = null,
+    val engineName: String? = null,
 )
+
+internal fun persistenceTabSnapshotAfterRelinquish(
+    id: Long,
+    lastAccess: Long,
+    browserState: BrowserState,
+    persistenceState: AndroidComponentsSessionStatePersistenceState,
+    engineName: String,
+): PersistenceTabSnapshot? {
+    val sessionId = id.toString()
+    val browserTab = browserState.tabs.firstOrNull { it.id == sessionId } ?: return null
+    val browserUrl = browserTab.content.url
+    val boundState = persistenceState.snapshot(sessionId)
+        ?.takeIf { it.stateUrl == browserUrl }
+
+    return PersistenceTabSnapshot(
+        id = id,
+        url = browserUrl,
+        title = browserTab.content.title,
+        desktop = browserTab.content.desktopMode,
+        lastAccess = lastAccess,
+        latestSessionState = null,
+        latestSessionStateUrl = null,
+        serializedSessionState = null,
+        serializedSessionStateUrl = null,
+        isPrivate = browserTab.content.private,
+        serializedEngineSessionState = null,
+        serializedEngineSessionStateUrl = null,
+        engineSessionState = boundState?.state,
+        engineSessionStateUrl = boundState?.stateUrl,
+        engineName = boundState?.let { engineName },
+    )
+}
 
 internal data class PersistenceSnapshot(
     val selectedId: Long?,
@@ -256,11 +294,26 @@ internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): Persis
             serializedState = it.serializedSessionState,
             serializedStateUrl = it.serializedSessionStateUrl,
         )
-        val selectedEngineState = selectEngineSessionStateForUrl(
-            tabUrl = it.url,
-            state = it.serializedEngineSessionState,
-            stateUrl = it.serializedEngineSessionStateUrl,
-        )
+        val selectedEngineState = if (it.engineSessionState != null) {
+            val encodedState = if (it.engineSessionStateUrl == it.url) {
+                encodeEngineSessionStateEnvelope(
+                    engineName = it.engineName.orEmpty(),
+                    state = it.engineSessionState,
+                )
+            } else {
+                null
+            }
+            EngineSessionStateSelection(
+                state = encodedState,
+                stateUrl = it.url.takeIf { encodedState != null },
+            )
+        } else {
+            selectEngineSessionStateForUrl(
+                tabUrl = it.url,
+                state = it.serializedEngineSessionState,
+                stateUrl = it.serializedEngineSessionStateUrl,
+            )
+        }
         PersistedTab(
             id = it.id,
             url = it.url,
@@ -744,21 +797,32 @@ class TabManager(
 
     private fun capturePersistenceSnapshot(): PersistenceSnapshot = PersistenceSnapshot(
         selectedId = currentId.value,
-        tabs = _tabs.value.map {
-            PersistenceTabSnapshot(
-                id = it.id,
-                url = it.url,
-                title = it.title,
-                desktop = it.desktop,
-                lastAccess = it.lastAccess,
-                latestSessionState = it.latestSessionState,
-                latestSessionStateUrl = it.latestSessionStateUrl,
-                serializedSessionState = it.persistedSessionState,
-                serializedSessionStateUrl = it.persistedSessionStateUrl,
-                isPrivate = it.isPrivate,
-                serializedEngineSessionState = it.persistedEngineSessionState,
-                serializedEngineSessionStateUrl = it.persistedEngineSessionStateUrl,
-            )
+        tabs = _tabs.value.mapNotNull { tab ->
+            if (tab.rawSessionOwnership == RawSessionOwnership.Relinquished) {
+                val browserApp = context.applicationContext as? BrowserApp ?: return@mapNotNull null
+                persistenceTabSnapshotAfterRelinquish(
+                    id = tab.id,
+                    lastAccess = tab.lastAccess,
+                    browserState = browserApp.browserStore.state,
+                    persistenceState = browserApp.sessionStatePersistence,
+                    engineName = browserApp.engine.name(),
+                )
+            } else {
+                PersistenceTabSnapshot(
+                    id = tab.id,
+                    url = tab.url,
+                    title = tab.title,
+                    desktop = tab.desktop,
+                    lastAccess = tab.lastAccess,
+                    latestSessionState = tab.latestSessionState,
+                    latestSessionStateUrl = tab.latestSessionStateUrl,
+                    serializedSessionState = tab.persistedSessionState,
+                    serializedSessionStateUrl = tab.persistedSessionStateUrl,
+                    isPrivate = tab.isPrivate,
+                    serializedEngineSessionState = tab.persistedEngineSessionState,
+                    serializedEngineSessionStateUrl = tab.persistedEngineSessionStateUrl,
+                )
+            }
         },
     )
 
