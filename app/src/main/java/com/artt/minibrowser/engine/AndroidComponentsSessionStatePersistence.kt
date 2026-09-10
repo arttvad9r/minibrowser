@@ -23,6 +23,11 @@ internal data class AndroidComponentsBoundEngineSessionState(
     val stateUrl: String,
 )
 
+internal fun shouldRequestAndroidComponentsSessionStatePersist(
+    isPrivate: Boolean,
+    ownership: RawSessionOwnership,
+): Boolean = !isPrivate && ownership == RawSessionOwnership.Relinquished
+
 /** App-scoped latest bound EngineSessionState for sessions that have crossed to A-C ownership. */
 internal class AndroidComponentsSessionStatePersistenceState {
     private val mutableSnapshots =
