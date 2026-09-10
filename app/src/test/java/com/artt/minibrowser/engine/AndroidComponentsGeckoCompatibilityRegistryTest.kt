@@ -110,14 +110,14 @@ class AndroidComponentsGeckoCompatibilityRegistryTest {
             },
         )
         val contentPermission = object : GeckoSession.PermissionDelegate.ContentPermission() {}
-        var contentValue: Int? = null
-        handler.onContentPermissionRequest(session, contentPermission).accept { value ->
-            contentValue = value
-        }
+        val contentResult = handler.onContentPermissionRequest(session, contentPermission)
 
         assertEquals(1, androidRejected)
         assertEquals(1, mediaRejected)
-        assertEquals(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY, contentValue)
+        assertEquals(
+            GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY),
+            contentResult,
+        )
     }
 
     private fun unusedHost() = object : AndroidComponentsGeckoCompatibilityHost {
