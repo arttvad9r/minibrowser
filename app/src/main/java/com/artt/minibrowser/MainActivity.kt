@@ -39,6 +39,7 @@ import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.clearBrowserFindMatches
 import com.artt.minibrowser.engine.clearWebDataAcrossAndroidComponentsOwnership
+import com.artt.minibrowser.engine.closeAndroidComponentsOwnedTabFromWindowRequest
 import com.artt.minibrowser.engine.exitBrowserFullscreen
 import com.artt.minibrowser.engine.goBrowserBack
 import com.artt.minibrowser.engine.loadBrowserUrl
@@ -208,6 +209,14 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                 },
                 openBackgroundTab = ::openBackgroundTab,
                 openWindowSession = tabManager::newWindowSession,
+                closeWindowTab = { sessionId ->
+                    ::tabManager.isInitialized &&
+                        closeAndroidComponentsOwnedTabFromWindowRequest(
+                            tabManager = tabManager,
+                            store = browserApp.browserStore,
+                            sessionId = sessionId,
+                        )
+                },
             ),
         )
     }

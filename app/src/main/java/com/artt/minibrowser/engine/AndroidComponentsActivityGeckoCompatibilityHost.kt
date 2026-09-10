@@ -20,6 +20,7 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
     openTab: (String, Boolean) -> Unit,
     openBackgroundTab: (String, Boolean) -> Unit,
     private val openWindowSession: (Boolean) -> GeckoSession,
+    private val closeWindowTab: (String) -> Boolean = { false },
 ) : AndroidComponentsGeckoCompatibilityHost {
     private val promptController by lazy(LazyThreadSafetyMode.NONE) {
         GeckoPromptController(activity, pickFiles)
@@ -95,6 +96,15 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         // Gecko itself loads uri into the newly-created session after this callback returns. Use the
         // raw-compatible factory rather than newTab(uri) to avoid issuing a duplicate navigation.
         return GeckoResult.fromValue(openWindowSession(context.privateMode))
+    }
+
+    override fun onCloseRequest(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+    ) {
+        // This is structural lifetime work, not UI. Resolve by immutable session identity even when
+        // the Activity is paused; a missing/stale TabManager mapping simply fails closed.
+        closeWindowTab(context.sessionId)
     }
 
     override fun onLinkedMediaContextMenu(

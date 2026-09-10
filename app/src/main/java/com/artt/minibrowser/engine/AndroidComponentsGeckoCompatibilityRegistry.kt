@@ -59,6 +59,12 @@ internal interface AndroidComponentsGeckoCompatibilityHost {
         uri: String,
     ): GeckoResult<GeckoSession>? = null
 
+    /** Consumes a close request for this immutable BrowserStore session identity. */
+    fun onCloseRequest(
+        context: AndroidComponentsGeckoSessionContext,
+        session: GeckoSession,
+    ) = Unit
+
     fun onLinkedMediaContextMenu(
         context: AndroidComponentsGeckoSessionContext,
         session: GeckoSession,
@@ -137,6 +143,12 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
                 session: GeckoSession,
                 uri: String,
             ): GeckoResult<GeckoSession>? = current?.onNewSession(context, session, uri)
+
+            override fun onCloseRequest(session: GeckoSession) {
+                // Do not fall through to GeckoEngineSession's BrowserStore WindowRequest: this
+                // transitional app has no TabsFeature consumer for it.
+                current?.onCloseRequest(context, session)
+            }
 
             override fun onLinkedMediaContextMenu(
                 session: GeckoSession,

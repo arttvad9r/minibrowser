@@ -12,9 +12,10 @@ import org.mozilla.geckoview.WebResponse
  * would otherwise create BrowserStore-only tabs during this transitional ownership phase. Permission
  * callbacks likewise stay on MiniBrowser's existing policy/UI until an equivalent BrowserStore
  * permission feature is introduced. Downloads keep ownership of Gecko's authenticated WebResponse
- * stream instead of emitting an unconsumed A-C external-resource event. New-window requests stay on
- * TabManager's structural path so stock A-C cannot create an untracked EngineSession. Linked-media
- * context menus remain here because A-C 154 drops the wrapping link URI for audio/video hit results.
+ * stream instead of emitting an unconsumed A-C external-resource event. New-window and close requests
+ * stay on TabManager's structural path so stock A-C cannot create or retain untracked window state.
+ * Linked-media context menus remain here because A-C 154 drops the wrapping link URI for audio/video
+ * hit results.
  */
 internal interface AndroidComponentsGeckoCompatibilityHandler {
     /** Resolves the current Activity-scoped raw-compatible prompt owner, or null between hosts. */
@@ -50,6 +51,9 @@ internal interface AndroidComponentsGeckoCompatibilityHandler {
         session: GeckoSession,
         uri: String,
     ): GeckoResult<GeckoSession>? = null
+
+    /** Consumes window.close without falling through to an unconsumed BrowserStore WindowRequest. */
+    fun onCloseRequest(session: GeckoSession) = Unit
 
     /** Returns true when the raw-compatible context menu consumed the event. */
     fun onLinkedMediaContextMenu(
@@ -201,8 +205,8 @@ internal class AndroidComponentsNewSessionCompatibilityDelegate(
 }
 
 /**
- * Keeps stock A-C content ownership except for the two semantics that are not yet safely consumable
- * after transfer: authenticated download responses and linked audio/video context menus.
+ * Keeps stock A-C content ownership except for semantics that are not yet safely consumable after
+ * transfer: authenticated download responses, window-close requests, and linked media context menus.
  */
 internal class AndroidComponentsContentCompatibilityDelegate(
     private val delegate: GeckoSession.ContentDelegate,
@@ -212,6 +216,12 @@ internal class AndroidComponentsContentCompatibilityDelegate(
         session: GeckoSession,
         response: WebResponse,
     ) = compatibility.onExternalResponse(session, response)
+
+    override fun onCloseRequest(session: GeckoSession) {
+        // A-C only publishes a BrowserStore WindowRequest here. MiniBrowser has no TabsFeature
+        // consumer during this ownership phase, so forwarding would silently stop window.close().
+        compatibility.onCloseRequest(session)
+    }
 
     override fun onContextMenu(
         session: GeckoSession,
