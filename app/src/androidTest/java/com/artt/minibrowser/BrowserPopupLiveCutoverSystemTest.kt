@@ -3,7 +3,9 @@ package com.artt.minibrowser
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -28,6 +30,7 @@ import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mozilla.geckoview.GeckoView
 
 @RunWith(AndroidJUnit4::class)
 class BrowserPopupLiveCutoverSystemTest {
@@ -70,6 +73,11 @@ class BrowserPopupLiveCutoverSystemTest {
                             "storeUrl=${selectedTab(app)?.content?.url}",
                         view.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_YES,
                     )
+                    val geckoView = findGeckoView(view)
+                    Log.d(
+                        "MinibrowserPopup",
+                        "live navigationDelegate=${geckoView?.session?.navigationDelegate?.javaClass?.name}",
+                    )
                 }
                 onView(isAssignableFrom(GeckoEngineView::class.java)).perform(click())
 
@@ -97,6 +105,15 @@ class BrowserPopupLiveCutoverSystemTest {
 
     private fun selectedTab(app: BrowserApp) = app.browserStore.state.let { state ->
         state.tabs.firstOrNull { it.id == state.selectedTabId }
+    }
+
+    private fun findGeckoView(root: View): GeckoView? {
+        if (root is GeckoView) return root
+        if (root !is ViewGroup) return null
+        for (index in 0 until root.childCount) {
+            findGeckoView(root.getChildAt(index))?.let { return it }
+        }
+        return null
     }
 
     private class LocalPopupServer : Closeable {
