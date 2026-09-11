@@ -2,11 +2,9 @@ package com.artt.minibrowser.engine
 
 import android.app.Application
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import java.io.InputStream
 import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.WebResponse
 import org.robolectric.annotation.Config
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -144,30 +142,6 @@ class AndroidComponentsGeckoCompatibilityRegistryTest {
         )
     }
 
-    @Test
-    fun missingActivityHostClosesExternalResponseBody() {
-        val registry = AndroidComponentsGeckoCompatibilityRegistry()
-        val handler = registry.forSession(
-            AndroidComponentsGeckoSessionContext(sessionId = "42", privateMode = true),
-        )
-        val session = GeckoSession()
-        var closed = false
-        val body = object : InputStream() {
-            override fun read(): Int = -1
-
-            override fun close() {
-                closed = true
-            }
-        }
-        val response = WebResponse.Builder("https://example.test/file.bin")
-            .body(body)
-            .build()
-
-        handler.onExternalResponse(session, response)
-
-        assertTrue(closed)
-    }
-
     private fun unusedHost(
         promptDelegate: GeckoSession.PromptDelegate? = null,
     ) = object : AndroidComponentsGeckoCompatibilityHost {
@@ -196,12 +170,6 @@ class AndroidComponentsGeckoCompatibilityRegistryTest {
             audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
             callback: GeckoSession.PermissionDelegate.MediaCallback,
         ) = error("Not used by registry lease tests")
-
-        override fun onExternalResponse(
-            context: AndroidComponentsGeckoSessionContext,
-            session: GeckoSession,
-            response: WebResponse,
-        ): Boolean = error("Not used by registry lease tests")
 
         override fun onLinkedMediaContextMenu(
             context: AndroidComponentsGeckoSessionContext,
