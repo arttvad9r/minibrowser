@@ -191,10 +191,8 @@ internal class AndroidComponentsPermissionCompatibilityDelegate(
 }
 
 /**
- * Diagnostic: preserve GeckoEngineSession's stock child-session creation so Gecko receives the
- * exact unopened EngineSession-backed GeckoSession used by Android Components for window.open().
- * The resulting WindowRequest is intentionally left for the existing BrowserStore observer here;
- * structural adoption is handled separately once this isolates the child-navigation contract.
+ * Prevents stock GeckoEngineSession.onNewSession() from creating an EngineSession outside
+ * TabManager's structural ownership during the transitional live-transfer phase.
  */
 internal class AndroidComponentsNewSessionCompatibilityDelegate(
     private val delegate: GeckoSession.NavigationDelegate,
@@ -203,7 +201,7 @@ internal class AndroidComponentsNewSessionCompatibilityDelegate(
     override fun onNewSession(
         session: GeckoSession,
         uri: String,
-    ): GeckoResult<GeckoSession>? = delegate.onNewSession(session, uri)
+    ): GeckoResult<GeckoSession>? = compatibility.onNewSession(session, uri)
 }
 
 /**
