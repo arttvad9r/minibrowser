@@ -3,11 +3,10 @@ package com.artt.minibrowser
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
-import android.view.InputDevice
-import android.view.MotionEvent
-import android.view.View
-import android.view.ViewGroup
 import androidx.test.core.app.ActivityScenario
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.data.PersistedBrowserState
@@ -20,7 +19,6 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
 import mozilla.components.browser.engine.gecko.GeckoEngineView
 import mozilla.components.browser.state.action.TabListAction
 import org.junit.Assert.assertTrue
@@ -50,11 +48,7 @@ class BrowserPictureInPicturePlaybackSystemTest {
                         server.pageReady
                     }
 
-                    val tapPoint = AtomicReference<Pair<Float, Float>>()
-                    scenario.onActivity { activity ->
-                        tapPoint.set(geckoContentCenter(activity.window.decorView))
-                    }
-                    sendTap(instrumentation, tapPoint.get())
+                    onView(isAssignableFrom(GeckoEngineView::class.java)).perform(click())
 
                     waitFor("Tap reached the Gecko media page") {
                         server.clicked
@@ -136,55 +130,6 @@ class BrowserPictureInPicturePlaybackSystemTest {
         }
         check(browserApp.browserStore.state.tabs.isEmpty()) { "BrowserStore did not reset before PiP test" }
         TabStore.saveState(File(targetContext.filesDir, "tabs"), PersistedBrowserState())
-    }
-
-    private fun geckoContentCenter(root: View): Pair<Float, Float> {
-        val engineView = findGeckoEngineView(root) ?: error("GeckoEngineView is not attached")
-        check(engineView.width > 0 && engineView.height > 0) { "GeckoEngineView has empty bounds" }
-        val location = IntArray(2)
-        engineView.getLocationOnScreen(location)
-        return location[0] + engineView.width / 2f to location[1] + engineView.height / 2f
-    }
-
-    private fun findGeckoEngineView(view: View): GeckoEngineView? {
-        if (view is GeckoEngineView) return view
-        if (view !is ViewGroup) return null
-        for (index in 0 until view.childCount) {
-            findGeckoEngineView(view.getChildAt(index))?.let { return it }
-        }
-        return null
-    }
-
-    private fun sendTap(
-        instrumentation: android.app.Instrumentation,
-        point: Pair<Float, Float>,
-    ) {
-        val downTime = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(
-            downTime,
-            downTime,
-            MotionEvent.ACTION_DOWN,
-            point.first,
-            point.second,
-            0,
-        ).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
-        val up = MotionEvent.obtain(
-            downTime,
-            downTime + TAP_DURATION_MS,
-            MotionEvent.ACTION_UP,
-            point.first,
-            point.second,
-            0,
-        ).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
-        try {
-            instrumentation.sendPointerSync(down)
-            SystemClock.sleep(TAP_DURATION_MS)
-            instrumentation.sendPointerSync(up)
-            instrumentation.waitForIdleSync()
-        } finally {
-            down.recycle()
-            up.recycle()
-        }
     }
 
     private fun waitFor(
@@ -390,7 +335,6 @@ class BrowserPictureInPicturePlaybackSystemTest {
         // test validates eventual real Gecko -> PiP behavior, not a playback-start latency SLA.
         const val MEDIA_READY_TIMEOUT_MS = 25_000L
         const val POLL_INTERVAL_MS = 100L
-        const val TAP_DURATION_MS = 50L
         const val SERVER_JOIN_TIMEOUT_MS = 1_000L
         const val SOCKET_TIMEOUT_MS = 5_000
         const val RESET_TIMEOUT_MS = 5_000L
