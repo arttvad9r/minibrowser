@@ -1,7 +1,19 @@
 package com.artt.minibrowser.engine
 
+import java.io.ByteArrayInputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+import mozilla.components.browser.state.action.ContentAction
+import mozilla.components.browser.state.state.BrowserState
+import mozilla.components.browser.state.state.content.DownloadState
+import mozilla.components.browser.state.state.createTab
+import mozilla.components.browser.state.store.BrowserStore
+import mozilla.components.concept.fetch.MutableHeaders
+import mozilla.components.concept.fetch.Response
 import mozilla.components.support.ktx.kotlin.sanitizeFileName
 
 class AndroidComponentsDownloadPolicyTest {
@@ -57,5 +69,71 @@ class AndroidComponentsDownloadPolicyTest {
                 "https://example.test/fallback.bin",
             ),
         )
+    }
+
+    @Test
+    fun consumedDownloadLeavesResponseOpenForMiniBrowserAndClearsBrowserStoreState() {
+        val stream = TrackingInputStream("body".encodeToByteArray())
+        val download = download(stream)
+        var handedOff: DownloadState? = null
+        val store = store {
+            handedOff = it
+            true
+        }
+
+        store.dispatch(ContentAction.UpdateDownloadAction("42", download))
+
+        assertSame(download, handedOff)
+        assertNull(store.state.tabs.single().content.download)
+        assertFalse(stream.closed)
+        download.response?.close()
+        assertTrue(stream.closed)
+    }
+
+    @Test
+    fun unconsumedDownloadIsCancelledClosedAndCleared() {
+        val stream = TrackingInputStream("body".encodeToByteArray())
+        val download = download(stream)
+        var calls = 0
+        val store = store {
+            calls++
+            false
+        }
+
+        store.dispatch(ContentAction.UpdateDownloadAction("42", download))
+
+        assertEquals(1, calls)
+        assertNull(store.state.tabs.single().content.download)
+        assertTrue(stream.closed)
+    }
+
+    private fun store(consume: (DownloadState) -> Boolean) = BrowserStore(
+        initialState = BrowserState(
+            tabs = listOf(createTab(url = "https://example.test", id = "42")),
+        ),
+        middleware = listOf(androidComponentsDownloadMiddleware(consume)),
+    )
+
+    private fun download(stream: TrackingInputStream) = DownloadState(
+        id = "download-1",
+        url = "https://example.test/file.bin",
+        fileName = "file.bin",
+        contentType = "application/octet-stream",
+        response = Response(
+            url = "https://example.test/file.bin",
+            status = Response.SUCCESS,
+            headers = MutableHeaders(),
+            body = Response.Body(stream),
+        ),
+    )
+
+    private class TrackingInputStream(bytes: ByteArray) : ByteArrayInputStream(bytes) {
+        var closed = false
+            private set
+
+        override fun close() {
+            closed = true
+            super.close()
+        }
     }
 }
