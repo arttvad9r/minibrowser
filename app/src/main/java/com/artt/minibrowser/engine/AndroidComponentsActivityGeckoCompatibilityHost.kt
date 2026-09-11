@@ -2,6 +2,7 @@ package com.artt.minibrowser.engine
 
 import android.app.Activity
 import android.net.Uri
+import android.os.Handler
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebResponse
@@ -20,8 +21,10 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
     openTab: (String, Boolean) -> Unit,
     openBackgroundTab: (String, Boolean) -> Unit,
     private val openWindowSession: (Boolean) -> GeckoSession,
+    private val onWindowSessionOpened: (GeckoSession) -> Unit = {},
     private val closeWindowTab: (String) -> Boolean = { false },
 ) : AndroidComponentsGeckoCompatibilityHost {
+    private val mainHandler = Handler(activity.mainLooper)
     private val promptController by lazy(LazyThreadSafetyMode.NONE) {
         GeckoPromptController(activity, pickFiles)
     }
@@ -93,9 +96,15 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         uri: String,
     ): GeckoResult<GeckoSession>? {
         if (!canShowUi() || !isAllowedPopupTarget(uri)) return null
-        // Gecko itself loads uri into the newly-created session after this callback returns. Use the
-        // raw-compatible factory rather than newTab(uri) to avoid issuing a duplicate navigation.
-        return GeckoResult.fromValue(openWindowSession(context.privateMode))
+        // GeckoView requires OnNewSession to return an unopened GeckoSession and opens it itself
+        // after this callback returns. Post the ownership retry to the next main-loop turn: Gecko's
+        // immediate GeckoResult continuation has opened the exact returned session by then, while
+        // about:blank/empty popups no longer depend on a later content callback to trigger cutover.
+        val windowSession = openWindowSession(context.privateMode)
+        mainHandler.post {
+            if (canShowUi()) onWindowSessionOpened(windowSession)
+        }
+        return GeckoResult.fromValue(windowSession)
     }
 
     override fun onCloseRequest(
