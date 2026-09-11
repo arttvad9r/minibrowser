@@ -6,15 +6,15 @@ import kotlin.test.assertFailsWith
 
 class AndroidComponentsActivityShutdownTest {
     @Test
-    fun removalPlanIncludesSuspendedRelinquishedAndLinkedOrphanTabs() {
+    fun removalPlanClearsEveryProcessScopedBrowserStoreRecord() {
         val ids = androidComponentsFinalActivityShutdownStoreTabIds(
             rawOwnedTabIds = setOf("1"),
             relinquishedTabIds = linkedSetOf("2", "3"),
-            storeTabIds = setOf("1", "2", "3", "orphan"),
+            storeTabIds = linkedSetOf("1", "2", "3", "orphan"),
             linkedStoreTabIds = linkedSetOf("2", "orphan"),
         )
 
-        assertEquals(listOf("2", "orphan", "3"), ids)
+        assertEquals(listOf("1", "2", "3", "orphan"), ids)
     }
 
     @Test
