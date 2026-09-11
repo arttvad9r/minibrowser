@@ -45,6 +45,7 @@ import com.artt.minibrowser.engine.clearWebDataAcrossAndroidComponentsOwnership
 import com.artt.minibrowser.engine.closeAndroidComponentsOwnedTabFromWindowRequest
 import com.artt.minibrowser.engine.exitBrowserFullscreen
 import com.artt.minibrowser.engine.goBrowserBack
+import com.artt.minibrowser.engine.hasTabManagerRecreationHandoff
 import com.artt.minibrowser.engine.loadBrowserUrl
 import com.artt.minibrowser.engine.notifyBrowserPictureInPictureModeChanged
 import java.io.Closeable
@@ -151,7 +152,10 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
         preloadedState: PersistedBrowserState,
     ) {
         val browserStore = browserApp.browserStore
-        if (browserStore.state.tabs.isEmpty()) {
+        // An in-process recreation handoff is the exact ownership source. In particular, a fresh
+        // sessionless A-C tab can be structurally handed off while its queued AddTabAction has not
+        // reduced yet, leaving BrowserStore temporarily empty. Do not race process restore against it.
+        if (browserStore.state.tabs.isEmpty() && !hasTabManagerRecreationHandoff(tabsDir)) {
             val restorePlan = androidComponentsProcessRestorePlan(preloadedState, browserApp.engine)
             androidComponentsProcessRestoreActions(restorePlan).forEach(browserStore::dispatch)
             // The planner decodes only URL-bound A-C state. Seed the same opaque objects before
@@ -230,9 +234,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                 pickFiles = activityRequests::pickFiles,
                 openTab = { uri, private ->
                     if (::tabManager.isInitialized) {
-                        tabManager.newTab(uri, private).awaitingInitialNonBlankPageStart =
-                            uri.isNotBlank() &&
-                            !uri.substringBefore('#').equals("about:blank", ignoreCase = true)
+                        tabManager.newTab(uri, private)
                     }
                 },
                 openBackgroundTab = ::openBackgroundTab,
@@ -330,9 +332,6 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
         if (!::tabManager.isInitialized) return
         val previousId = tabManager.currentId.value
         val opened = tabManager.newTab(uri, private)
-        opened.awaitingInitialNonBlankPageStart =
-            uri.isNotBlank() &&
-            !uri.substringBefore('#').equals("about:blank", ignoreCase = true)
         if (previousId != null) tabManager.select(previousId)
         backgroundTabOpened.tryEmit(opened.id)
     }
