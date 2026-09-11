@@ -237,16 +237,32 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                 },
                 openBackgroundTab = ::openBackgroundTab,
                 openWindowSession = { uri, private ->
+                    val parentId = tabManager.currentId.value
                     tabManager.newWindowSession(private).also { session ->
                         tabManager.current()
                             ?.takeIf { it.ownsRawSession(session) }
-                            ?.let { tab ->
-                                // Gecko opens this returned session itself after onNewSession returns.
-                                // Seed only the known target metadata/guard; never call loadUri here.
-                                tab.url = uri
-                                tab.awaitingInitialNonBlankPageStart =
+                            ?.let { popup ->
+                                // GeckoView requires the session returned from onNewSession to stay
+                                // unopened until Gecko binds it to the new browsing-context id. Undo
+                                // TabManager's eager selection before this callback returns, then
+                                // select the exact popup on the next UI turn after Gecko has opened it.
+                                popup.url = uri
+                                popup.awaitingInitialNonBlankPageStart =
                                     uri.isNotBlank() &&
                                     !uri.substringBefore('#').equals("about:blank", ignoreCase = true)
+                                if (parentId != null && parentId != popup.id) {
+                                    tabManager.select(parentId)
+                                }
+                                window.decorView.post {
+                                    if (
+                                        !isFinishing &&
+                                        !isDestroyed &&
+                                        session.isOpen &&
+                                        popup.ownsRawSession(session)
+                                    ) {
+                                        tabManager.select(popup.id)
+                                    }
+                                }
                             }
                     }
                 },
