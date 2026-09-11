@@ -6,7 +6,6 @@ import android.os.Handler
 import mozilla.components.browser.state.state.content.DownloadState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.WebResponse
 
 /**
  * Activity-scoped compatibility UI retained while BrowserStore owns transferred EngineSessions.
@@ -78,16 +77,6 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     ) = permissionController.handleMediaPermissionRequest(uri, video, audio, callback) {
         context.isSelected(selectedSessionId())
-    }
-
-    override fun onExternalResponse(
-        context: AndroidComponentsGeckoSessionContext,
-        session: GeckoSession,
-        response: WebResponse,
-    ): Boolean {
-        // Legacy fallback retained until the stock A-C content callback cutover is validated.
-        downloadController.handle(response, context.privateMode)
-        return true
     }
 
     override fun onDownload(download: DownloadState): Boolean {
