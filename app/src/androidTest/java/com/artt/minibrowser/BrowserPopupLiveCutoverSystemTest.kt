@@ -53,6 +53,13 @@ class BrowserPopupLiveCutoverSystemTest {
                         selectedTab(app)?.engineState?.engineSession != null
                     },
                 )
+                assertTrue(
+                    "Diagnostic persisted tab ID survived restore and ACTION_VIEW received the next ID",
+                    app.browserStore.state.let { state ->
+                        state.selectedTabId == (DIAGNOSTIC_TAB_ID + 1L).toString() &&
+                            state.tabs.any { it.id == DIAGNOSTIC_TAB_ID.toString() }
+                    },
+                )
 
                 val initialIds = app.browserStore.state.tabs.mapTo(mutableSetOf()) { it.id }
                 val tapPoint = AtomicReference<Pair<Float, Float>>()
