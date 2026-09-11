@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import mozilla.components.browser.state.state.content.DownloadState
 import org.mozilla.geckoview.WebResponse
 
 private data class SavedDownload(val location: String, val bytes: Long)
@@ -157,28 +158,59 @@ private object DownloadIo {
     }
 }
 
-/** Saves GeckoView's already-authenticated WebResponse instead of issuing a second HTTP request. */
+/** Saves the engine's already-authenticated response instead of issuing a second HTTP request. */
 class GeckoDownloadController(
     private val activity: Activity,
     private val requestPermissions: ((Array<String>, (Boolean) -> Unit) -> Unit)? = null,
 ) {
+    /** Raw GeckoView owner retained for tabs that have not transferred to Android Components yet. */
     fun handle(response: WebResponse, isPrivate: Boolean = false) {
         val responseBody = response.body
         if (responseBody == null) {
             toast(activity.applicationContext, activity.getString(R.string.download_response_missing))
             return
         }
-        val body = InputStreamDownloadBody(responseBody)
-
-        val name = androidComponentsCompatibleDownloadFilename(
-            contentDisposition = response.headers.header("Content-Disposition"),
-            url = response.uri,
+        handle(
+            body = InputStreamDownloadBody(responseBody),
+            name = androidComponentsCompatibleDownloadFilename(
+                contentDisposition = response.headers.header("Content-Disposition"),
+                url = response.uri,
+            ),
+            mime = normalizeDownloadMime(response.headers.header("Content-Type")),
+            sourceUrl = response.uri,
+            persistHistory = shouldPersistDownloadHistory(isPrivate),
+            skipConfirmation = response.skipConfirmation,
         )
-        val mime = normalizeDownloadMime(response.headers.header("Content-Type"))
-        val persistHistory = shouldPersistDownloadHistory(isPrivate)
+    }
 
-        val begin = { ensureStorageAccessAndSave(body, name, mime, response.uri, persistHistory) }
-        if (response.skipConfirmation) {
+    /** Android Components owner after GeckoEngineSession publishes an external-resource response. */
+    fun handle(download: DownloadState) {
+        val response = download.response
+        if (response == null) {
+            toast(activity.applicationContext, activity.getString(R.string.download_response_missing))
+            return
+        }
+        handle(
+            body = AndroidComponentsDownloadBody(response),
+            name = download.fileName?.takeIf { it.isNotBlank() }
+                ?: androidComponentsCompatibleDownloadFilename(null, download.url),
+            mime = normalizeDownloadMime(download.contentType),
+            sourceUrl = download.url,
+            persistHistory = shouldPersistDownloadHistory(download.private),
+            skipConfirmation = download.skipConfirmation,
+        )
+    }
+
+    private fun handle(
+        body: DownloadBody,
+        name: String,
+        mime: String,
+        sourceUrl: String,
+        persistHistory: Boolean,
+        skipConfirmation: Boolean,
+    ) {
+        val begin = { ensureStorageAccessAndSave(body, name, mime, sourceUrl, persistHistory) }
+        if (skipConfirmation) {
             runCatching(begin).onFailure { body.closeQuietly() }
             return
         }
@@ -200,7 +232,7 @@ class GeckoDownloadController(
                     .show()
             }.onFailure {
                 // Activity/window state can change after the isDestroyed check but before show().
-                // This body owns Gecko's authenticated response stream, so always close it if no
+                // This body owns the authenticated response stream, so always close it if no
                 // transfer can take ownership.
                 body.closeQuietly()
             }
