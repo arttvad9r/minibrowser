@@ -4,10 +4,10 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -30,12 +30,24 @@ import com.artt.minibrowser.browser.initialExternalNavigationUri
 import com.artt.minibrowser.data.BookmarksRepository
 import com.artt.minibrowser.data.DbHolder
 import com.artt.minibrowser.data.HistoryRepository
+import com.artt.minibrowser.data.PersistedBrowserState
 import com.artt.minibrowser.data.SettingsRepository
 import com.artt.minibrowser.data.TabStore
+import com.artt.minibrowser.engine.AndroidComponentsActivityGeckoCompatibilityHost
 import com.artt.minibrowser.engine.BackgroundTabHost
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.FaviconRepository
 import com.artt.minibrowser.engine.TabManager
+import com.artt.minibrowser.engine.androidComponentsProcessRestoreActions
+import com.artt.minibrowser.engine.androidComponentsProcessRestorePlan
+import com.artt.minibrowser.engine.clearBrowserFindMatches
+import com.artt.minibrowser.engine.clearWebDataAcrossAndroidComponentsOwnership
+import com.artt.minibrowser.engine.closeAndroidComponentsOwnedTabFromWindowRequest
+import com.artt.minibrowser.engine.exitBrowserFullscreen
+import com.artt.minibrowser.engine.goBrowserBack
+import com.artt.minibrowser.engine.loadBrowserUrl
+import com.artt.minibrowser.engine.notifyBrowserPictureInPictureModeChanged
+import java.io.Closeable
 import java.io.File
 import java.util.ArrayDeque
 import kotlinx.coroutines.Dispatchers
@@ -43,7 +55,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class MainActivity : ComponentActivity(), BackgroundTabHost {
+class MainActivity : FragmentActivity(), BackgroundTabHost {
     private val browserApp by lazy { application as BrowserApp }
     private val runtime by lazy { browserApp.runtime }
     private val extensionLoader by lazy { browserApp.extensionLoader }
@@ -56,6 +68,7 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
     private val backgroundTabOpened = MutableSharedFlow<Long>(extraBufferCapacity = 1)
     private val pendingIntents = ArrayDeque<Intent>()
     private lateinit var tabManager: TabManager
+    private var androidComponentsCompatibilityHostLease: Closeable? = null
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
         ViewModelProvider(
@@ -69,7 +82,9 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
             clearHistory = { historyRepo.clear() },
             clearBookmarks = { bookmarksRepo.clearAll() },
             clearFaviconCaches = { FaviconRepository.clear(iconsDir) },
-            clearWebData = { tabManager.clearWebData() },
+            clearWebData = {
+                clearWebDataAcrossAndroidComponentsOwnership(tabManager, browserApp.browserStore)
+            },
         )
     }
     private val browserDataViewModel by lazy {
@@ -94,7 +109,8 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
     private val browserIntents by lazy {
         BrowserIntentController(this) { fallback ->
             if (::tabManager.isInitialized) {
-                (tabManager.current() ?: tabManager.newTab(null)).session.loadUri(fallback)
+                val target = tabManager.current() ?: tabManager.newTab(null)
+                loadBrowserUrl(target, browserApp.browserStore, fallback)
             }
         }
     }
@@ -114,20 +130,42 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
         enableEdgeToEdge()
 
         // TabStore may parse, sanitize and atomically rewrite legacy/corrupt metadata. Do that work
-        // on IO before TabManager is constructed; its synchronous restore() then consumes the
-        // one-shot in-memory handoff instead of touching disk on the Activity main thread.
+        // on IO before TabManager is constructed. Both BrowserStore and TabManager then consume the
+        // same sanitized snapshot without a second disk read on the Activity main thread.
         val launchIntent = intent
         val tabsDir = File(filesDir, "tabs")
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) {
+            val preloadedState = withContext(Dispatchers.IO) {
                 TabStore.preloadStateForNextRestore(tabsDir)
             }
             if (isFinishing || isDestroyed || ::tabManager.isInitialized) return@launch
-            initializeBrowser(savedInstanceState, launchIntent, tabsDir)
+            initializeBrowser(savedInstanceState, launchIntent, tabsDir, preloadedState)
         }
     }
 
-    private fun initializeBrowser(savedInstanceState: Bundle?, launchIntent: Intent?, tabsDir: File) {
+    private fun initializeBrowser(
+        savedInstanceState: Bundle?,
+        launchIntent: Intent?,
+        tabsDir: File,
+        preloadedState: PersistedBrowserState,
+    ) {
+        val browserStore = browserApp.browserStore
+        if (browserStore.state.tabs.isEmpty()) {
+            val restorePlan = androidComponentsProcessRestorePlan(preloadedState, browserApp.engine)
+            androidComponentsProcessRestoreActions(restorePlan).forEach(browserStore::dispatch)
+            // The planner decodes only URL-bound A-C state. Seed the same opaque objects before
+            // TabManager can publish a persistence snapshot; do not decode the envelope twice.
+            restorePlan.tabs.forEach { restoredTab ->
+                restoredTab.engineState.engineSessionState?.let { engineSessionState ->
+                    browserApp.sessionStatePersistence.bind(
+                        sessionId = restoredTab.id,
+                        stateUrl = restoredTab.content.url,
+                        state = engineSessionState,
+                    )
+                }
+            }
+        }
+
         tabManager = TabManager(
             runtime,
             tabsDir,
@@ -135,6 +173,7 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
             permissionRequester = activityRequests::requestPermissions,
             filePicker = activityRequests::pickFiles,
         )
+        bindAndroidComponentsCompatibilityHost()
         BrowserTabLifecycleController(this, tabManager)
         val lifecycleState = lifecycle.currentState
         val browserVisible = lifecycleState.isAtLeast(Lifecycle.State.RESUMED) || isInPictureInPictureMode
@@ -146,9 +185,11 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
         val handledShortcut = handleShortcut(launchIntent)
 
         setContent {
-            BrowserPictureInPictureEffect(tabManager, pictureInPicture)
+            BrowserPictureInPictureEffect(tabManager, browserApp.browserStore, pictureInPicture)
             BrowserRoute(
                 tabManager = tabManager,
+                browserStore = browserApp.browserStore,
+                uiCompatibilityState = browserApp.uiCompatibilityState,
                 settingsViewModel = settingsViewModel,
                 browserDataViewModel = browserDataViewModel,
                 browserDataClearer = browserDataClearer,
@@ -178,6 +219,33 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
         }
     }
 
+    private fun bindAndroidComponentsCompatibilityHost() {
+        androidComponentsCompatibilityHostLease?.close()
+        androidComponentsCompatibilityHostLease = browserApp.geckoCompatibilityRegistry.bind(
+            AndroidComponentsActivityGeckoCompatibilityHost(
+                activity = this,
+                selectedSessionId = { browserApp.browserStore.state.selectedTabId },
+                requestPermissions = activityRequests::requestPermissions,
+                pickFiles = activityRequests::pickFiles,
+                openTab = { uri, private ->
+                    if (::tabManager.isInitialized) {
+                        tabManager.newTab(uri, private)
+                    }
+                },
+                openBackgroundTab = ::openBackgroundTab,
+                openWindowSession = tabManager::newWindowSession,
+                closeWindowTab = { sessionId ->
+                    ::tabManager.isInitialized &&
+                        closeAndroidComponentsOwnedTabFromWindowRequest(
+                            tabManager = tabManager,
+                            store = browserApp.browserStore,
+                            sessionId = sessionId,
+                        )
+                },
+            ),
+        )
+    }
+
     private fun handleIncomingIntent(intent: Intent) {
         if (!handleShortcut(intent)) {
             externalNavigation.accept(intent.data?.toString())
@@ -193,17 +261,24 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
                 override fun handleOnBackPressed() {
                     val ui = browserViewModel.state.value
                     val current = tabManager.current()
+                    val currentContent = current?.let { tab ->
+                        browserApp.browserStore.state.tabs
+                            .firstOrNull { it.id == tab.id.toString() }
+                            ?.content
+                    }
+                    val inFullscreen = currentContent?.fullScreen ?: (current?.fullscreen == true)
+                    val canGoBack = currentContent?.canGoBack ?: (current?.canGoBack == true)
 
                     when {
                         ui.showSwitcher -> browserViewModel.showSwitcher(false)
                         ui.showSiteInfo -> browserViewModel.showSiteInfo(false)
                         ui.showFind -> {
-                            current?.session?.finder?.clear()
+                            current?.let { tab -> clearBrowserFindMatches(tab, browserApp.browserStore) }
                             browserViewModel.showFind(false)
                         }
-                        current?.fullscreen == true -> current.session.exitFullScreen()
+                        inFullscreen -> current?.let { tab -> exitBrowserFullscreen(tab, browserApp.browserStore) }
                         ui.screen != BrowserScreen.Browser -> browserViewModel.screen(BrowserScreen.Browser)
-                        current?.canGoBack == true -> current.session.goBack()
+                        canGoBack -> current?.let { tab -> goBrowserBack(tab, browserApp.browserStore) }
                         current != null && closeCurrentTabForSystemBack(current.id) -> Unit
                         else -> passThroughToSystem()
                     }
@@ -283,14 +358,26 @@ class MainActivity : ComponentActivity(), BackgroundTabHost {
         newConfig: Configuration,
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        if (isInPictureInPictureMode && ::tabManager.isInitialized) {
-            // BrowserTabLifecycleController may receive onPause during the transition. Keep the
-            // selected GeckoSession active so suspendMediaWhenInactive does not stop the video.
-            tabManager.setAppVisible(true)
+        if (::tabManager.isInitialized) {
+            val current = tabManager.current()
+            current?.let { tab ->
+                notifyBrowserPictureInPictureModeChanged(
+                    tab = tab,
+                    browserStore = browserApp.browserStore,
+                    enabled = isInPictureInPictureMode,
+                )
+            }
+            if (isInPictureInPictureMode) {
+                // GeckoView owns linked-session activation via its display surface. TabManager only
+                // keeps the current raw-owned GeckoSession active across the PiP transition.
+                tabManager.setAppVisible(true)
+            }
         }
     }
 
     override fun onDestroy() {
+        androidComponentsCompatibilityHostLease?.close()
+        androidComponentsCompatibilityHostLease = null
         activityRequests.cancelAll()
         super.onDestroy()
     }
