@@ -230,11 +230,26 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                 pickFiles = activityRequests::pickFiles,
                 openTab = { uri, private ->
                     if (::tabManager.isInitialized) {
-                        tabManager.newTab(uri, private)
+                        tabManager.newTab(uri, private).awaitingInitialNonBlankPageStart =
+                            uri.isNotBlank() &&
+                            !uri.substringBefore('#').equals("about:blank", ignoreCase = true)
                     }
                 },
                 openBackgroundTab = ::openBackgroundTab,
-                openWindowSession = tabManager::newWindowSession,
+                openWindowSession = { uri, private ->
+                    tabManager.newWindowSession(private).also { session ->
+                        tabManager.current()
+                            ?.takeIf { it.ownsRawSession(session) }
+                            ?.let { tab ->
+                                // Gecko opens this returned session itself after onNewSession returns.
+                                // Seed only the known target metadata/guard; never call loadUri here.
+                                tab.url = uri
+                                tab.awaitingInitialNonBlankPageStart =
+                                    uri.isNotBlank() &&
+                                    !uri.substringBefore('#').equals("about:blank", ignoreCase = true)
+                            }
+                    }
+                },
                 onWindowSessionOpened = { session ->
                     tabLifecycleController?.transferOpenedWindowSession(session)
                 },
@@ -315,6 +330,9 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
         if (!::tabManager.isInitialized) return
         val previousId = tabManager.currentId.value
         val opened = tabManager.newTab(uri, private)
+        opened.awaitingInitialNonBlankPageStart =
+            uri.isNotBlank() &&
+            !uri.substringBefore('#').equals("about:blank", ignoreCase = true)
         if (previousId != null) tabManager.select(previousId)
         backgroundTabOpened.tryEmit(opened.id)
     }

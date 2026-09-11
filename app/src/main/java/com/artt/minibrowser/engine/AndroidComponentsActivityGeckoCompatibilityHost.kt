@@ -20,7 +20,7 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
     pickFiles: ((Int, Array<String>, (Array<Uri>) -> Unit) -> Unit)?,
     openTab: (String, Boolean) -> Unit,
     openBackgroundTab: (String, Boolean) -> Unit,
-    private val openWindowSession: (Boolean) -> GeckoSession,
+    private val openWindowSession: (String, Boolean) -> GeckoSession,
     private val onWindowSessionOpened: (GeckoSession) -> Unit = {},
     private val closeWindowTab: (String) -> Boolean = { false },
 ) : AndroidComponentsGeckoCompatibilityHost {
@@ -101,8 +101,8 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         // first PageStart/PageStop; BrowserTabLifecycleController already transfers it at that idle
         // boundary. Empty/about:blank windows may never produce those callbacks, so only they need
         // the next-main-loop ownership retry after Gecko has opened the returned session.
-        val windowSession = openWindowSession(context.privateMode)
-        if (uri.isBlank() || uri.equals("about:blank", ignoreCase = true)) {
+        val windowSession = openWindowSession(uri, context.privateMode)
+        if (uri.isBlank() || uri.substringBefore('#').equals("about:blank", ignoreCase = true)) {
             mainHandler.post {
                 if (canShowUi()) onWindowSessionOpened(windowSession)
             }
