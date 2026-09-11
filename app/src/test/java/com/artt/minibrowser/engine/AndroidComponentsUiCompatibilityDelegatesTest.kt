@@ -14,6 +14,7 @@ class AndroidComponentsUiCompatibilityDelegatesTest {
     fun navigationDelegateForwardsNewSessionToWrappedDelegate() {
         val parent = GeckoSession()
         val child = GeckoSession()
+        val expectedResult = GeckoResult.fromValue(child)
         val calls = AtomicInteger()
         val delegate =
             object : GeckoSession.NavigationDelegate {
@@ -24,7 +25,7 @@ class AndroidComponentsUiCompatibilityDelegatesTest {
                     assertSame(parent, session)
                     assertEquals("https://example.com/child", uri)
                     calls.incrementAndGet()
-                    return GeckoResult.fromValue(child)
+                    return expectedResult
                 }
             }
 
@@ -38,6 +39,6 @@ class AndroidComponentsUiCompatibilityDelegatesTest {
         val result = wrapper.onNewSession(parent, "https://example.com/child")
 
         assertEquals(1, calls.get())
-        assertSame(child, result?.pollDefault(null))
+        assertSame(expectedResult, result)
     }
 }
