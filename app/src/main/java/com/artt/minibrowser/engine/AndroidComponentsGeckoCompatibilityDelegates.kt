@@ -1,8 +1,11 @@
 package com.artt.minibrowser.engine
 
+import android.view.PointerIcon
+import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.SlowScriptResponse
 import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 
@@ -239,21 +242,31 @@ internal class AndroidComponentsNewSessionCompatibilityDelegate(
 /**
  * Keeps stock A-C content ownership except for semantics that are not yet safely consumable after
  * transfer: authenticated download responses, window-close requests, and linked media context menus.
+ * GeckoView content callbacks are Java defaults, so non-owned callbacks must be forwarded explicitly.
  */
 internal class AndroidComponentsContentCompatibilityDelegate(
     private val delegate: GeckoSession.ContentDelegate,
     private val compatibility: AndroidComponentsGeckoCompatibilityHandler,
-) : GeckoSession.ContentDelegate by delegate {
-    override fun onExternalResponse(
-        session: GeckoSession,
-        response: WebResponse,
-    ) = compatibility.onExternalResponse(session, response)
+) : GeckoSession.ContentDelegate {
+    override fun onTitleChange(session: GeckoSession, title: String?) =
+        delegate.onTitleChange(session, title)
+
+    override fun onPreviewImage(session: GeckoSession, previewImageUrl: String) =
+        delegate.onPreviewImage(session, previewImageUrl)
+
+    override fun onFocusRequest(session: GeckoSession) = delegate.onFocusRequest(session)
 
     override fun onCloseRequest(session: GeckoSession) {
         // A-C only publishes a BrowserStore WindowRequest here. MiniBrowser has no TabsFeature
         // consumer during this ownership phase, so forwarding would silently stop window.close().
         compatibility.onCloseRequest(session)
     }
+
+    override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) =
+        delegate.onFullScreen(session, fullScreen)
+
+    override fun onMetaViewportFitChange(session: GeckoSession, viewportFit: String) =
+        delegate.onMetaViewportFitChange(session, viewportFit)
 
     override fun onContextMenu(
         session: GeckoSession,
@@ -271,4 +284,37 @@ internal class AndroidComponentsContentCompatibilityDelegate(
             delegate.onContextMenu(session, screenX, screenY, element)
         }
     }
+
+    override fun onExternalResponse(
+        session: GeckoSession,
+        response: WebResponse,
+    ) = compatibility.onExternalResponse(session, response)
+
+    override fun onCrash(session: GeckoSession) = delegate.onCrash(session)
+
+    override fun onKill(session: GeckoSession) = delegate.onKill(session)
+
+    override fun onFirstComposite(session: GeckoSession) = delegate.onFirstComposite(session)
+
+    override fun onFirstContentfulPaint(session: GeckoSession) =
+        delegate.onFirstContentfulPaint(session)
+
+    override fun onPaintStatusReset(session: GeckoSession) = delegate.onPaintStatusReset(session)
+
+    override fun onPointerIconChange(session: GeckoSession, icon: PointerIcon) =
+        delegate.onPointerIconChange(session, icon)
+
+    override fun onWebAppManifest(session: GeckoSession, manifest: JSONObject) =
+        delegate.onWebAppManifest(session, manifest)
+
+    override fun onSlowScript(
+        geckoSession: GeckoSession,
+        scriptFileName: String,
+    ): GeckoResult<SlowScriptResponse>? = delegate.onSlowScript(geckoSession, scriptFileName)
+
+    override fun onShowDynamicToolbar(geckoSession: GeckoSession) =
+        delegate.onShowDynamicToolbar(geckoSession)
+
+    override fun onHideDynamicToolbar(geckoSession: GeckoSession) =
+        delegate.onHideDynamicToolbar(geckoSession)
 }
