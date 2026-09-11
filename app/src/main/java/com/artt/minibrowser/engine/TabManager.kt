@@ -516,17 +516,28 @@ class TabManager(
 
     fun newTab(url: String?, private: Boolean = false): Tab {
         check(!closed) { "TabManager is closed" }
-        val tab = createTab(private, persisted = null, publish = false)
-        if (url != null) {
-            tab.url = url
-            tab.awaitingInitialNonBlankPageStart =
-                url.isNotBlank() && !url.equals("about:blank", ignoreCase = true)
+        val browserApp = checkNotNull(context.applicationContext as? BrowserApp) {
+            "Fresh tabs require BrowserApp BrowserStore ownership"
         }
+        val id = ++seq
+        val plan = androidComponentsFreshTabPlan(
+            id = id,
+            url = url,
+            isPrivate = private,
+        )
+
+        // Queue BrowserStore ownership before publishing the structural tab. BrowserStore reduction
+        // is asynchronous, so render code tolerates the short interval before this row is visible.
+        browserApp.browserStore.dispatch(
+            TabListAction.AddTabAction(
+                tab = plan.storeTab,
+                select = true,
+            ),
+        )
+        val tab = plan.structuralTab
         _tabs.value += tab
         deactivateOthers(tab.id)
         currentId.value = tab.id
-        openTab(tab)
-        url?.let(tab.session::loadUri)
         enforceHotTabBudget()
         return tab
     }
@@ -626,6 +637,10 @@ class TabManager(
 
         selectedTab.lastAccess = System.currentTimeMillis()
         if (!selectedTab.hasRawSessionAuthority) {
+            val browserApp = checkNotNull(context.applicationContext as? BrowserApp) {
+                "Android Components tab selection requires BrowserApp BrowserStore ownership"
+            }
+            browserApp.browserStore.dispatch(TabListAction.SelectTabAction(id.toString()))
             enforceHotTabBudget()
             return
         }
