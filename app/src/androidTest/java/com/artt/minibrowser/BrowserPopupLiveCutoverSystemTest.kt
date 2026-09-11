@@ -44,8 +44,13 @@ class BrowserPopupLiveCutoverSystemTest {
             composeRule.waitForIdle()
 
             composeRule.runOnUiThread {
-                composeRule.activity.onNewIntent(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(server.pageUrl)),
+                composeRule.activity.startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse(server.pageUrl),
+                        composeRule.activity,
+                        MainActivity::class.java,
+                    ),
                 )
             }
             composeRule.waitUntil(LINK_TIMEOUT_MS) {
