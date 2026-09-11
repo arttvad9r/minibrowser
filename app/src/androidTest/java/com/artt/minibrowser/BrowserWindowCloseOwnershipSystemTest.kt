@@ -3,6 +3,9 @@ package com.artt.minibrowser
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.artt.minibrowser.data.PersistedBrowserState
+import com.artt.minibrowser.data.PersistedTab
+import com.artt.minibrowser.data.TabStore
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.androidComponentsExistingSessionTransferPlan
@@ -27,9 +30,21 @@ class BrowserWindowCloseOwnershipSystemTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as BrowserApp
         val storeDir = File(app.cacheDir, "window-close-owner-${System.nanoTime()}")
+        val rawTabId = 91_001L
         var tabManager: TabManager? = null
         var engineSession: GeckoEngineSession? = null
         var rawSession: GeckoSession? = null
+
+        // This test exercises the legacy raw -> A-C transfer boundary. Since ordinary blank tabs are
+        // now born A-C-owned, explicitly restore one raw-owned tab instead of letting an empty
+        // TabManager create a fresh A-C tab in the application-scoped BrowserStore.
+        TabStore.saveState(
+            storeDir,
+            PersistedBrowserState(
+                selectedId = rawTabId,
+                tabs = listOf(PersistedTab(id = rawTabId, url = "about:blank")),
+            ),
+        )
 
         try {
             instrumentation.runOnMainSync {
@@ -104,6 +119,9 @@ class BrowserWindowCloseOwnershipSystemTest {
                 }
                 tabManager?.close()
             }
+            // TabManager.close() may enqueue a final versioned write from main. Drain TabStore's
+            // ordered IO queue before deleting this isolated directory.
+            TabStore.loadState(storeDir)
             storeDir.deleteRecursively()
         }
     }
