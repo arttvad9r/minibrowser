@@ -66,6 +66,33 @@ internal class BrowserTabLifecycleController(
                     .collect { tabManager.enforceHotTabBudget() }
             }
             androidComponentsBridgeScope.launch {
+                // Selected raw tabs are transferred only at an idle page boundary. This state signal
+                // supplies deterministic retries for both cases that cannot transfer immediately:
+                // GeckoView popups are returned unopened from onNewSession and active navigations keep
+                // their raw delegates through PageStop so terminal URL/progress/loading state cannot be
+                // lost while delegates are replaced. Once an EngineSession is linked this maps to null,
+                // so ordinary A-C progress/content churn does not keep retrying the transfer path.
+                browserApp.browserStore.stateFlow
+                    .map { state ->
+                        val selected = state.tabs.firstOrNull { it.id == state.selectedTabId }
+                        if (selected == null || selected.engineState.engineSession != null) {
+                            null
+                        } else {
+                            Triple(selected.id, selected.content.url, selected.content.loading)
+                        }
+                    }
+                    .distinctUntilChanged()
+                    .drop(1)
+                    .collect { rawSelected ->
+                        if (
+                            rawSelected != null &&
+                            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                        ) {
+                            transferCurrentRawTabWhenMirrored(browserApp)
+                        }
+                    }
+            }
+            androidComponentsBridgeScope.launch {
                 // The initial current tab is handled by onResume. Later selections cross ownership
                 // only while the Activity is resumed; a paused selection is handled on next resume.
                 tabManager.currentId
@@ -144,6 +171,10 @@ internal class BrowserTabLifecycleController(
             if (!tab.hasRawSessionAuthority) return@launch
             val rawSession = tab.rawSessionOrNull ?: return@launch
             if (!rawSession.isOpen) return@launch
+            // Raw progress is >= 0 from PageStart through PageStop. Keep the raw delegates installed
+            // for the whole navigation so a late terminal progress/PageStop callback cannot fall into
+            // the delegate-replacement window. The BrowserStore content observer retries at PageStop.
+            if (tab.progress >= 0f) return@launch
 
             val storeTab = browserApp.browserStore.state.tabs
                 .firstOrNull { it.id == tab.id.toString() }

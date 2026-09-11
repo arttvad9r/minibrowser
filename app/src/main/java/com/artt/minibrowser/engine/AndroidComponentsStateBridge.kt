@@ -1,5 +1,6 @@
 package com.artt.minibrowser.engine
 
+import androidx.annotation.MainThread
 import androidx.compose.runtime.snapshotFlow
 import com.artt.minibrowser.data.EngineSessionStateEnvelope
 import com.artt.minibrowser.data.decodeBoundEngineSessionStateEnvelope
@@ -244,6 +245,46 @@ private fun changedContentActions(
     if (current.securityInfo != securityInfo) {
         add(ContentAction.UpdateSecurityInfoAction(next.id, securityInfo))
     }
+}
+
+/**
+ * Computes the final raw-owned content delta that must be committed synchronously at cutover.
+ *
+ * The normal StateBridge observes Compose state through snapshotFlow. A Gecko callback can therefore
+ * update the raw Tab on the main thread before that collector has dispatched the matching BrowserStore
+ * action. Once ownership becomes Relinquished the bridge deliberately stops mirroring raw content, so
+ * that pending delta would otherwise be lost permanently. This helper reuses the exact same content
+ * diff rules without touching structure, selection, or EngineSession ownership.
+ */
+internal fun rawContentHandoffActions(
+    state: BrowserState,
+    next: BrowserStoreTabSnapshot,
+): List<BrowserAction> {
+    check(next.rawSessionOwnership.mirrorsRawContent) {
+        "Only a raw-owned tab can flush content at Android Components handoff"
+    }
+    val current = checkNotNull(state.tabs.firstOrNull { it.id == next.id }) {
+        "BrowserStore tab ${next.id} does not exist at Android Components handoff"
+    }
+    check(current.engineState.engineSession == null) {
+        "BrowserStore tab ${next.id} already has an EngineSession at Android Components handoff"
+    }
+    check(current.content.private == next.isPrivate) {
+        "BrowserStore private mode changed before Android Components handoff"
+    }
+    return changedContentActions(current.content, next)
+}
+
+@MainThread
+internal fun syncRawTabContentBeforeAndroidComponentsRelinquish(
+    tab: Tab,
+    store: BrowserStore,
+) {
+    check(tab.hasRawSessionAuthority) {
+        "Raw content must be flushed before Android Components ownership relinquish"
+    }
+    val snapshot = tab.toBrowserStoreTabSnapshot()
+    rawContentHandoffActions(store.state, snapshot).forEach(store::dispatch)
 }
 
 private data class PersistedEngineStateKey(
