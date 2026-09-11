@@ -380,6 +380,7 @@ class Tab private constructor(
     internal var rawMediaSessionDelegate: AndroidComponentsRawMediaSessionDelegate? = null
     internal val progressGate = ProgressGate()
     internal var restoreUrlOnOpen = false
+    internal var awaitingInitialNonBlankPageStart = false
     @Volatile internal var latestSessionState: GeckoSession.SessionState? = null
     @Volatile internal var latestSessionStateUrl: String? = null
     internal var persistedSessionState: String? = null
@@ -516,7 +517,11 @@ class TabManager(
     fun newTab(url: String?, private: Boolean = false): Tab {
         check(!closed) { "TabManager is closed" }
         val tab = createTab(private, persisted = null, publish = false)
-        if (url != null) tab.url = url
+        if (url != null) {
+            tab.url = url
+            tab.awaitingInitialNonBlankPageStart =
+                url.isNotBlank() && !url.equals("about:blank", ignoreCase = true)
+        }
         _tabs.value += tab
         deactivateOthers(tab.id)
         currentId.value = tab.id
@@ -1079,6 +1084,13 @@ class TabManager(
         tab.session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 if (!tab.ownsRawSession(session)) return
+                if (
+                    tab.awaitingInitialNonBlankPageStart &&
+                    url.isNotBlank() &&
+                    !url.equals("about:blank", ignoreCase = true)
+                ) {
+                    tab.awaitingInitialNonBlankPageStart = false
+                }
                 tab.progressGate.accept(progress = 5)
                 tab.loadError = null
                 tab.securityState = SecurityState.Unknown
