@@ -9,13 +9,13 @@ import org.mozilla.geckoview.WebResponse
 import org.robolectric.annotation.Config
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertFalse
 
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35], application = Application::class)
 class AndroidComponentsDownloadCompatibilityDelegateTest {
     @Test
-    fun externalResponseDoesNotFallThroughToStockAndroidComponentsDelegate() {
+    fun externalResponseForwardsToStockAndroidComponentsDelegate() {
         val session = GeckoSession()
         val compatibility = AndroidComponentsGeckoCompatibilityRegistry().forSession(
             AndroidComponentsGeckoSessionContext(sessionId = "42", privateMode = true),
@@ -41,7 +41,8 @@ class AndroidComponentsDownloadCompatibilityDelegateTest {
 
         delegate.onExternalResponse(session, response)
 
-        assertEquals(0, stockCalls)
-        assertTrue(bodyClosed)
+        assertEquals(1, stockCalls)
+        assertFalse(bodyClosed)
+        body.close()
     }
 }
