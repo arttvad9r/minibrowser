@@ -9,6 +9,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.data.PersistedBrowserState
+import com.artt.minibrowser.data.PersistedTab
 import com.artt.minibrowser.data.TabStore
 import com.artt.minibrowser.engine.BrowserApp
 import java.io.Closeable
@@ -215,6 +216,7 @@ class BrowserPopupLiveCutoverSystemTest {
         const val POLL_INTERVAL_MS = 25L
         const val SERVER_JOIN_TIMEOUT_MS = 1_000L
         const val SOCKET_TIMEOUT_MS = 5_000
+        const val DIAGNOSTIC_TAB_ID = 10_000L
 
         val PAGE_BYTES = """
             <!doctype html>
@@ -253,6 +255,19 @@ class BrowserPopupLiveCutoverSystemTest {
         @BeforeClass
         fun prepareIsolatedBrowserState() {
             resetBrowserState()
+            val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
+            TabStore.saveState(
+                File(targetContext.filesDir, "tabs"),
+                PersistedBrowserState(
+                    selectedId = DIAGNOSTIC_TAB_ID,
+                    tabs = listOf(
+                        PersistedTab(
+                            id = DIAGNOSTIC_TAB_ID,
+                            url = "about:blank",
+                        ),
+                    ),
+                ),
+            )
         }
 
         @JvmStatic
