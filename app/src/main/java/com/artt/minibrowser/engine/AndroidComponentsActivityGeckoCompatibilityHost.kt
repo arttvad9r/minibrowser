@@ -3,6 +3,7 @@ package com.artt.minibrowser.engine
 import android.app.Activity
 import android.net.Uri
 import android.os.Handler
+import android.util.Log
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebResponse
@@ -102,9 +103,20 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         // boundary. Empty/about:blank windows may never produce those callbacks, so only they need
         // the next-main-loop ownership retry after Gecko has opened the returned session.
         val windowSession = openWindowSession(uri, context.privateMode)
-        if (uri.isBlank() || uri.substringBefore('#').equals("about:blank", ignoreCase = true)) {
-            mainHandler.post {
-                if (canShowUi()) onWindowSessionOpened(windowSession)
+        Log.d(
+            "MinibrowserPopup",
+            "onNewSession uri=$uri parentOpen=${session.isOpen} childOpen=${windowSession.isOpen}",
+        )
+        mainHandler.post {
+            Log.d(
+                "MinibrowserPopup",
+                "onNewSession nextTurn uri=$uri childOpen=${windowSession.isOpen}",
+            )
+            if (
+                (uri.isBlank() || uri.substringBefore('#').equals("about:blank", ignoreCase = true)) &&
+                canShowUi()
+            ) {
+                onWindowSessionOpened(windowSession)
             }
         }
         return GeckoResult.fromValue(windowSession)
