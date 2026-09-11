@@ -94,7 +94,7 @@ class AndroidComponentsDownloadPolicyTest {
     }
 
     @Test
-    fun unconsumedDownloadIsCancelledClosedAndCleared() {
+    fun rejectedDownloadIsClosedAndCleared() {
         val stream = TrackingInputStream("body".encodeToByteArray())
         val download = download(stream)
         var calls = 0
@@ -110,9 +110,21 @@ class AndroidComponentsDownloadPolicyTest {
         assertTrue(stream.closed)
     }
 
+    @Test
+    fun throwingDownloadConsumerFailsClosedWithoutPoisoningBrowserStore() {
+        val stream = TrackingInputStream("body".encodeToByteArray())
+        val download = download(stream)
+        val store = store { error("Activity handoff failed") }
+
+        store.dispatchAndDrain(ContentAction.UpdateDownloadAction("42", download))
+
+        assertNull(store.state.tabs.single().content.download)
+        assertTrue(stream.closed)
+    }
+
     private fun BrowserStore.dispatchAndDrain(action: BrowserAction) = runBlocking {
         dispatch(action).join()
-        // Store.dispatch is asynchronous. A-C's consume/cancel action was queued from the middleware;
+        // Store.dispatch is asynchronous. The middleware queues a consume action after the update;
         // this no-op action is a FIFO barrier so assertions see the terminal BrowserStore state.
         dispatch(InitAction).join()
     }
