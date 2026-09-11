@@ -699,9 +699,9 @@ class TabManager(
             engineSessionState = androidComponentsCapture?.engineSessionState,
             engineSessionStateUrl = androidComponentsCapture?.engineSessionStateUrl,
         )
-        if (androidComponentsOwned && browserApp != null && storeTab != null) {
-            // BrowserStore removal must happen before the structural record disappears so
-            // TabsRemovedMiddleware remains the sole EngineSession close owner.
+        if (androidComponentsOwned && browserApp != null) {
+            // Add/remove dispatches are ordered even while the freshly-added row is not yet visible.
+            // Always queue removal so an immediate close cannot leave a late BrowserStore orphan.
             browserApp.browserStore.dispatch(TabListAction.RemoveTabAction(sessionId))
         }
         if (dying.hasRawSessionAuthority) {
@@ -1006,7 +1006,26 @@ class TabManager(
                     browserState = browserApp.browserStore.state,
                     persistenceState = browserApp.sessionStatePersistence,
                     engineName = browserApp.engine.name(),
-                )
+                ) ?: if (tab.rawSessionOrNull == null) {
+                    // A fresh A-C tab can be structurally visible before its queued AddTabAction has
+                    // reduced. Preserve durable structural metadata instead of dropping that tab from
+                    // an immediate recreation/final-destroy snapshot.
+                    PersistenceTabSnapshot(
+                        id = tab.id,
+                        url = tab.url,
+                        title = tab.title,
+                        desktop = tab.desktop,
+                        lastAccess = tab.lastAccess,
+                        latestSessionState = null,
+                        latestSessionStateUrl = null,
+                        serializedSessionState = null,
+                        serializedSessionStateUrl = null,
+                        isPrivate = tab.isPrivate,
+                        sessionOwner = PersistedSessionOwner.AndroidComponents,
+                    )
+                } else {
+                    null
+                }
             } else {
                 PersistenceTabSnapshot(
                     id = tab.id,
