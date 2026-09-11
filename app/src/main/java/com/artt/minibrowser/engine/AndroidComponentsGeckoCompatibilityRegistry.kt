@@ -1,6 +1,7 @@
 package com.artt.minibrowser.engine
 
 import java.io.Closeable
+import mozilla.components.browser.state.state.content.DownloadState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebResponse
@@ -52,6 +53,9 @@ internal interface AndroidComponentsGeckoCompatibilityHost {
         response: WebResponse,
     ): Boolean
 
+    /** Returns true after taking ownership of [download.response]. */
+    fun onDownload(download: DownloadState): Boolean = false
+
     /** Returns a new TabManager-owned popup session, or null when the request must fail closed. */
     fun onNewSession(
         context: AndroidComponentsGeckoSessionContext,
@@ -97,6 +101,9 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
     }
 
     internal fun currentHost(): AndroidComponentsGeckoCompatibilityHost? = current
+
+    /** BrowserStore download middleware uses the same Activity lease without retaining an Activity. */
+    fun consumeDownload(download: DownloadState): Boolean = current?.onDownload(download) == true
 
     fun forSession(context: AndroidComponentsGeckoSessionContext): AndroidComponentsGeckoCompatibilityHandler =
         object : AndroidComponentsGeckoCompatibilityHandler {
