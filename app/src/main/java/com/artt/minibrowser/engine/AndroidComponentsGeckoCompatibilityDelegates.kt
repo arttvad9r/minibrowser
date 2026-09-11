@@ -44,12 +44,6 @@ internal interface AndroidComponentsGeckoCompatibilityHandler {
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     )
 
-    /** Legacy download bridge retained until the BrowserStore cutover is fully validated. */
-    fun onExternalResponse(
-        session: GeckoSession,
-        response: WebResponse,
-    )
-
     /** Returns a structurally-owned popup session, or null to fail the web-content request closed. */
     fun onNewSession(
         session: GeckoSession,
