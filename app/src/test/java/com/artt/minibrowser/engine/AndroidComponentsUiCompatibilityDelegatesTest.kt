@@ -89,4 +89,25 @@ class AndroidComponentsUiCompatibilityDelegatesTest {
 
         assertEquals(42, forwarded)
     }
+
+    @Test
+    fun persistenceDelegateForwardsNonSessionStateProgressCallbacks() {
+        val session = GeckoSession()
+        var forwarded: Boolean? = null
+        val delegate =
+            object : GeckoSession.ProgressDelegate {
+                override fun onPageStop(session: GeckoSession, success: Boolean) {
+                    forwarded = success
+                }
+            }
+        val observer = AndroidComponentsSessionStatePersistenceObserver(
+            sessionId = "tab",
+            persistenceState = AndroidComponentsSessionStatePersistenceState(),
+        )
+        val wrapper = AndroidComponentsSessionStatePersistenceDelegate(delegate, observer)
+
+        wrapper.onPageStop(session, true)
+
+        assertEquals(true, forwarded)
+    }
 }
