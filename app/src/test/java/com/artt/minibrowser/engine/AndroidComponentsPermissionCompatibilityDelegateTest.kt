@@ -5,7 +5,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.WebResponse
 import org.robolectric.annotation.Config
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -80,11 +79,6 @@ class AndroidComponentsPermissionCompatibilityDelegateTest {
                 compatibilityMediaCalls++
                 callback.reject()
             }
-
-            override fun onExternalResponse(
-                session: GeckoSession,
-                response: WebResponse,
-            ) = Unit
 
             override fun onLinkedMediaContextMenu(
                 session: GeckoSession,
