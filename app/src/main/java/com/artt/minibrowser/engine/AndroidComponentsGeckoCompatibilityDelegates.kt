@@ -1,5 +1,6 @@
 package com.artt.minibrowser.engine
 
+import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebResponse
@@ -167,9 +168,8 @@ internal class AndroidComponentsPromptCompatibilityDelegate(
  * Activity-scoped compatibility host and fail closed if that host is unavailable.
  */
 internal class AndroidComponentsPermissionCompatibilityDelegate(
-    private val delegate: GeckoSession.PermissionDelegate,
     private val compatibility: AndroidComponentsGeckoCompatibilityHandler,
-) : GeckoSession.PermissionDelegate by delegate {
+) : GeckoSession.PermissionDelegate {
     override fun onAndroidPermissionsRequest(
         session: GeckoSession,
         permissions: Array<String>?,
@@ -192,16 +192,46 @@ internal class AndroidComponentsPermissionCompatibilityDelegate(
 
 /**
  * Prevents stock GeckoEngineSession.onNewSession() from creating an EngineSession outside
- * TabManager's structural ownership during the transitional live-transfer phase.
+ * TabManager's structural ownership during the transitional live-transfer phase. All other stock
+ * navigation callbacks are forwarded explicitly because GeckoView exposes them as Java defaults.
  */
 internal class AndroidComponentsNewSessionCompatibilityDelegate(
     private val delegate: GeckoSession.NavigationDelegate,
     private val compatibility: AndroidComponentsGeckoCompatibilityHandler,
-) : GeckoSession.NavigationDelegate by delegate {
+) : GeckoSession.NavigationDelegate {
+    override fun onLocationChange(
+        session: GeckoSession,
+        url: String?,
+        perms: List<GeckoSession.PermissionDelegate.ContentPermission>,
+        hasUserGesture: Boolean,
+    ) = delegate.onLocationChange(session, url, perms, hasUserGesture)
+
+    override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) =
+        delegate.onCanGoBack(session, canGoBack)
+
+    override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) =
+        delegate.onCanGoForward(session, canGoForward)
+
+    override fun onLoadRequest(
+        session: GeckoSession,
+        request: GeckoSession.NavigationDelegate.LoadRequest,
+    ): GeckoResult<AllowOrDeny>? = delegate.onLoadRequest(session, request)
+
+    override fun onSubframeLoadRequest(
+        session: GeckoSession,
+        request: GeckoSession.NavigationDelegate.LoadRequest,
+    ): GeckoResult<AllowOrDeny>? = delegate.onSubframeLoadRequest(session, request)
+
     override fun onNewSession(
         session: GeckoSession,
         uri: String,
     ): GeckoResult<GeckoSession>? = compatibility.onNewSession(session, uri)
+
+    override fun onLoadError(
+        session: GeckoSession,
+        uri: String?,
+        error: org.mozilla.geckoview.WebRequestError,
+    ): GeckoResult<String>? = delegate.onLoadError(session, uri, error)
 }
 
 /**
