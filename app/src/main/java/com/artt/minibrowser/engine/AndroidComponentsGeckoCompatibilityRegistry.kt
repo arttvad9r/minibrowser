@@ -1,6 +1,5 @@
 package com.artt.minibrowser.engine
 
-import android.util.Log
 import java.io.Closeable
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -143,14 +142,7 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
             override fun onNewSession(
                 session: GeckoSession,
                 uri: String,
-            ): GeckoResult<GeckoSession>? {
-                val host = current
-                Log.d(
-                    "MinibrowserPopup",
-                    "registry child uri=$uri hostBound=${host != null} sessionId=${context.sessionId}",
-                )
-                return host?.onNewSession(context, session, uri)
-            }
+            ): GeckoResult<GeckoSession>? = current?.onNewSession(context, session, uri)
 
             override fun onCloseRequest(session: GeckoSession) {
                 // Do not fall through to GeckoEngineSession's BrowserStore WindowRequest: this
