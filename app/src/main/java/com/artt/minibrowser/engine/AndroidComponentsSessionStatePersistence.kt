@@ -157,11 +157,28 @@ internal class AndroidComponentsSessionStatePersistenceObserver(
     }
 }
 
-/** Intercepts only SessionState callbacks while preserving the stock A-C ProgressDelegate. */
+/**
+ * Intercepts only SessionState callbacks while preserving every stock A-C ProgressDelegate callback.
+ * GeckoView progress callbacks are Java defaults, so non-owned callbacks are forwarded explicitly.
+ */
 internal class AndroidComponentsSessionStatePersistenceDelegate(
     private val delegate: GeckoSession.ProgressDelegate,
     private val observer: AndroidComponentsSessionStatePersistenceObserver,
-) : GeckoSession.ProgressDelegate by delegate {
+) : GeckoSession.ProgressDelegate {
+    override fun onPageStart(session: GeckoSession, url: String) =
+        delegate.onPageStart(session, url)
+
+    override fun onPageStop(session: GeckoSession, success: Boolean) =
+        delegate.onPageStop(session, success)
+
+    override fun onProgressChange(session: GeckoSession, progress: Int) =
+        delegate.onProgressChange(session, progress)
+
+    override fun onSecurityChange(
+        session: GeckoSession,
+        securityInfo: GeckoSession.ProgressDelegate.SecurityInformation,
+    ) = delegate.onSecurityChange(session, securityInfo)
+
     override fun onSessionStateChange(
         session: GeckoSession,
         sessionState: GeckoSession.SessionState,
