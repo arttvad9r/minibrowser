@@ -185,20 +185,29 @@ class GeckoDownloadController(
 
     /** Android Components owner after GeckoEngineSession publishes an external-resource response. */
     fun handle(download: DownloadState) {
-        val response = download.response
-        if (response == null) {
-            toast(activity.applicationContext, activity.getString(R.string.download_response_missing))
-            return
+        // BrowserStore middleware runs on its own serialized worker. Activity UI, runtime permission
+        // requests and even skip-confirmation admission belong on main; ownership of the response is
+        // retained by this posted closure after BrowserStore consumes its transient DownloadState.
+        activity.runOnUiThread {
+            if (activity.isFinishing || activity.isDestroyed) {
+                runCatching { download.response?.close() }
+                return@runOnUiThread
+            }
+            val response = download.response
+            if (response == null) {
+                toast(activity.applicationContext, activity.getString(R.string.download_response_missing))
+                return@runOnUiThread
+            }
+            handle(
+                body = AndroidComponentsDownloadBody(response),
+                name = download.fileName?.takeIf { it.isNotBlank() }
+                    ?: androidComponentsCompatibleDownloadFilename(null, download.url),
+                mime = normalizeDownloadMime(download.contentType),
+                sourceUrl = download.url,
+                persistHistory = shouldPersistDownloadHistory(download.private),
+                skipConfirmation = download.skipConfirmation,
+            )
         }
-        handle(
-            body = AndroidComponentsDownloadBody(response),
-            name = download.fileName?.takeIf { it.isNotBlank() }
-                ?: androidComponentsCompatibleDownloadFilename(null, download.url),
-            mime = normalizeDownloadMime(download.contentType),
-            sourceUrl = download.url,
-            persistHistory = shouldPersistDownloadHistory(download.private),
-            skipConfirmation = download.skipConfirmation,
-        )
     }
 
     private fun handle(
