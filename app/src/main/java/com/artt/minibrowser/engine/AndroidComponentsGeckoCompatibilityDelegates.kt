@@ -3,6 +3,7 @@ package com.artt.minibrowser.engine
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 
 /**
@@ -168,8 +169,9 @@ internal class AndroidComponentsPromptCompatibilityDelegate(
  * Activity-scoped compatibility host and fail closed if that host is unavailable.
  */
 internal class AndroidComponentsPermissionCompatibilityDelegate(
+    private val delegate: GeckoSession.PermissionDelegate,
     private val compatibility: AndroidComponentsGeckoCompatibilityHandler,
-) : GeckoSession.PermissionDelegate {
+) : GeckoSession.PermissionDelegate by delegate {
     override fun onAndroidPermissionsRequest(
         session: GeckoSession,
         permissions: Array<String>?,
@@ -230,7 +232,7 @@ internal class AndroidComponentsNewSessionCompatibilityDelegate(
     override fun onLoadError(
         session: GeckoSession,
         uri: String?,
-        error: org.mozilla.geckoview.WebRequestError,
+        error: WebRequestError,
     ): GeckoResult<String>? = delegate.onLoadError(session, uri, error)
 }
 
