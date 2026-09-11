@@ -5,6 +5,8 @@ import android.net.Uri
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -19,6 +21,7 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import mozilla.components.browser.engine.gecko.GeckoEngineView
 import mozilla.components.browser.state.action.TabListAction
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,8 +52,7 @@ class BrowserPictureInPicturePlaybackSystemTest {
 
                     val tapPoint = AtomicReference<Pair<Float, Float>>()
                     scenario.onActivity { activity ->
-                        val decor = activity.window.decorView
-                        tapPoint.set(decor.width * 0.5f to decor.height * 0.45f)
+                        tapPoint.set(geckoContentCenter(activity.window.decorView))
                     }
                     sendTap(instrumentation, tapPoint.get())
 
@@ -134,6 +136,23 @@ class BrowserPictureInPicturePlaybackSystemTest {
         }
         check(browserApp.browserStore.state.tabs.isEmpty()) { "BrowserStore did not reset before PiP test" }
         TabStore.saveState(File(targetContext.filesDir, "tabs"), PersistedBrowserState())
+    }
+
+    private fun geckoContentCenter(root: View): Pair<Float, Float> {
+        val engineView = findGeckoEngineView(root) ?: error("GeckoEngineView is not attached")
+        check(engineView.width > 0 && engineView.height > 0) { "GeckoEngineView has empty bounds" }
+        val location = IntArray(2)
+        engineView.getLocationOnScreen(location)
+        return location[0] + engineView.width / 2f to location[1] + engineView.height / 2f
+    }
+
+    private fun findGeckoEngineView(view: View): GeckoEngineView? {
+        if (view is GeckoEngineView) return view
+        if (view !is ViewGroup) return null
+        for (index in 0 until view.childCount) {
+            findGeckoEngineView(view.getChildAt(index))?.let { return it }
+        }
+        return null
     }
 
     private fun sendTap(
