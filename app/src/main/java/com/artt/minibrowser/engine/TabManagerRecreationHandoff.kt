@@ -49,6 +49,10 @@ internal object TabManagerRecreationHandoffRegistry {
         }
     }
 
+    fun hasPending(storeDir: File): Boolean = synchronized(lock) {
+        storeDir.absolutePath in pendingByStore
+    }
+
     fun consume(storeDir: File): TabManagerRecreationHandoff? = synchronized(lock) {
         pendingByStore.remove(storeDir.absolutePath)
     }
@@ -59,6 +63,9 @@ internal object TabManagerRecreationHandoffRegistry {
         }
     }
 }
+
+internal fun hasTabManagerRecreationHandoff(storeDir: File): Boolean =
+    TabManagerRecreationHandoffRegistry.hasPending(storeDir)
 
 internal fun takeTabManagerRecreationHandoff(storeDir: File): TabManagerRecreationHandoff? =
     TabManagerRecreationHandoffRegistry.consume(storeDir)
