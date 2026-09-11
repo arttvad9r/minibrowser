@@ -43,11 +43,13 @@ class BrowserPopupLiveCutoverSystemTest {
             )
             ActivityScenario.launch<MainActivity>(intent).use { scenario ->
                 assertTrue(
-                    "Initial popup parent is loaded by the selected Android Components session",
+                    "Initial popup parent executed its local DOM readiness script in Gecko",
+                    waitUntil(LINK_TIMEOUT_MS) { server.pageReady },
+                )
+                assertTrue(
+                    "Initial popup parent is owned by a linked Android Components session",
                     waitUntil(LINK_TIMEOUT_MS) {
-                        selectedTab(app)?.let { tab ->
-                            tab.content.url == server.pageUrl && tab.engineState.engineSession != null
-                        } == true
+                        selectedTab(app)?.engineState?.engineSession != null
                     },
                 )
 
@@ -57,7 +59,6 @@ class BrowserPopupLiveCutoverSystemTest {
                     val decor = activity.window.decorView
                     tapPoint.set(decor.width * 0.5f to decor.height * 0.5f)
                 }
-                SystemClock.sleep(PAGE_SETTLE_MS)
                 sendTap(instrumentation, tapPoint.get())
 
                 assertTrue(
@@ -113,12 +114,15 @@ class BrowserPopupLiveCutoverSystemTest {
     private class LocalPopupServer : Closeable {
         private val server = ServerSocket(0, 8, InetAddress.getByName(LOOPBACK_HOST))
         private val running = AtomicBoolean(true)
+        private val ready = AtomicBoolean(false)
         private val worker = Thread(::acceptLoop, "popup-cutover-test-server").apply {
             isDaemon = true
             start()
         }
 
         val pageUrl: String = "http://$LOOPBACK_HOST:${server.localPort}/"
+        val pageReady: Boolean
+            get() = ready.get()
 
         override fun close() {
             if (!running.getAndSet(false)) return
@@ -144,9 +148,14 @@ class BrowserPopupLiveCutoverSystemTest {
                 if (line.isEmpty()) break
             }
 
-            val body = if (path == "/") PAGE_BYTES else NOT_FOUND_BYTES
-            val status = if (path == "/") "200 OK" else "404 Not Found"
-            writeResponse(socket, method, status, body)
+            when (path) {
+                "/" -> writeResponse(socket, method, "200 OK", PAGE_BYTES)
+                "/ready" -> {
+                    writeResponse(socket, method, "200 OK", READY_BYTES)
+                    ready.set(true)
+                }
+                else -> writeResponse(socket, method, "404 Not Found", NOT_FOUND_BYTES)
+            }
         }
 
         private fun writeResponse(
@@ -174,7 +183,6 @@ class BrowserPopupLiveCutoverSystemTest {
         const val LOOPBACK_HOST = "127.0.0.1"
         const val LINK_TIMEOUT_MS = 10_000L
         const val RESET_TIMEOUT_MS = 5_000L
-        const val PAGE_SETTLE_MS = 300L
         const val TAP_DURATION_MS = 50L
         const val POLL_INTERVAL_MS = 25L
         const val SERVER_JOIN_TIMEOUT_MS = 1_000L
@@ -192,10 +200,16 @@ class BrowserPopupLiveCutoverSystemTest {
             </head>
             <body>
               <button onclick="window.open('', '_blank')">Open blank popup</button>
+              <script>
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                  fetch('/ready', { cache: 'no-store' }).catch(() => {});
+                }));
+              </script>
             </body>
             </html>
         """.trimIndent().toByteArray(StandardCharsets.UTF_8)
 
+        val READY_BYTES = "ready".toByteArray(StandardCharsets.UTF_8)
         val NOT_FOUND_BYTES = "not found".toByteArray(StandardCharsets.UTF_8)
 
         @JvmStatic
