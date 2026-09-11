@@ -43,8 +43,8 @@ class BrowserPictureInPicturePlaybackSystemTest {
                 }
                 val scenario = ActivityScenario.launch<MainActivity>(intent)
                 try {
-                    waitFor("The local Gecko media page became selected") {
-                        selectedContent(browserApp)?.url == server.pageUrl
+                    waitFor("The local Gecko media page executed its DOM readiness script") {
+                        server.pageReady
                     }
 
                     val tapPoint = AtomicReference<Pair<Float, Float>>()
@@ -52,7 +52,6 @@ class BrowserPictureInPicturePlaybackSystemTest {
                         val decor = activity.window.decorView
                         tapPoint.set(decor.width * 0.5f to decor.height * 0.45f)
                     }
-                    SystemClock.sleep(PAGE_SETTLE_MS)
                     sendTap(instrumentation, tapPoint.get())
 
                     waitFor("Gecko reported content fullscreen from the real video element") {
@@ -162,12 +161,15 @@ class BrowserPictureInPicturePlaybackSystemTest {
     ) : Closeable {
         private val server = ServerSocket(0, 8, InetAddress.getByName(LOOPBACK_HOST))
         private val running = AtomicBoolean(true)
+        private val ready = AtomicBoolean(false)
         private val worker = Thread(::acceptLoop, "pip-media-test-server").apply {
             isDaemon = true
             start()
         }
 
         val pageUrl: String = "http://$LOOPBACK_HOST:${server.localPort}/"
+        val pageReady: Boolean
+            get() = ready.get()
 
         override fun close() {
             if (!running.getAndSet(false)) return
@@ -208,6 +210,16 @@ class BrowserPictureInPicturePlaybackSystemTest {
                     contentType = "text/html; charset=utf-8",
                     body = PAGE_BYTES,
                 )
+                "/ready" -> {
+                    writeResponse(
+                        socket = socket,
+                        method = method,
+                        status = "200 OK",
+                        contentType = "text/plain; charset=utf-8",
+                        body = READY_BYTES,
+                    )
+                    ready.set(true)
+                }
                 "/pip.webm" -> writeVideoResponse(socket, method, headers["range"])
                 else -> writeResponse(
                     socket = socket,
@@ -293,7 +305,6 @@ class BrowserPictureInPicturePlaybackSystemTest {
         // test validates eventual real Gecko -> PiP behavior, not a playback-start latency SLA.
         const val MEDIA_READY_TIMEOUT_MS = 25_000L
         const val POLL_INTERVAL_MS = 100L
-        const val PAGE_SETTLE_MS = 300L
         const val TAP_DURATION_MS = 50L
         const val SERVER_JOIN_TIMEOUT_MS = 1_000L
         const val SOCKET_TIMEOUT_MS = 5_000
@@ -323,9 +334,14 @@ class BrowserPictureInPicturePlaybackSystemTest {
                     video.requestFullscreen().catch(error => document.title = 'fullscreen-error:' + error.name);
                   }
                 }
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                  fetch('/ready', { cache: 'no-store' }).catch(() => {});
+                }));
               </script>
             </body>
             </html>
         """.trimIndent().toByteArray(StandardCharsets.UTF_8)
+
+        val READY_BYTES = "ready".toByteArray(StandardCharsets.UTF_8)
     }
 }
