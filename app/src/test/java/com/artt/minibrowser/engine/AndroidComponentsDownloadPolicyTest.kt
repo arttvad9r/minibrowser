@@ -1,13 +1,16 @@
 package com.artt.minibrowser.engine
 
 import java.io.ByteArrayInputStream
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import mozilla.components.browser.state.action.BrowserAction
 import mozilla.components.browser.state.action.ContentAction
+import mozilla.components.browser.state.action.InitAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.content.DownloadState
 import mozilla.components.browser.state.state.createTab
@@ -81,7 +84,7 @@ class AndroidComponentsDownloadPolicyTest {
             true
         }
 
-        store.dispatch(ContentAction.UpdateDownloadAction("42", download))
+        store.dispatchAndDrain(ContentAction.UpdateDownloadAction("42", download))
 
         assertSame(download, handedOff)
         assertNull(store.state.tabs.single().content.download)
@@ -100,11 +103,18 @@ class AndroidComponentsDownloadPolicyTest {
             false
         }
 
-        store.dispatch(ContentAction.UpdateDownloadAction("42", download))
+        store.dispatchAndDrain(ContentAction.UpdateDownloadAction("42", download))
 
         assertEquals(1, calls)
         assertNull(store.state.tabs.single().content.download)
         assertTrue(stream.closed)
+    }
+
+    private fun BrowserStore.dispatchAndDrain(action: BrowserAction) = runBlocking {
+        dispatch(action).join()
+        // Store.dispatch is asynchronous. A-C's consume/cancel action was queued from the middleware;
+        // this no-op action is a FIFO barrier so assertions see the terminal BrowserStore state.
+        dispatch(InitAction).join()
     }
 
     private fun store(consume: (DownloadState) -> Boolean) = BrowserStore(
