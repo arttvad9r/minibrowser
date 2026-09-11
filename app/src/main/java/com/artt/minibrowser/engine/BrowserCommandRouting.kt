@@ -1,6 +1,7 @@
 package com.artt.minibrowser.engine
 
 import mozilla.components.browser.state.action.ContentAction
+import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
 import org.mozilla.geckoview.GeckoSession
@@ -25,7 +26,23 @@ internal fun loadBrowserUrl(tab: Tab, browserStore: BrowserStore, url: String) {
     when (val target = browserCommandTargetForTab(tab, browserStore)) {
         is BrowserCommandTarget.Raw -> target.session.loadUri(url)
         is BrowserCommandTarget.Linked -> target.session.loadUrl(url)
-        null -> Unit
+        null -> {
+            // A fresh/process-restored A-C tab may not have an EngineSession yet. Match
+            // SessionUseCases: queue the load for EngineMiddleware instead of dropping it. The
+            // raw-to-A-C handoff interval is deliberately excluded because it still retains a raw
+            // session whose authority has already been relinquished.
+            if (
+                tab.rawSessionOwnership == RawSessionOwnership.Relinquished &&
+                tab.rawSessionOrNull == null
+            ) {
+                browserStore.dispatch(
+                    EngineAction.LoadUrlAction(
+                        sessionId = tab.id.toString(),
+                        url = url,
+                    ),
+                )
+            }
+        }
     }
 }
 
