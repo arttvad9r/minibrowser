@@ -66,6 +66,31 @@ internal class BrowserTabLifecycleController(
                     .collect { tabManager.enforceHotTabBudget() }
             }
             androidComponentsBridgeScope.launch {
+                // GeckoView requires onNewSession to return a newly-created *unopened* GeckoSession
+                // and opens it itself only after the callback returns. The selection event therefore
+                // arrives too early for the normal isOpen-gated transfer. Raw StateBridge content
+                // changes after Gecko opens the popup provide a deterministic second transfer signal.
+                browserApp.browserStore.stateFlow
+                    .map { state ->
+                        val selected = state.tabs.firstOrNull { it.id == state.selectedTabId }
+                        if (selected == null || selected.engineState.engineSession != null) {
+                            null
+                        } else {
+                            Triple(selected.id, selected.content.url, selected.content.loading)
+                        }
+                    }
+                    .distinctUntilChanged()
+                    .drop(1)
+                    .collect { rawSelected ->
+                        if (
+                            rawSelected != null &&
+                            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                        ) {
+                            transferCurrentRawTabWhenMirrored(browserApp)
+                        }
+                    }
+            }
+            androidComponentsBridgeScope.launch {
                 // The initial current tab is handled by onResume. Later selections cross ownership
                 // only while the Activity is resumed; a paused selection is handled on next resume.
                 tabManager.currentId
