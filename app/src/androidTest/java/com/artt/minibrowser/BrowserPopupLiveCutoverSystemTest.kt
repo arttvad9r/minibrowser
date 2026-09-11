@@ -1,7 +1,5 @@
 package com.artt.minibrowser
 
-import android.content.Intent
-import android.net.Uri
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -19,6 +17,7 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.action.TabListAction
 import org.junit.AfterClass
 import org.junit.Assert.assertTrue
@@ -43,19 +42,19 @@ class BrowserPopupLiveCutoverSystemTest {
             }
             composeRule.waitForIdle()
 
+            val parentId = checkNotNull(app.browserStore.state.selectedTabId) {
+                "No selected A-C parent tab for popup test"
+            }
             composeRule.runOnUiThread {
-                composeRule.activity.startActivity(
-                    Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse(server.pageUrl),
-                        composeRule.activity,
-                        MainActivity::class.java,
-                    ),
-                )
+                // Keep the Activity instance untouched: this test exercises the linked-session
+                // compatibility onNewSession seam, not MainActivity's external-intent lifecycle.
+                app.browserStore.dispatch(EngineAction.LoadUrlAction(parentId, server.pageUrl))
             }
             composeRule.waitUntil(LINK_TIMEOUT_MS) {
                 selectedTab(app)?.let { tab ->
-                    tab.content.url == server.pageUrl && tab.engineState.engineSession != null
+                    tab.id == parentId &&
+                        tab.content.url == server.pageUrl &&
+                        tab.engineState.engineSession != null
                 } == true
             }
 
