@@ -41,6 +41,11 @@ internal class AndroidComponentsNavigationUiCompatibilityDelegate(
     private val sessionId: String,
     private val compatibilityState: AndroidComponentsUiCompatibilityState,
 ) : GeckoSession.NavigationDelegate by delegate {
+    override fun onNewSession(
+        session: GeckoSession,
+        uri: String,
+    ): GeckoResult<GeckoSession>? = delegate.onNewSession(session, uri)
+
     override fun onLoadError(
         session: GeckoSession,
         uri: String?,
