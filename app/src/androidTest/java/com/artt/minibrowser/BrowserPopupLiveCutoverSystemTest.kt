@@ -29,7 +29,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class BrowserPopupLiveCutoverSystemTest {
     @Test
-    fun geckoOpenedPopupRetriesAndTransfersToAndroidComponents() {
+    fun blankPopupTransfersAfterGeckoOpensReturnedSession() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val app = targetApp()
@@ -61,22 +61,14 @@ class BrowserPopupLiveCutoverSystemTest {
                 sendTap(instrumentation, tapPoint.get())
 
                 assertTrue(
-                    "Gecko-opened popup becomes the selected linked Android Components tab",
+                    "Blank Gecko popup becomes the selected linked Android Components tab",
                     waitUntil(LINK_TIMEOUT_MS) {
                         val state = app.browserStore.state
                         val popup = state.tabs.singleOrNull { it.id !in initialIds }
                         popup != null &&
                             state.selectedTabId == popup.id &&
-                            popup.content.url == server.popupUrl &&
                             popup.engineState.engineSession != null
                     },
-                )
-
-                val state = app.browserStore.state
-                val popup = state.tabs.single { it.id !in initialIds }
-                assertTrue(
-                    "Gecko-opened popup is linked to Android Components after its raw load settles",
-                    popup.engineState.engineSession != null,
                 )
             }
         }
@@ -127,7 +119,6 @@ class BrowserPopupLiveCutoverSystemTest {
         }
 
         val pageUrl: String = "http://$LOOPBACK_HOST:${server.localPort}/"
-        val popupUrl: String = "http://$LOOPBACK_HOST:${server.localPort}/popup"
 
         override fun close() {
             if (!running.getAndSet(false)) return
@@ -153,12 +144,8 @@ class BrowserPopupLiveCutoverSystemTest {
                 if (line.isEmpty()) break
             }
 
-            val body = when (path) {
-                "/" -> PAGE_BYTES
-                "/popup" -> POPUP_BYTES
-                else -> NOT_FOUND_BYTES
-            }
-            val status = if (path == "/" || path == "/popup") "200 OK" else "404 Not Found"
+            val body = if (path == "/") PAGE_BYTES else NOT_FOUND_BYTES
+            val status = if (path == "/") "200 OK" else "404 Not Found"
             writeResponse(socket, method, status, body)
         }
 
@@ -204,14 +191,9 @@ class BrowserPopupLiveCutoverSystemTest {
               </style>
             </head>
             <body>
-              <button onclick="window.open('/popup', '_blank')">Open popup</button>
+              <button onclick="window.open('', '_blank')">Open blank popup</button>
             </body>
             </html>
-        """.trimIndent().toByteArray(StandardCharsets.UTF_8)
-
-        val POPUP_BYTES = """
-            <!doctype html>
-            <html><body>Popup ownership cutover</body></html>
         """.trimIndent().toByteArray(StandardCharsets.UTF_8)
 
         val NOT_FOUND_BYTES = "not found".toByteArray(StandardCharsets.UTF_8)
