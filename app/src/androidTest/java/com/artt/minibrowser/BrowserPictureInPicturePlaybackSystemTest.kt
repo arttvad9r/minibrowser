@@ -54,6 +54,31 @@ class BrowserPictureInPicturePlaybackSystemTest {
                     }
                     sendTap(instrumentation, tapPoint.get())
 
+                    waitFor("Tap reached the Gecko media page") {
+                        server.clicked
+                    }
+                    waitFor(
+                        "Fullscreen request did not settle after the page click",
+                        MEDIA_READY_TIMEOUT_MS,
+                    ) {
+                        server.fullscreenSucceeded || server.fullscreenFailed
+                    }
+                    assertTrue(
+                        "Fullscreen API rejected the real video request; " +
+                            "playSucceeded=${server.playSucceeded}, playFailed=${server.playFailed}",
+                        server.fullscreenSucceeded,
+                    )
+                    waitFor(
+                        "Video play() did not settle after the page click",
+                        MEDIA_READY_TIMEOUT_MS,
+                    ) {
+                        server.playSucceeded || server.playFailed
+                    }
+                    assertTrue(
+                        "Video play() rejected after a real page click",
+                        server.playSucceeded,
+                    )
+
                     waitFor("Gecko reported content fullscreen from the real video element") {
                         selectedContent(browserApp)?.fullScreen == true
                     }
@@ -162,6 +187,11 @@ class BrowserPictureInPicturePlaybackSystemTest {
         private val server = ServerSocket(0, 8, InetAddress.getByName(LOOPBACK_HOST))
         private val running = AtomicBoolean(true)
         private val ready = AtomicBoolean(false)
+        private val clickedMarker = AtomicBoolean(false)
+        private val playSucceededMarker = AtomicBoolean(false)
+        private val playFailedMarker = AtomicBoolean(false)
+        private val fullscreenSucceededMarker = AtomicBoolean(false)
+        private val fullscreenFailedMarker = AtomicBoolean(false)
         private val worker = Thread(::acceptLoop, "pip-media-test-server").apply {
             isDaemon = true
             start()
@@ -170,6 +200,16 @@ class BrowserPictureInPicturePlaybackSystemTest {
         val pageUrl: String = "http://$LOOPBACK_HOST:${server.localPort}/"
         val pageReady: Boolean
             get() = ready.get()
+        val clicked: Boolean
+            get() = clickedMarker.get()
+        val playSucceeded: Boolean
+            get() = playSucceededMarker.get()
+        val playFailed: Boolean
+            get() = playFailedMarker.get()
+        val fullscreenSucceeded: Boolean
+            get() = fullscreenSucceededMarker.get()
+        val fullscreenFailed: Boolean
+            get() = fullscreenFailedMarker.get()
 
         override fun close() {
             if (!running.getAndSet(false)) return
@@ -226,6 +266,11 @@ class BrowserPictureInPicturePlaybackSystemTest {
                     )
                     ready.set(true)
                 }
+                "/clicked" -> writeMarkerResponse(socket, method, clickedMarker)
+                "/play-ok" -> writeMarkerResponse(socket, method, playSucceededMarker)
+                "/play-error" -> writeMarkerResponse(socket, method, playFailedMarker)
+                "/fullscreen-ok" -> writeMarkerResponse(socket, method, fullscreenSucceededMarker)
+                "/fullscreen-error" -> writeMarkerResponse(socket, method, fullscreenFailedMarker)
                 "/pip.webm" -> writeVideoResponse(socket, method, headers["range"])
                 else -> writeResponse(
                     socket = socket,
@@ -235,6 +280,21 @@ class BrowserPictureInPicturePlaybackSystemTest {
                     body = "not found".toByteArray(StandardCharsets.UTF_8),
                 )
             }
+        }
+
+        private fun writeMarkerResponse(
+            socket: Socket,
+            method: String,
+            marker: AtomicBoolean,
+        ) {
+            writeResponse(
+                socket = socket,
+                method = method,
+                status = "200 OK",
+                contentType = "text/plain; charset=utf-8",
+                body = MARKER_BYTES,
+            )
+            marker.set(true)
         }
 
         private fun writeVideoResponse(
@@ -331,13 +391,25 @@ class BrowserPictureInPicturePlaybackSystemTest {
               <video id="video" preload="auto" loop playsinline src="/pip.webm"></video>
               <button id="start" onclick="startPlayback()">Start video</button>
               <script>
+                function mark(path) {
+                  fetch(path, { cache: 'no-store', keepalive: true }).catch(() => {});
+                }
                 function startPlayback() {
+                  mark('/clicked');
                   const video = document.getElementById('video');
                   document.getElementById('start').remove();
                   const playResult = video.play();
-                  if (playResult) playResult.catch(error => document.title = 'play-error:' + error.name);
+                  if (playResult) {
+                    playResult.then(() => mark('/play-ok')).catch(() => mark('/play-error'));
+                  } else {
+                    mark('/play-ok');
+                  }
                   if (video.requestFullscreen) {
-                    video.requestFullscreen().catch(error => document.title = 'fullscreen-error:' + error.name);
+                    video.requestFullscreen()
+                      .then(() => mark('/fullscreen-ok'))
+                      .catch(() => mark('/fullscreen-error'));
+                  } else {
+                    mark('/fullscreen-error');
                   }
                 }
                 requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -349,5 +421,6 @@ class BrowserPictureInPicturePlaybackSystemTest {
         """.trimIndent().toByteArray(StandardCharsets.UTF_8)
 
         val READY_BYTES = "ready".toByteArray(StandardCharsets.UTF_8)
+        val MARKER_BYTES = "ok".toByteArray(StandardCharsets.UTF_8)
     }
 }
