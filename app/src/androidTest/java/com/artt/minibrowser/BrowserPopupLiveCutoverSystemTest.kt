@@ -1,9 +1,11 @@
 package com.artt.minibrowser
 
+import android.content.Intent
+import android.net.Uri
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
-import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.data.PersistedBrowserState
@@ -17,71 +19,66 @@ import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
-import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.action.TabListAction
 import org.junit.AfterClass
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class BrowserPopupLiveCutoverSystemTest {
-    @get:Rule
-    val composeRule = createAndroidComposeRule<MainActivity>()
-
     @Test
     fun geckoOpenedPopupRetriesAndTransfersToAndroidComponents() {
-        val app = targetApp()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val app = targetApp()
 
         LocalPopupServer().use { server ->
-            composeRule.waitUntil(LINK_TIMEOUT_MS) {
-                selectedTab(app)?.engineState?.engineSession != null
-            }
-            composeRule.waitForIdle()
-
-            val parentId = checkNotNull(app.browserStore.state.selectedTabId) {
-                "No selected A-C parent tab for popup test"
-            }
-            composeRule.runOnUiThread {
-                // Keep the Activity instance untouched: this test exercises the linked-session
-                // compatibility onNewSession seam, not MainActivity's external-intent lifecycle.
-                app.browserStore.dispatch(EngineAction.LoadUrlAction(parentId, server.pageUrl))
-            }
-            composeRule.waitUntil(LINK_TIMEOUT_MS) {
-                selectedTab(app)?.let { tab ->
-                    tab.id == parentId &&
-                        tab.content.url == server.pageUrl &&
-                        tab.engineState.engineSession != null
-                } == true
-            }
-
-            val initialIds = app.browserStore.state.tabs.mapTo(mutableSetOf()) { it.id }
-            val tapPoint = AtomicReference<Pair<Float, Float>>()
-            composeRule.runOnUiThread {
-                val decor = composeRule.activity.window.decorView
-                tapPoint.set(decor.width * 0.5f to decor.height * 0.5f)
-            }
-            SystemClock.sleep(PAGE_SETTLE_MS)
-            sendTap(instrumentation, tapPoint.get())
-
-            composeRule.waitUntil(LINK_TIMEOUT_MS) {
-                val state = app.browserStore.state
-                val popup = state.tabs.singleOrNull { it.id !in initialIds }
-                popup != null &&
-                    state.selectedTabId == popup.id &&
-                    popup.content.url == server.popupUrl &&
-                    popup.engineState.engineSession != null
-            }
-
-            val state = app.browserStore.state
-            val popup = state.tabs.single { it.id !in initialIds }
-            assertTrue(
-                "Gecko-opened popup is linked to Android Components after its first raw content update",
-                popup.engineState.engineSession != null,
+            val intent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(server.pageUrl),
+                targetContext,
+                MainActivity::class.java,
             )
+            ActivityScenario.launch<MainActivity>(intent).use { scenario ->
+                assertTrue(
+                    "Initial popup parent is loaded by the selected Android Components session",
+                    waitUntil(LINK_TIMEOUT_MS) {
+                        selectedTab(app)?.let { tab ->
+                            tab.content.url == server.pageUrl && tab.engineState.engineSession != null
+                        } == true
+                    },
+                )
+
+                val initialIds = app.browserStore.state.tabs.mapTo(mutableSetOf()) { it.id }
+                val tapPoint = AtomicReference<Pair<Float, Float>>()
+                scenario.onActivity { activity ->
+                    val decor = activity.window.decorView
+                    tapPoint.set(decor.width * 0.5f to decor.height * 0.5f)
+                }
+                SystemClock.sleep(PAGE_SETTLE_MS)
+                sendTap(instrumentation, tapPoint.get())
+
+                assertTrue(
+                    "Gecko-opened popup becomes the selected linked Android Components tab",
+                    waitUntil(LINK_TIMEOUT_MS) {
+                        val state = app.browserStore.state
+                        val popup = state.tabs.singleOrNull { it.id !in initialIds }
+                        popup != null &&
+                            state.selectedTabId == popup.id &&
+                            popup.content.url == server.popupUrl &&
+                            popup.engineState.engineSession != null
+                    },
+                )
+
+                val state = app.browserStore.state
+                val popup = state.tabs.single { it.id !in initialIds }
+                assertTrue(
+                    "Gecko-opened popup is linked to Android Components after its raw load settles",
+                    popup.engineState.engineSession != null,
+                )
+            }
         }
     }
 
@@ -192,6 +189,7 @@ class BrowserPopupLiveCutoverSystemTest {
         const val RESET_TIMEOUT_MS = 5_000L
         const val PAGE_SETTLE_MS = 300L
         const val TAP_DURATION_MS = 50L
+        const val POLL_INTERVAL_MS = 25L
         const val SERVER_JOIN_TIMEOUT_MS = 1_000L
         const val SOCKET_TIMEOUT_MS = 5_000
 
@@ -246,10 +244,19 @@ class BrowserPopupLiveCutoverSystemTest {
 
             val deadline = SystemClock.uptimeMillis() + RESET_TIMEOUT_MS
             while (app.browserStore.state.tabs.isNotEmpty() && SystemClock.uptimeMillis() < deadline) {
-                SystemClock.sleep(25L)
+                SystemClock.sleep(POLL_INTERVAL_MS)
             }
             check(app.browserStore.state.tabs.isEmpty()) { "BrowserStore did not reset before test" }
             TabStore.saveState(File(targetContext.filesDir, "tabs"), PersistedBrowserState())
+        }
+
+        fun waitUntil(timeoutMs: Long, condition: () -> Boolean): Boolean {
+            val deadline = SystemClock.uptimeMillis() + timeoutMs
+            while (SystemClock.uptimeMillis() < deadline) {
+                if (condition()) return true
+                SystemClock.sleep(POLL_INTERVAL_MS)
+            }
+            return condition()
         }
     }
 }
