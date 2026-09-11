@@ -3,7 +3,12 @@ package com.artt.minibrowser.engine
 import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import mozilla.components.browser.state.action.BrowserAction
+import mozilla.components.browser.state.action.ContentAction
+import mozilla.components.browser.state.state.BrowserState
+import mozilla.components.browser.state.state.content.DownloadState
 import mozilla.components.concept.engine.DownloadDelegate
+import mozilla.components.lib.state.Middleware
 import mozilla.components.support.ktx.kotlin.sanitizeFileName
 
 /**
@@ -36,7 +41,7 @@ internal fun suggestedDownloadFilename(
  *
  * GeckoEngineSession 154.0.1 calls DownloadDelegate.guessFileName(...) and then applies the same
  * Mozilla sanitizeFileName() extension before publishing EngineSession.Observer.onExternalResource.
- * Applying it here now keeps final filenames stable across the future live ownership cutover.
+ * Applying it here keeps final filenames stable across the live ownership cutover.
  */
 internal fun androidComponentsCompatibleDownloadFilename(
     contentDisposition: String?,
@@ -44,8 +49,8 @@ internal fun androidComponentsCompatibleDownloadFilename(
 ): String = suggestedDownloadFilename(contentDisposition, url).sanitizeFileName()
 
 /**
- * Pre-cutover A-C download delegate. It intentionally returns the MiniBrowser suggestion rather
- * than the final filename because GeckoEngineSession performs Mozilla's sanitizeFileName() step.
+ * A-C download delegate. GeckoEngineSession post-sanitizes this suggestion before publishing the
+ * resulting [DownloadState] through BrowserStore.
  */
 internal class AndroidComponentsDownloadDelegate : DownloadDelegate {
     override fun guessFileName(
@@ -53,4 +58,26 @@ internal class AndroidComponentsDownloadDelegate : DownloadDelegate {
         url: String?,
         mimeType: String?,
     ): String = suggestedDownloadFilename(contentDisposition, url)
+}
+
+/**
+ * Hands A-C-owned authenticated responses to MiniBrowser's existing Activity download UI exactly
+ * once. A consumed response is removed from BrowserStore without closing it because the download
+ * controller now owns its lifetime. If no Activity host can take ownership, A-C closes the response
+ * through its standard cancel action instead of leaking an unconsumed body.
+ */
+internal fun androidComponentsDownloadMiddleware(
+    consume: (DownloadState) -> Boolean,
+): Middleware<BrowserState, BrowserAction> = { store, next, action ->
+    next(action)
+    if (action is ContentAction.UpdateDownloadAction) {
+        val download = action.download
+        store.dispatch(
+            if (consume(download)) {
+                ContentAction.ConsumeDownloadAction(action.sessionId, download.id)
+            } else {
+                ContentAction.CancelDownloadAction(action.sessionId, download.id)
+            },
+        )
+    }
 }
