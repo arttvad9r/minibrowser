@@ -80,6 +80,7 @@ class BrowserApp : Application() {
                     uiCompatibilityState = uiCompatibilityState,
                     sessionStatePersistence = sessionStatePersistence,
                 ),
+                androidComponentsDownloadMiddleware(geckoCompatibilityRegistry::consumeDownload),
                 androidComponentsUiCompatibilityCleanupMiddleware(uiCompatibilityState),
                 androidComponentsSessionStatePersistenceCleanupMiddleware(sessionStatePersistence),
                 // Firefox installs this outside EngineMiddleware.create(). Keep linked sessions on
