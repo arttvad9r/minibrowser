@@ -29,7 +29,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class BrowserPopupLiveCutoverSystemTest {
     @Test
-    fun blankPopupTransfersAfterGeckoOpensReturnedSession() {
+    fun popupTransfersAfterGeckoOpensReturnedSession() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val app = targetApp()
@@ -62,7 +62,15 @@ class BrowserPopupLiveCutoverSystemTest {
                 sendTap(instrumentation, tapPoint.get())
 
                 assertTrue(
-                    "Blank Gecko popup becomes the selected linked Android Components tab",
+                    "Tap reached the current popup parent page",
+                    waitUntil(LINK_TIMEOUT_MS) { server.popupClicked },
+                )
+                assertTrue(
+                    "Gecko opened the requested child page in the popup session",
+                    waitUntil(LINK_TIMEOUT_MS) { server.childRequested },
+                )
+                assertTrue(
+                    "Gecko popup becomes the selected linked Android Components tab",
                     waitUntil(LINK_TIMEOUT_MS) {
                         val state = app.browserStore.state
                         val popup = state.tabs.singleOrNull { it.id !in initialIds }
@@ -115,6 +123,8 @@ class BrowserPopupLiveCutoverSystemTest {
         private val server = ServerSocket(0, 8, InetAddress.getByName(LOOPBACK_HOST))
         private val running = AtomicBoolean(true)
         private val ready = AtomicBoolean(false)
+        private val clicked = AtomicBoolean(false)
+        private val child = AtomicBoolean(false)
         private val worker = Thread(::acceptLoop, "popup-cutover-test-server").apply {
             isDaemon = true
             start()
@@ -123,6 +133,10 @@ class BrowserPopupLiveCutoverSystemTest {
         val pageUrl: String = "http://$LOOPBACK_HOST:${server.localPort}/"
         val pageReady: Boolean
             get() = ready.get()
+        val popupClicked: Boolean
+            get() = clicked.get()
+        val childRequested: Boolean
+            get() = child.get()
 
         override fun close() {
             if (!running.getAndSet(false)) return
@@ -133,7 +147,13 @@ class BrowserPopupLiveCutoverSystemTest {
         private fun acceptLoop() {
             while (running.get()) {
                 val socket = runCatching { server.accept() }.getOrNull() ?: continue
-                runCatching { socket.use(::handle) }
+                Thread(
+                    { runCatching { socket.use(::handle) } },
+                    "popup-cutover-test-connection",
+                ).apply {
+                    isDaemon = true
+                    start()
+                }
             }
         }
 
@@ -153,6 +173,14 @@ class BrowserPopupLiveCutoverSystemTest {
                 "/ready" -> {
                     writeResponse(socket, method, "200 OK", READY_BYTES)
                     ready.set(true)
+                }
+                "/clicked" -> {
+                    writeResponse(socket, method, "200 OK", CLICKED_BYTES)
+                    clicked.set(true)
+                }
+                "/child" -> {
+                    writeResponse(socket, method, "200 OK", CHILD_BYTES)
+                    child.set(true)
                 }
                 else -> writeResponse(socket, method, "404 Not Found", NOT_FOUND_BYTES)
             }
@@ -199,8 +227,12 @@ class BrowserPopupLiveCutoverSystemTest {
               </style>
             </head>
             <body>
-              <button onclick="window.open('', '_blank')">Open blank popup</button>
+              <button onclick="openPopup()">Open popup</button>
               <script>
+                function openPopup() {
+                  fetch('/clicked', { cache: 'no-store', keepalive: true }).catch(() => {});
+                  window.open('/child', '_blank');
+                }
                 requestAnimationFrame(() => requestAnimationFrame(() => {
                   fetch('/ready', { cache: 'no-store' }).catch(() => {});
                 }));
@@ -209,7 +241,12 @@ class BrowserPopupLiveCutoverSystemTest {
             </html>
         """.trimIndent().toByteArray(StandardCharsets.UTF_8)
 
+        val CHILD_BYTES = """
+            <!doctype html>
+            <html><body>Popup child</body></html>
+        """.trimIndent().toByteArray(StandardCharsets.UTF_8)
         val READY_BYTES = "ready".toByteArray(StandardCharsets.UTF_8)
+        val CLICKED_BYTES = "clicked".toByteArray(StandardCharsets.UTF_8)
         val NOT_FOUND_BYTES = "not found".toByteArray(StandardCharsets.UTF_8)
 
         @JvmStatic
