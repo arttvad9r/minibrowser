@@ -1,14 +1,18 @@
 package com.artt.minibrowser.engine
 
+import android.app.Application
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
+import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.robolectric.annotation.Config
 
-@Config(sdk = [35])
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [35], application = Application::class)
 class AndroidComponentsUiCompatibilityDelegatesTest {
     @Test
     fun navigationDelegateForwardsNewSessionToWrappedDelegate() {
