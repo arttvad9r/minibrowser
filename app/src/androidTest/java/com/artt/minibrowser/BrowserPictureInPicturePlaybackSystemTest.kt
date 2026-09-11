@@ -180,7 +180,13 @@ class BrowserPictureInPicturePlaybackSystemTest {
         private fun acceptLoop() {
             while (running.get()) {
                 val socket = runCatching { server.accept() }.getOrNull() ?: continue
-                runCatching { socket.use(::handle) }
+                Thread(
+                    { runCatching { socket.use(::handle) } },
+                    "pip-media-test-connection",
+                ).apply {
+                    isDaemon = true
+                    start()
+                }
             }
         }
 
