@@ -57,14 +57,13 @@ internal fun runAllTerminalCleanupSteps(vararg steps: () -> Unit) {
 /**
  * Production coordinator for moving one already-open MiniBrowser GeckoSession to A-C ownership.
  *
- * This function is intentionally not called by the current raw-owned runtime yet. It centralizes the
- * exact main-thread ordering needed by the eventual live cutover and, critically, owns terminal
- * cleanup for the interval after [Tab.captureAndroidComponentsHandoffAndRelinquish] has made raw
- * ownership irreversible.
+ * This function centralizes the exact main-thread ordering needed by the live cutover and, critically,
+ * owns terminal cleanup for the interval after [Tab.captureAndroidComponentsHandoffAndRelinquish] has
+ * made raw ownership irreversible.
  *
  * A-C session-state changes are routed here into TabManager's existing dirty persistence queue. The
- * coordinator owns that wiring so a future live caller cannot accidentally link an EngineSession
- * while leaving the post-relinquish persistence path asleep.
+ * coordinator owns that wiring so a caller cannot accidentally link an EngineSession while leaving
+ * the post-relinquish persistence path asleep.
  */
 @MainThread
 internal fun transferTabToAndroidComponents(
@@ -83,11 +82,17 @@ internal fun transferTabToAndroidComponents(
             check(tab.ownsRawSession(rawSession)) {
                 "Tab must still own its raw GeckoSession before Android Components transfer"
             }
-            preflightAndroidComponentsExistingSessionTransfer(
+            val checked = preflightAndroidComponentsExistingSessionTransfer(
                 rawSession = rawSession,
                 store = store,
                 tabId = tab.id.toString(),
             )
+            // StateBridge is asynchronous. Commit any raw Gecko callback state that reached Tab but
+            // has not yet reached BrowserStore before the one-way ownership flag disables mirroring.
+            // This preflight/capture sequence is synchronous on main, so no raw callback can slip
+            // between this final flush and relinquish.
+            syncRawTabContentBeforeAndroidComponentsRelinquish(tab, store)
+            checked
         },
         captureAndRelinquish = { preflight ->
             tab.captureAndroidComponentsHandoffAndRelinquish(preflight.rawSession)
