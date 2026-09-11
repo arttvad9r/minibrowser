@@ -1,5 +1,7 @@
 package com.artt.minibrowser.engine
 
+import android.app.Application
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.ByteArrayInputStream
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -18,7 +20,11 @@ import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.fetch.MutableHeaders
 import mozilla.components.concept.fetch.Response
 import mozilla.components.support.ktx.kotlin.sanitizeFileName
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [35], application = Application::class)
 class AndroidComponentsDownloadPolicyTest {
     @Test
     fun urlFallbackUsesDecodedLastPathSegment() {
