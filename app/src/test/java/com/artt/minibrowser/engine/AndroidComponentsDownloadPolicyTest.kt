@@ -1,16 +1,16 @@
 package com.artt.minibrowser.engine
 
 import java.io.ByteArrayInputStream
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
-import mozilla.components.browser.state.action.BrowserAction
 import mozilla.components.browser.state.action.ContentAction
-import mozilla.components.browser.state.action.InitAction
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.content.DownloadState
 import mozilla.components.browser.state.state.createTab
@@ -84,7 +84,8 @@ class AndroidComponentsDownloadPolicyTest {
             true
         }
 
-        store.dispatchAndDrain(ContentAction.UpdateDownloadAction("42", download))
+        store.dispatch(ContentAction.UpdateDownloadAction("42", download))
+        store.awaitDownloadHandled { handedOff != null }
 
         assertSame(download, handedOff)
         assertNull(store.state.tabs.single().content.download)
@@ -103,7 +104,8 @@ class AndroidComponentsDownloadPolicyTest {
             false
         }
 
-        store.dispatchAndDrain(ContentAction.UpdateDownloadAction("42", download))
+        store.dispatch(ContentAction.UpdateDownloadAction("42", download))
+        store.awaitDownloadHandled { calls > 0 }
 
         assertEquals(1, calls)
         assertNull(store.state.tabs.single().content.download)
@@ -114,19 +116,29 @@ class AndroidComponentsDownloadPolicyTest {
     fun throwingDownloadConsumerFailsClosedWithoutPoisoningBrowserStore() {
         val stream = TrackingInputStream("body".encodeToByteArray())
         val download = download(stream)
-        val store = store { error("Activity handoff failed") }
+        var calls = 0
+        val store = store {
+            calls++
+            error("Activity handoff failed")
+        }
 
-        store.dispatchAndDrain(ContentAction.UpdateDownloadAction("42", download))
+        store.dispatch(ContentAction.UpdateDownloadAction("42", download))
+        store.awaitDownloadHandled { calls > 0 }
 
+        assertEquals(1, calls)
         assertNull(store.state.tabs.single().content.download)
         assertTrue(stream.closed)
     }
 
-    private fun BrowserStore.dispatchAndDrain(action: BrowserAction) = runBlocking {
-        dispatch(action).join()
-        // Store.dispatch is asynchronous. The middleware queues a consume action after the update;
-        // this no-op action is a FIFO barrier so assertions see the terminal BrowserStore state.
-        dispatch(InitAction).join()
+    private fun BrowserStore.awaitDownloadHandled(handled: () -> Boolean) = runBlocking {
+        // BrowserStore.dispatch() is asynchronous in the pinned A-C 154.0.1 API. Wait for both the
+        // handoff callback and the nested ConsumeDownloadAction instead of depending on its return
+        // type, which changed in later Android Components releases.
+        withTimeout(5_000) {
+            while (!handled() || state.tabs.single().content.download != null) {
+                delay(1)
+            }
+        }
     }
 
     private fun store(consume: (DownloadState) -> Boolean) = BrowserStore(
