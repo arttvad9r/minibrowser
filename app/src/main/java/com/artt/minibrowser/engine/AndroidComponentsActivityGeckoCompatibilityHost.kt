@@ -3,6 +3,7 @@ package com.artt.minibrowser.engine
 import android.app.Activity
 import android.net.Uri
 import android.os.Handler
+import mozilla.components.browser.state.state.content.DownloadState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebResponse
@@ -84,9 +85,15 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
         session: GeckoSession,
         response: WebResponse,
     ): Boolean {
-        // GeckoDownloadController owns/always closes the authenticated body once handle() begins.
-        // This intentionally matches the raw path, where downloads are not selected-tab gated.
+        // Legacy fallback retained until the stock A-C content callback cutover is validated.
         downloadController.handle(response, context.privateMode)
+        return true
+    }
+
+    override fun onDownload(download: DownloadState): Boolean {
+        // BrowserStore has already materialized the stock GeckoEngineSession external-resource
+        // event. From this point the existing MiniBrowser controller owns the authenticated body.
+        downloadController.handle(download)
         return true
     }
 
