@@ -63,8 +63,10 @@ internal class AndroidComponentsDownloadDelegate : DownloadDelegate {
 /**
  * Hands A-C-owned authenticated responses to MiniBrowser's existing Activity download UI exactly
  * once. A consumed response is removed from BrowserStore without closing it because the download
- * controller now owns its lifetime. If no Activity host can take ownership, A-C closes the response
- * through its standard cancel action instead of leaking an unconsumed body.
+ * controller now owns its lifetime. When no Activity host can take ownership, or the handoff itself
+ * fails, this middleware closes the response before consuming the BrowserStore request. BrowserStore
+ * has no DownloadsFeature/DownloadMiddleware here, so a CancelDownloadAction alone would only clear
+ * reducer state and would not own response cleanup.
  */
 internal fun androidComponentsDownloadMiddleware(
     consume: (DownloadState) -> Boolean,
@@ -72,12 +74,10 @@ internal fun androidComponentsDownloadMiddleware(
     next(action)
     if (action is ContentAction.UpdateDownloadAction) {
         val download = action.download
-        store.dispatch(
-            if (consume(download)) {
-                ContentAction.ConsumeDownloadAction(action.sessionId, download.id)
-            } else {
-                ContentAction.CancelDownloadAction(action.sessionId, download.id)
-            },
-        )
+        val consumed = runCatching { consume(download) }.getOrDefault(false)
+        if (!consumed) {
+            runCatching { download.response?.close() }
+        }
+        store.dispatch(ContentAction.ConsumeDownloadAction(action.sessionId, download.id))
     }
 }
