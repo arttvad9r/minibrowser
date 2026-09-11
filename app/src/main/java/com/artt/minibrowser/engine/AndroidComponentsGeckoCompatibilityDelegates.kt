@@ -16,11 +16,10 @@ import org.mozilla.geckoview.WebResponse
  * ownership moves away from TabManager. A-C's PromptFeature can open tabs through TabsUseCases, which
  * would otherwise create BrowserStore-only tabs during this transitional ownership phase. Permission
  * callbacks likewise stay on MiniBrowser's existing policy/UI until an equivalent BrowserStore
- * permission feature is introduced. Downloads keep ownership of Gecko's authenticated WebResponse
- * stream instead of emitting an unconsumed A-C external-resource event. New-window and close requests
- * stay on TabManager's structural path so stock A-C cannot create or retain untracked window state.
- * Linked-media context menus remain here because A-C 154 drops the wrapping link URI for audio/video
- * hit results.
+ * permission feature is introduced. Download responses now remain with stock GeckoEngineSession and
+ * flow through BrowserStore. New-window and close requests stay on TabManager's structural path so
+ * stock A-C cannot create or retain untracked window state. Linked-media context menus remain here
+ * because A-C 154 drops the wrapping link URI for audio/video hit results.
  */
 internal interface AndroidComponentsGeckoCompatibilityHandler {
     /** Resolves the current Activity-scoped raw-compatible prompt owner, or null between hosts. */
@@ -45,7 +44,7 @@ internal interface AndroidComponentsGeckoCompatibilityHandler {
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     )
 
-    /** Takes ownership of [response.body], closing it if no Activity host can consume the response. */
+    /** Legacy download bridge retained until the BrowserStore cutover is fully validated. */
     fun onExternalResponse(
         session: GeckoSession,
         response: WebResponse,
@@ -241,8 +240,8 @@ internal class AndroidComponentsNewSessionCompatibilityDelegate(
 
 /**
  * Keeps stock A-C content ownership except for semantics that are not yet safely consumable after
- * transfer: authenticated download responses, window-close requests, and linked media context menus.
- * GeckoView content callbacks are Java defaults, so non-owned callbacks must be forwarded explicitly.
+ * transfer: window-close requests and linked media context menus. GeckoView content callbacks are
+ * Java defaults, so non-owned callbacks must be forwarded explicitly.
  */
 internal class AndroidComponentsContentCompatibilityDelegate(
     private val delegate: GeckoSession.ContentDelegate,
@@ -288,7 +287,7 @@ internal class AndroidComponentsContentCompatibilityDelegate(
     override fun onExternalResponse(
         session: GeckoSession,
         response: WebResponse,
-    ) = compatibility.onExternalResponse(session, response)
+    ) = delegate.onExternalResponse(session, response)
 
     override fun onCrash(session: GeckoSession) = delegate.onCrash(session)
 
