@@ -8,8 +8,10 @@ import org.mozilla.geckoview.GeckoSession
 import org.robolectric.annotation.Config
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35], application = Application::class)
@@ -27,8 +29,12 @@ class TabManagerRecreationHandoffTest {
         try {
             TabManagerRecreationHandoffRegistry.publish(firstStore, handoff)
 
+            assertTrue(hasTabManagerRecreationHandoff(firstStore))
+            assertFalse(hasTabManagerRecreationHandoff(secondStore))
             assertNull(TabManagerRecreationHandoffRegistry.consume(secondStore))
+            assertTrue(hasTabManagerRecreationHandoff(firstStore))
             assertSame(handoff, TabManagerRecreationHandoffRegistry.consume(firstStore))
+            assertFalse(hasTabManagerRecreationHandoff(firstStore))
             assertNull(TabManagerRecreationHandoffRegistry.consume(firstStore))
         } finally {
             TabManagerRecreationHandoffRegistry.clearForTest(firstStore)
