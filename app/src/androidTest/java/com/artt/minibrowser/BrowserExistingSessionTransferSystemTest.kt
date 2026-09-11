@@ -1,0 +1,312 @@
+package com.artt.minibrowser
+
+import android.os.SystemClock
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.artt.minibrowser.engine.AndroidComponentsContentCompatibilityDelegate
+import com.artt.minibrowser.engine.AndroidComponentsGeckoCompatibilityRegistry
+import com.artt.minibrowser.engine.AndroidComponentsMediaSessionHandoff
+import com.artt.minibrowser.engine.AndroidComponentsNavigationUiCompatibilityDelegate
+import com.artt.minibrowser.engine.AndroidComponentsOwnedSessionConfigurator
+import com.artt.minibrowser.engine.AndroidComponentsPermissionCompatibilityDelegate
+import com.artt.minibrowser.engine.AndroidComponentsPreparedExistingSessionTransfer
+import com.artt.minibrowser.engine.AndroidComponentsProgressUiCompatibilityDelegate
+import com.artt.minibrowser.engine.AndroidComponentsPromptCompatibilityDelegate
+import com.artt.minibrowser.engine.AndroidComponentsUiCompatibilityHandoff
+import com.artt.minibrowser.engine.BrowserApp
+import com.artt.minibrowser.engine.ExternalAppNavigationPolicyRegistry
+import com.artt.minibrowser.engine.PageLoadError
+import com.artt.minibrowser.engine.SecurityState
+import com.artt.minibrowser.engine.preflightAndroidComponentsExistingSessionTransfer
+import com.artt.minibrowser.engine.prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish
+import mozilla.components.browser.state.action.TabListAction
+import mozilla.components.browser.state.state.createTab
+import mozilla.components.concept.engine.mediasession.MediaSession
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
+
+@RunWith(AndroidJUnit4::class)
+class BrowserExistingSessionTransferSystemTest {
+    @Test
+    fun existingOpenGeckoSessionCanBeTakenOverWithoutChangingIdentity() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val app = instrumentation.targetContext.applicationContext as BrowserApp
+        val tabId = "existing-transfer-test"
+
+        instrumentation.runOnMainSync {
+            val rawSession = newRawSession(app)
+            var prepared: AndroidComponentsPreparedExistingSessionTransfer? = null
+            try {
+                addStoreTab(app, tabId, private = false)
+                assertTrue("Raw session is open before ownership transfer", rawSession.isOpen)
+
+                prepared = prepareTransfer(app, rawSession, tabId)
+
+                assertTrue("Ownership wrapper keeps the existing GeckoSession open", rawSession.isOpen)
+                assertTrue(
+                    "A-C prompt delegate is wrapped by the selective compatibility proxy",
+                    rawSession.promptDelegate is AndroidComponentsPromptCompatibilityDelegate,
+                )
+                assertTrue(
+                    "A-C permission delegate is wrapped by the selective compatibility proxy",
+                    rawSession.permissionDelegate is AndroidComponentsPermissionCompatibilityDelegate,
+                )
+                assertTrue(
+                    "A-C content delegate is wrapped by the selective compatibility proxy",
+                    rawSession.contentDelegate is AndroidComponentsContentCompatibilityDelegate,
+                )
+                assertTrue(
+                    "A-C progress delegate retains MiniBrowser-only security UI state",
+                    rawSession.progressDelegate is AndroidComponentsProgressUiCompatibilityDelegate,
+                )
+                assertTrue(
+                    "A-C navigation delegate retains MiniBrowser-only load-error UI state",
+                    rawSession.navigationDelegate is AndroidComponentsNavigationUiCompatibilityDelegate,
+                )
+                val uiCompatibility = app.uiCompatibilityState.snapshot(tabId)
+                assertNotNull("Raw UI compatibility state is handed off before delegate takeover", uiCompatibility)
+                assertSame(SecurityState.Exception, uiCompatibility!!.securityState)
+                assertSame(PageLoadError.Network, uiCompatibility.pageLoadError)
+                assertTrue(
+                    "Future owned session keeps MiniBrowser's suspend-media policy",
+                    prepared!!.engineSession.settings.suspendMediaWhenInactive,
+                )
+                assertTrue("Existing-session link is forced to skip loading", prepared!!.transferPlan.skipLoading)
+                assertFalse("Existing-session link must not infer a parent", prepared!!.transferPlan.includeParent)
+
+                prepared!!.engineSession.close()
+                prepared = null
+                assertFalse(
+                    "Once wrapped, GeckoEngineSession is the close owner of the supplied raw session",
+                    rawSession.isOpen,
+                )
+            } finally {
+                prepared?.engineSession?.close()
+                removeStoreTab(app, tabId)
+                if (rawSession.isOpen) rawSession.close()
+            }
+        }
+    }
+
+    @Test
+    fun browserStoreRemovalClosesTheTransferredRawSession() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val app = instrumentation.targetContext.applicationContext as BrowserApp
+        val tabId = "existing-linked-transfer-test"
+        var rawSession: GeckoSession? = null
+        var prepared: AndroidComponentsPreparedExistingSessionTransfer? = null
+
+        try {
+            instrumentation.runOnMainSync {
+                val store = app.browserStore
+                addStoreTab(app, tabId, private = false)
+
+                val mediaController = TestMediaSessionController()
+                val mediaMetadata = MediaSession.ElementMetadata(
+                    source = "https://example.com/video.webm",
+                    duration = 42.0,
+                    width = 1920L,
+                    height = 1080L,
+                    audioTrackCount = 1,
+                    videoTrackCount = 1,
+                )
+                val openedRawSession = newRawSession(app)
+                rawSession = openedRawSession
+                prepared = prepareTransfer(
+                    app = app,
+                    rawSession = openedRawSession,
+                    tabId = tabId,
+                    mediaSessionHandoff = AndroidComponentsMediaSessionHandoff(
+                        controller = mediaController,
+                        playbackState = MediaSession.PlaybackState.PLAYING,
+                        fullscreen = true,
+                        elementMetadata = mediaMetadata,
+                    ),
+                )
+                prepared!!.transferPlan.linkAndReplayTo(store, prepared!!.engineSession)
+
+                val transferredTab = store.state.tabs.first { it.id == tabId }
+                assertSame(
+                    "BrowserStore links the exact prepared EngineSession",
+                    prepared!!.engineSession,
+                    transferredTab.engineState.engineSession,
+                )
+                val mediaState = transferredTab.mediaSessionState
+                assertNotNull("Retained media session is replayed during cutover", mediaState)
+                assertSame("Media controller identity is retained", mediaController, mediaState!!.controller)
+                assertSame(
+                    "Playing state is retained",
+                    MediaSession.PlaybackState.PLAYING,
+                    mediaState.playbackState,
+                )
+                assertTrue("Fullscreen media state is retained", mediaState.fullscreen)
+                assertSame("Media element metadata is retained", mediaMetadata, mediaState.elementMetadata)
+
+                store.dispatch(TabListAction.RemoveTabAction(tabId))
+                assertTrue("Transferred test tab is removed from BrowserStore", store.state.tabs.none { it.id == tabId })
+                assertNull(
+                    "BrowserStore removal also drops MiniBrowser-only UI compatibility state",
+                    app.uiCompatibilityState.snapshot(tabId),
+                )
+            }
+
+            val transferredRawSession = checkNotNull(rawSession)
+            val deadline = SystemClock.uptimeMillis() + CLOSE_TIMEOUT_MS
+            while (
+                SystemClock.uptimeMillis() < deadline &&
+                isSessionOpenOnMainThread(instrumentation, transferredRawSession)
+            ) {
+                SystemClock.sleep(POLL_INTERVAL_MS)
+            }
+            assertFalse(
+                "TabsRemovedMiddleware closes the underlying supplied GeckoSession",
+                isSessionOpenOnMainThread(instrumentation, transferredRawSession),
+            )
+            prepared = null
+        } finally {
+            instrumentation.runOnMainSync {
+                removeStoreTab(app, tabId)
+                prepared?.engineSession?.close()
+                rawSession?.let { session ->
+                    if (session.isOpen) session.close()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun privateModeMismatchIsRejectedFromBrowserStoreMetadataBeforeDelegateTakeover() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val app = instrumentation.targetContext.applicationContext as BrowserApp
+        val tabId = "private-mismatch-test"
+
+        instrumentation.runOnMainSync {
+            val rawSession = newRawSession(app)
+            val promptBefore = rawSession.promptDelegate
+            val permissionBefore = rawSession.permissionDelegate
+            val contentBefore = rawSession.contentDelegate
+            try {
+                addStoreTab(app, tabId, private = true)
+                var rejected = false
+                try {
+                    preflightAndroidComponentsExistingSessionTransfer(
+                        rawSession = rawSession,
+                        store = app.browserStore,
+                        tabId = tabId,
+                    )
+                } catch (_: IllegalStateException) {
+                    rejected = true
+                }
+
+                assertTrue("BrowserStore private-mode mismatch is rejected before raw ownership is relinquished", rejected)
+                assertTrue("Rejected transfer leaves the raw session open", rawSession.isOpen)
+                assertSame("Prompt ownership is untouched before rejection", promptBefore, rawSession.promptDelegate)
+                assertSame(
+                    "Permission ownership is untouched before rejection",
+                    permissionBefore,
+                    rawSession.permissionDelegate,
+                )
+                assertSame("Content ownership is untouched before rejection", contentBefore, rawSession.contentDelegate)
+            } finally {
+                removeStoreTab(app, tabId)
+                if (rawSession.isOpen) rawSession.close()
+            }
+        }
+    }
+
+    private fun prepareTransfer(
+        app: BrowserApp,
+        rawSession: GeckoSession,
+        tabId: String,
+        mediaSessionHandoff: AndroidComponentsMediaSessionHandoff? = null,
+        uiCompatibilityHandoff: AndroidComponentsUiCompatibilityHandoff = AndroidComponentsUiCompatibilityHandoff(
+            securityState = SecurityState.Exception,
+            pageLoadError = PageLoadError.Network,
+        ),
+    ): AndroidComponentsPreparedExistingSessionTransfer {
+        val preflight = preflightAndroidComponentsExistingSessionTransfer(
+            rawSession = rawSession,
+            store = app.browserStore,
+            tabId = tabId,
+        )
+        return prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
+            runtime = app.runtime,
+            preflight = preflight,
+            configurator = newConfigurator(),
+            compatibilityRegistry = AndroidComponentsGeckoCompatibilityRegistry(),
+            uiCompatibilityState = app.uiCompatibilityState,
+            uiCompatibilityHandoff = uiCompatibilityHandoff,
+            mediaSessionHandoff = mediaSessionHandoff,
+        )
+    }
+
+    private fun addStoreTab(
+        app: BrowserApp,
+        tabId: String,
+        private: Boolean,
+    ) {
+        removeStoreTab(app, tabId)
+        app.browserStore.dispatch(
+            TabListAction.AddTabAction(
+                createTab(
+                    url = "about:blank",
+                    private = private,
+                    id = tabId,
+                ),
+            ),
+        )
+    }
+
+    private fun removeStoreTab(app: BrowserApp, tabId: String) {
+        if (app.browserStore.state.tabs.any { it.id == tabId }) {
+            app.browserStore.dispatch(TabListAction.RemoveTabAction(tabId))
+        }
+    }
+
+    private fun isSessionOpenOnMainThread(
+        instrumentation: android.app.Instrumentation,
+        session: GeckoSession,
+    ): Boolean {
+        var isOpen = false
+        instrumentation.runOnMainSync {
+            isOpen = session.isOpen
+        }
+        return isOpen
+    }
+
+    private fun newRawSession(app: BrowserApp): GeckoSession = GeckoSession(
+        GeckoSessionSettings.Builder()
+            .usePrivateMode(false)
+            .suspendMediaWhenInactive(true)
+            .build(),
+    ).also { it.open(app.runtime) }
+
+    private fun newConfigurator() = AndroidComponentsOwnedSessionConfigurator(
+        externalNavigationPolicy = ExternalAppNavigationPolicyRegistry(),
+    )
+
+    private class TestMediaSessionController : MediaSession.Controller {
+        override fun pause() = Unit
+        override fun stop() = Unit
+        override fun play() = Unit
+        override fun seekTo(time: Double, fast: Boolean) = Unit
+        override fun seekForward() = Unit
+        override fun seekBackward() = Unit
+        override fun nextTrack() = Unit
+        override fun previousTrack() = Unit
+        override fun skipAd() = Unit
+        override fun muteAudio(mute: Boolean) = Unit
+    }
+
+    private companion object {
+        const val CLOSE_TIMEOUT_MS = 5_000L
+        const val POLL_INTERVAL_MS = 50L
+    }
+}

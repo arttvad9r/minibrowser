@@ -5,6 +5,7 @@ import com.artt.minibrowser.net.sanitizeWebUriUserInfoInText
 import com.artt.minibrowser.net.webUriHost
 
 private val HISTORY_WHITESPACE = Regex("\\s+")
+private const val HISTORY_VISITED_QUERY_CHUNK_SIZE = 900
 
 internal fun isHistoryUrl(url: String): Boolean = sanitizeWebUriForPersistence(url) != null
 
@@ -12,6 +13,20 @@ internal fun isHistoryUrl(url: String): Boolean = sanitizeWebUriForPersistence(u
 internal fun historyTitleForPersistence(title: String?): String? {
     val value = title?.takeIf { it.isNotBlank() } ?: return null
     return sanitizeWebUriUserInfoInText(value)
+}
+
+internal fun historyVisitedStatuses(
+    requestedUrls: List<String>,
+    visitedUrls: Set<String>,
+): List<Boolean> = requestedUrls.map { url ->
+    sanitizeWebUriForPersistence(url)?.let(visitedUrls::contains) ?: false
+}
+
+internal fun persistentHistoryUrls(urls: List<String>): List<String> {
+    if (urls.isEmpty()) return emptyList()
+    val result = LinkedHashSet<String>(urls.size)
+    urls.forEach { url -> sanitizeWebUriForPersistence(url)?.let(result::add) }
+    return result.toList()
 }
 
 /**
@@ -164,6 +179,24 @@ class HistoryRepository(private val dao: AppDao) {
         val safeTitle = historyTitleForPersistence(title) ?: return
         dao.updateHistoryTitle(safeUrl, safeTitle)
     }
+
+    /**
+     * Answers Gecko's link-coloring query without issuing one Room query per URI. Keep chunks below
+     * SQLite's bind-parameter limit and map results back to the caller's original order.
+     */
+    suspend fun getVisited(uris: List<String>): List<Boolean> {
+        if (uris.isEmpty()) return emptyList()
+        val candidates = persistentHistoryUrls(uris)
+        if (candidates.isEmpty()) return List(uris.size) { false }
+
+        val visited = HashSet<String>(candidates.size)
+        candidates.chunked(HISTORY_VISITED_QUERY_CHUNK_SIZE).forEach { chunk ->
+            visited.addAll(dao.historyUrlsIn(chunk))
+        }
+        return historyVisitedStatuses(uris, visited)
+    }
+
+    suspend fun getVisited(): List<String> = persistentHistoryUrls(dao.allHistoryUrls())
 
     suspend fun suggest(q: String): List<Suggestion> {
         val query = q.trim()

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.SystemClock
 import android.os.Trace
 import android.util.Log
+import androidx.annotation.MainThread
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -12,10 +13,13 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.artt.minibrowser.BuildConfig
 import com.artt.minibrowser.browser.isCurrentPermissionRequestTab
+import com.artt.minibrowser.data.EngineSessionStateEnvelope
 import com.artt.minibrowser.data.HistorySink
 import com.artt.minibrowser.data.PersistedBrowserState
+import com.artt.minibrowser.data.PersistedSessionOwner
 import com.artt.minibrowser.data.PersistedTab
 import com.artt.minibrowser.data.TabStore
+import com.artt.minibrowser.data.encodeEngineSessionStateEnvelope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +31,10 @@ import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import mozilla.components.browser.state.action.EngineAction
+import mozilla.components.browser.state.action.TabListAction
+import mozilla.components.browser.state.state.BrowserState
+import mozilla.components.concept.engine.EngineSessionState
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -62,6 +70,12 @@ internal fun pageLoadErrorForCategory(category: Int): PageLoadError = when (cate
     WebRequestError.ERROR_CATEGORY_NETWORK -> PageLoadError.Network
     else -> PageLoadError.Generic
 }
+
+/** Mirrors GeckoEngineSession's gate before HistoryTrackingDelegate.onVisited is invoked. */
+internal fun shouldRecordHistoryVisit(isPrivate: Boolean, flags: Int): Boolean =
+    !isPrivate &&
+        flags and GeckoSession.HistoryDelegate.VISIT_TOP_LEVEL != 0 &&
+        flags and GeckoSession.HistoryDelegate.VISIT_UNRECOVERABLE_ERROR == 0
 
 internal fun shouldCloseSession(isOpen: Boolean): Boolean = isOpen
 
@@ -182,10 +196,42 @@ internal fun selectSessionStateForUrl(
     return SessionStateSelection(null, null)
 }
 
+internal data class EngineSessionStateSelection(
+    val state: EngineSessionStateEnvelope?,
+    val stateUrl: String?,
+)
+
+internal fun selectEngineSessionStateForUrl(
+    tabUrl: String,
+    state: EngineSessionStateEnvelope?,
+    stateUrl: String?,
+): EngineSessionStateSelection =
+    if (state != null && stateUrl == tabUrl) {
+        EngineSessionStateSelection(state, tabUrl)
+    } else {
+        EngineSessionStateSelection(null, null)
+    }
+
 internal fun currentSessionStateUrl(state: GeckoSession.SessionState): String? = runCatching {
     val index = state.currentIndex
     if (index < 0 || index >= state.size) null else state[index].uri
 }.getOrNull()?.takeIf { it.isNotBlank() }
+
+internal data class TabMediaPlaybackState(
+    val playing: Boolean = false,
+    val videoWidth: Long = 0L,
+    val videoHeight: Long = 0L,
+)
+
+internal fun tabMediaPlaybackStateWithVideoMetadata(
+    state: TabMediaPlaybackState,
+    fullscreenVideo: Boolean,
+    width: Long?,
+    height: Long?,
+): TabMediaPlaybackState = state.copy(
+    videoWidth = if (fullscreenVideo) width ?: 0L else 0L,
+    videoHeight = if (fullscreenVideo) height ?: 0L else 0L,
+)
 
 internal data class PersistenceTabSnapshot(
     val id: Long,
@@ -198,7 +244,46 @@ internal data class PersistenceTabSnapshot(
     val serializedSessionState: String?,
     val serializedSessionStateUrl: String?,
     val isPrivate: Boolean,
+    val sessionOwner: PersistedSessionOwner = PersistedSessionOwner.Raw,
+    val serializedEngineSessionState: EngineSessionStateEnvelope? = null,
+    val serializedEngineSessionStateUrl: String? = null,
+    val engineSessionState: EngineSessionState? = null,
+    val engineSessionStateUrl: String? = null,
+    val engineName: String? = null,
 )
+
+internal fun persistenceTabSnapshotAfterRelinquish(
+    id: Long,
+    lastAccess: Long,
+    browserState: BrowserState,
+    persistenceState: AndroidComponentsSessionStatePersistenceState,
+    engineName: String,
+): PersistenceTabSnapshot? {
+    val sessionId = id.toString()
+    val browserTab = browserState.tabs.firstOrNull { it.id == sessionId } ?: return null
+    val browserUrl = browserTab.content.url
+    val boundState = persistenceState.snapshot(sessionId)
+        ?.takeIf { it.stateUrl == browserUrl }
+
+    return PersistenceTabSnapshot(
+        id = id,
+        url = browserUrl,
+        title = browserTab.content.title,
+        desktop = browserTab.content.desktopMode,
+        lastAccess = lastAccess,
+        latestSessionState = null,
+        latestSessionStateUrl = null,
+        serializedSessionState = null,
+        serializedSessionStateUrl = null,
+        isPrivate = browserTab.content.private,
+        sessionOwner = PersistedSessionOwner.AndroidComponents,
+        serializedEngineSessionState = null,
+        serializedEngineSessionStateUrl = null,
+        engineSessionState = boundState?.state,
+        engineSessionStateUrl = boundState?.stateUrl,
+        engineName = boundState?.let { engineName },
+    )
+}
 
 internal data class PersistenceSnapshot(
     val selectedId: Long?,
@@ -215,6 +300,26 @@ internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): Persis
             serializedState = it.serializedSessionState,
             serializedStateUrl = it.serializedSessionStateUrl,
         )
+        val selectedEngineState = if (it.engineSessionState != null) {
+            val encodedState = if (it.engineSessionStateUrl == it.url) {
+                encodeEngineSessionStateEnvelope(
+                    engineName = it.engineName.orEmpty(),
+                    state = it.engineSessionState,
+                )
+            } else {
+                null
+            }
+            EngineSessionStateSelection(
+                state = encodedState,
+                stateUrl = it.url.takeIf { encodedState != null },
+            )
+        } else {
+            selectEngineSessionStateForUrl(
+                tabUrl = it.url,
+                state = it.serializedEngineSessionState,
+                stateUrl = it.serializedEngineSessionStateUrl,
+            )
+        }
         PersistedTab(
             id = it.id,
             url = it.url,
@@ -223,6 +328,9 @@ internal fun serializePersistenceSnapshot(snapshot: PersistenceSnapshot): Persis
             sessionState = selectedState.state,
             lastAccess = it.lastAccess,
             sessionStateUrl = selectedState.stateUrl,
+            engineSessionState = selectedEngineState.state,
+            engineSessionStateUrl = selectedEngineState.stateUrl,
+            sessionOwner = it.sessionOwner,
         )
     },
 )
@@ -242,8 +350,21 @@ internal fun snapshotPersistedState(selectedId: Long?, tabs: List<PersistTabCand
     },
 )
 
-class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
-    var session: GeckoSession by mutableStateOf(session)
+class Tab private constructor(
+    initialSession: GeckoSession?,
+    val id: Long,
+    val isPrivate: Boolean,
+    initialRawSessionOwnership: RawSessionOwnership,
+) {
+    constructor(session: GeckoSession, id: Long, isPrivate: Boolean) :
+        this(session, id, isPrivate, RawSessionOwnership.Owned)
+
+    private var rawSession: GeckoSession? by mutableStateOf(initialSession)
+    var session: GeckoSession
+        get() = checkNotNull(rawSession) { "Tab $id has no raw GeckoSession" }
+        set(value) {
+            rawSession = value
+        }
     var url by mutableStateOf("")
     var title by mutableStateOf("")
     var progress by mutableFloatStateOf(-1f)
@@ -253,14 +374,55 @@ class Tab(session: GeckoSession, val id: Long, val isPrivate: Boolean) {
     var fullscreen by mutableStateOf(false)
     var securityState by mutableStateOf(SecurityState.Unknown)
     var loadError by mutableStateOf<PageLoadError?>(null)
+    internal var rawSessionOwnership by mutableStateOf(initialRawSessionOwnership)
+        private set
+    internal var mediaPlaybackState by mutableStateOf(TabMediaPlaybackState())
+    internal var rawMediaSessionDelegate: AndroidComponentsRawMediaSessionDelegate? = null
     internal val progressGate = ProgressGate()
     internal var restoreUrlOnOpen = false
     @Volatile internal var latestSessionState: GeckoSession.SessionState? = null
     @Volatile internal var latestSessionStateUrl: String? = null
     internal var persistedSessionState: String? = null
     internal var persistedSessionStateUrl: String? = null
+    internal var persistedEngineSessionState: EngineSessionStateEnvelope? = null
+    internal var persistedEngineSessionStateUrl: String? = null
     internal var historyTitleUrl: String? = null
     internal var lastAccess = System.currentTimeMillis()
+
+    internal val rawSessionOrNull: GeckoSession?
+        get() = rawSession
+
+    internal val hasRawSessionAuthority: Boolean
+        get() = rawSession != null && rawSessionOwnership.allowsRawSessionMutation
+
+    internal fun ownsRawSession(candidateSession: GeckoSession): Boolean {
+        val actualSession = rawSession ?: return false
+        return rawSessionOwnership.ownsRawSession(
+            actualSession = actualSession,
+            candidateSession = candidateSession,
+        )
+    }
+
+    internal fun relinquishRawSessionOwnership(expectedSession: GeckoSession) {
+        val actualSession = checkNotNull(rawSession) {
+            "Cannot relinquish a tab without a raw GeckoSession"
+        }
+        rawSessionOwnership = rawSessionOwnershipAfterRelinquish(
+            current = rawSessionOwnership,
+            actualSession = actualSession,
+            expectedSession = expectedSession,
+        )
+    }
+
+    internal companion object {
+        fun androidComponentsOwned(id: Long, isPrivate: Boolean = false): Tab =
+            Tab(
+                initialSession = null,
+                id = id,
+                isPrivate = isPrivate,
+                initialRawSessionOwnership = RawSessionOwnership.Relinquished,
+            )
+    }
 }
 
 data class ClosedTabSnapshot(
@@ -276,6 +438,11 @@ data class ClosedTabSnapshot(
     val latestSessionStateUrl: String?,
     val persistedSessionState: String?,
     val persistedSessionStateUrl: String?,
+    val persistedEngineSessionState: EngineSessionStateEnvelope? = null,
+    val persistedEngineSessionStateUrl: String? = null,
+    val sessionOwner: PersistedSessionOwner = PersistedSessionOwner.Raw,
+    val engineSessionState: EngineSessionState? = null,
+    val engineSessionStateUrl: String? = null,
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -307,7 +474,11 @@ class TabManager(
     private val lifecycleOwner = context as? LifecycleOwner
     private val lifecycleObserver = object : DefaultLifecycleObserver {
         override fun onDestroy(owner: LifecycleOwner) {
-            close()
+            if ((context as? Activity)?.isChangingConfigurations == true) {
+                TabManagerRecreationHandoffRegistry.publish(storeDir, detachForRecreation())
+            } else {
+                close()
+            }
         }
     }
     val tabs get() = _tabs
@@ -330,7 +501,16 @@ class TabManager(
                 }.onFailure { Log.e("MinibrowserTabs", "Failed to persist tab metadata", it) }
             }
         }
-        restore()
+        val recreationHandoff = TabManagerRecreationHandoffRegistry.consume(storeDir)
+        if (recreationHandoff != null) {
+            // MainActivity always preloads TabStore before constructing TabManager. Drain that one-shot
+            // snapshot even though exact in-process session identity wins for a configuration change;
+            // otherwise a later process-local restore could consume stale pre-rotation metadata.
+            TabStore.loadState(storeDir)
+            adoptRecreationHandoff(recreationHandoff)
+        } else {
+            restore()
+        }
     }
 
     fun newTab(url: String?, private: Boolean = false): Tab {
@@ -376,6 +556,13 @@ class TabManager(
                 tab.persistedSessionState = saved.sessionState
                 tab.persistedSessionStateUrl = stateUrl
             }
+            val engineStateUrl = saved.engineSessionStateUrl
+            if (saved.engineSessionState != null && engineStateUrl == saved.url) {
+                // Preserve the opaque A-C state for a future ownership cutover, but do not decode or
+                // restore it while this tab is still raw-Gecko-owned.
+                tab.persistedEngineSessionState = saved.engineSessionState
+                tab.persistedEngineSessionStateUrl = engineStateUrl
+            }
         }
         attachDelegates(tab)
         if (publish) _tabs.value += tab
@@ -383,7 +570,7 @@ class TabManager(
     }
 
     private fun openTab(tab: Tab) {
-        if (closed) return
+        if (closed || !tab.hasRawSessionAuthority) return
         tab.session.open(runtime)
         val selected = tab.id == currentId.value
         val active = selected && appVisible
@@ -431,6 +618,10 @@ class TabManager(
         }
 
         selectedTab.lastAccess = System.currentTimeMillis()
+        if (!selectedTab.hasRawSessionAuthority) {
+            enforceHotTabBudget()
+            return
+        }
         if (!selectedTab.session.isOpen) {
             openTab(selectedTab)
         } else {
@@ -451,23 +642,52 @@ class TabManager(
         val idx = _tabs.value.indexOfFirst { it.id == id }
         if (idx < 0) return null
         val dying = _tabs.value[idx]
+        val androidComponentsOwned = dying.rawSessionOwnership == RawSessionOwnership.Relinquished
+        val browserApp = if (androidComponentsOwned) context.applicationContext as? BrowserApp else null
+        val sessionId = id.toString()
+        val storeTab = browserApp?.browserStore?.state?.tabs?.firstOrNull { it.id == sessionId }
+        val androidComponentsCapture = if (browserApp != null && storeTab != null) {
+            androidComponentsClosedTabCapture(
+                tab = storeTab,
+                boundState = browserApp.sessionStatePersistence.snapshot(sessionId),
+            )
+        } else {
+            null
+        }
         val snapshot = ClosedTabSnapshot(
             id = dying.id,
             index = idx,
             wasCurrent = currentId.value == id,
-            isPrivate = dying.isPrivate,
-            url = dying.url,
-            title = dying.title,
-            desktop = dying.desktop,
+            isPrivate = androidComponentsCapture?.isPrivate ?: dying.isPrivate,
+            url = androidComponentsCapture?.url ?: dying.url,
+            title = androidComponentsCapture?.title ?: dying.title,
+            desktop = androidComponentsCapture?.desktop ?: dying.desktop,
             lastAccess = dying.lastAccess,
             latestSessionState = dying.latestSessionState,
             latestSessionStateUrl = dying.latestSessionStateUrl,
             persistedSessionState = dying.persistedSessionState,
             persistedSessionStateUrl = dying.persistedSessionStateUrl,
+            persistedEngineSessionState = dying.persistedEngineSessionState,
+            persistedEngineSessionStateUrl = dying.persistedEngineSessionStateUrl,
+            sessionOwner = if (androidComponentsOwned) {
+                PersistedSessionOwner.AndroidComponents
+            } else {
+                PersistedSessionOwner.Raw
+            },
+            engineSessionState = androidComponentsCapture?.engineSessionState,
+            engineSessionStateUrl = androidComponentsCapture?.engineSessionStateUrl,
         )
-        runtime.webExtensionController.setTabActive(dying.session, false)
-        dying.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
-        closeIfOpen(dying.session)
+        if (androidComponentsOwned && browserApp != null && storeTab != null) {
+            // BrowserStore removal must happen before the structural record disappears so
+            // TabsRemovedMiddleware remains the sole EngineSession close owner.
+            browserApp.browserStore.dispatch(TabListAction.RemoveTabAction(sessionId))
+        }
+        if (dying.hasRawSessionAuthority) {
+            runtime.webExtensionController.setTabActive(dying.session, false)
+            dying.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+            resetMediaPlaybackState(dying)
+            closeIfOpen(dying.session)
+        }
         _tabs.value = _tabs.value - dying
         if (snapshot.wasCurrent) {
             val next = _tabs.value.getOrNull(idx.coerceAtMost(_tabs.value.size - 1))
@@ -483,6 +703,41 @@ class TabManager(
 
     fun restoreClosedTab(snapshot: ClosedTabSnapshot): Tab? {
         if (closed || _tabs.value.any { it.id == snapshot.id }) return null
+        if (snapshot.sessionOwner == PersistedSessionOwner.AndroidComponents) {
+            val browserApp = context.applicationContext as? BrowserApp ?: return null
+            val plan = androidComponentsClosedTabRestorePlan(snapshot) ?: return null
+            val sessionId = snapshot.id.toString()
+            if (browserApp.browserStore.state.tabs.any { it.id == sessionId }) return null
+
+            // Restore A-C state before publishing the structural record. The bridge never recreates
+            // relinquished tabs from raw state, so this is the only EngineSessionState source.
+            browserApp.browserStore.dispatch(
+                TabListAction.AddMultipleTabsAction(listOf(plan.storeTab)),
+            )
+            plan.engineSessionState?.let { state ->
+                browserApp.sessionStatePersistence.bind(
+                    sessionId = sessionId,
+                    stateUrl = snapshot.url,
+                    state = state,
+                )
+            }
+
+            val tab = plan.structuralTab
+            seq = maxOf(seq, tab.id)
+            val restoredTabs = _tabs.value.toMutableList()
+            restoredTabs.add(snapshot.index.coerceIn(0, restoredTabs.size), tab)
+            _tabs.value = restoredTabs
+
+            if (snapshot.wasCurrent || currentId.value == null) {
+                deactivateOthers(tab.id)
+                currentId.value = tab.id
+                browserApp.browserStore.dispatch(TabListAction.SelectTabAction(sessionId))
+            }
+            persist()
+            enforceHotTabBudget()
+            return tab
+        }
+
         val tab = Tab(GeckoSession(sessionSettings(snapshot.isPrivate)), snapshot.id, snapshot.isPrivate).apply {
             url = snapshot.url
             title = snapshot.title
@@ -492,6 +747,8 @@ class TabManager(
             latestSessionStateUrl = snapshot.latestSessionStateUrl
             persistedSessionState = snapshot.persistedSessionState
             persistedSessionStateUrl = snapshot.persistedSessionStateUrl
+            persistedEngineSessionState = snapshot.persistedEngineSessionState
+            persistedEngineSessionStateUrl = snapshot.persistedEngineSessionStateUrl
             restoreUrlOnOpen = true
         }
         seq = maxOf(seq, tab.id)
@@ -514,7 +771,7 @@ class TabManager(
 
     private fun isCurrentPermissionSession(session: GeckoSession): Boolean =
         isCurrentPermissionRequestTab(
-            requestTabId = _tabs.value.firstOrNull { it.session === session }?.id,
+            requestTabId = _tabs.value.firstOrNull { it.ownsRawSession(session) }?.id,
             currentTabId = currentId.value,
         )
 
@@ -522,7 +779,7 @@ class TabManager(
         if (closed) return
         appVisible = visible
         if (visible) backgroundTrimRequested = false
-        _tabs.value.filter { it.session.isOpen }.forEach { tab ->
+        _tabs.value.filter { it.hasRawSessionAuthority && it.session.isOpen }.forEach { tab ->
             val active = visible && tab.id == currentId.value
             tab.session.setActive(active)
             tab.session.setFocused(active)
@@ -539,45 +796,85 @@ class TabManager(
     private fun effectiveHotTabLimit(): Int =
         if (backgroundTrimRequested) backgroundHotTabLimit else hotTabLimit
 
-    private fun enforceHotTabBudget() {
+    internal fun enforceHotTabBudget() {
         if (closed) return
-        val targetLimit = effectiveHotTabLimit()
-        var openCount = _tabs.value.count { it.session.isOpen }
-        if (openCount <= targetLimit) return
+        val structuralTabs = _tabs.value
+        val browserApp = if (
+            structuralTabs.any { it.rawSessionOwnership == RawSessionOwnership.Relinquished }
+        ) {
+            context.applicationContext as? BrowserApp
+        } else {
+            null
+        }
+        val storeTabsById = browserApp
+            ?.browserStore
+            ?.state
+            ?.tabs
+            ?.associateBy { it.id }
+            .orEmpty()
+        val entries = structuralTabs.mapNotNull { tab ->
+            when {
+                tab.hasRawSessionAuthority && tab.session.isOpen -> {
+                    val hasRestorableState = tab.url.isBlank() || tab.url == "about:blank" ||
+                        (tab.latestSessionState != null && tab.latestSessionStateUrl == tab.url)
+                    HotTabBudgetEntry(
+                        tabId = tab.id,
+                        owner = HotTabSessionOwner.Raw,
+                        lastAccess = tab.lastAccess,
+                        canEvict = tab.progress < 0f && hasRestorableState,
+                    )
+                }
 
-        val selectedId = currentId.value
-        val coldest = _tabs.value
-            .asSequence()
-            .filter { it.id != selectedId && it.session.isOpen }
-            .sortedBy { it.lastAccess }
-            .toList()
-        for (tab in coldest) {
-            if (openCount <= targetLimit) break
-            if (tab.progress >= 0f) continue
-            val hasRestorableState = tab.url.isBlank() || tab.url == "about:blank" ||
-                (tab.latestSessionState != null && tab.latestSessionStateUrl == tab.url)
-            if (!hasRestorableState) continue
-            hibernateTab(tab)
-            openCount--
+                tab.rawSessionOwnership == RawSessionOwnership.Relinquished -> {
+                    val storeTab = storeTabsById[tab.id.toString()] ?: return@mapNotNull null
+                    if (storeTab.engineState.engineSession == null) return@mapNotNull null
+                    HotTabBudgetEntry(
+                        tabId = tab.id,
+                        owner = HotTabSessionOwner.AndroidComponents,
+                        lastAccess = tab.lastAccess,
+                        canEvict = !storeTab.content.loading,
+                    )
+                }
+
+                else -> null
+            }
+        }
+        val structuralTabsById = structuralTabs.associateBy { it.id }
+        planHotTabBudget(
+            entries = entries,
+            selectedTabId = currentId.value,
+            limit = effectiveHotTabLimit(),
+        ).forEach { eviction ->
+            when (eviction.owner) {
+                HotTabSessionOwner.Raw -> structuralTabsById[eviction.tabId]?.let(::hibernateTab)
+                HotTabSessionOwner.AndroidComponents -> browserApp?.browserStore?.dispatch(
+                    EngineAction.SuspendEngineSessionAction(eviction.tabId.toString()),
+                )
+            }
         }
     }
 
     private fun hibernateTab(tab: Tab) {
-        if (!tab.session.isOpen || tab.id == currentId.value) return
+        if (!tab.hasRawSessionAuthority || !tab.session.isOpen || tab.id == currentId.value) return
         runtime.webExtensionController.setTabActive(tab.session, false)
         tab.session.setFocused(false)
         tab.session.setActive(false)
         tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+        resetMediaPlaybackState(tab)
         closeIfOpen(tab.session)
         tab.restoreUrlOnOpen = true
     }
 
     suspend fun clearWebData() {
         if (closed) return
+        check(_tabs.value.all { it.hasRawSessionAuthority }) {
+            "clearWebData requires BrowserStore removal of relinquished sessions before Gecko storage clear"
+        }
         val clearRequest = clearGeneration.incrementAndGet()
         _tabs.value.forEach { tab ->
             runtime.webExtensionController.setTabActive(tab.session, false)
             tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+            resetMediaPlaybackState(tab)
             closeIfOpen(tab.session)
         }
         _tabs.value = emptyList()
@@ -620,6 +917,36 @@ class TabManager(
         requestPersist(immediate = true)
     }
 
+    internal fun requestPersistFromAndroidComponentsSessionState(sessionId: String) {
+        val tab = _tabs.value.firstOrNull { it.id.toString() == sessionId } ?: return
+        if (!shouldRequestAndroidComponentsSessionStatePersist(tab.isPrivate, tab.rawSessionOwnership)) return
+        requestPersist(immediate = false)
+    }
+
+    /**
+     * Stops this Activity-owned manager without closing any live tab session and returns exact ownership
+     * objects for the replacement Activity. Raw Activity-bound delegates are removed so the handoff cannot
+     * retain the destroyed host; the engine-only media delegate stays installed to preserve PiP/media state.
+     */
+    @MainThread
+    internal fun detachForRecreation(): TabManagerRecreationHandoff {
+        check(!closed) { "TabManager is already closed" }
+        val finalSnapshot = capturePersistenceSnapshot()
+        val finalRevision = TabStore.nextRevision(storeDir)
+        closed = true
+        persistJob.cancel()
+        runCatching {
+            TabStore.saveStateVersioned(storeDir, serializePersistenceSnapshot(finalSnapshot), finalRevision)
+        }.onFailure { Log.e("MinibrowserTabs", "Failed to persist recreation tab metadata", it) }
+        lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
+        _tabs.value.filter { it.hasRawSessionAuthority }.forEach(::detachRawActivityDelegatesForRecreation)
+        return TabManagerRecreationHandoff(
+            tabs = _tabs.value.toList(),
+            selectedId = currentId.value,
+            sequence = seq,
+        )
+    }
+
     fun close() {
         if (closed) return
         val finalSnapshot = capturePersistenceSnapshot()
@@ -630,9 +957,10 @@ class TabManager(
             TabStore.saveStateVersioned(storeDir, serializePersistenceSnapshot(finalSnapshot), finalRevision)
         }.onFailure { Log.e("MinibrowserTabs", "Failed to persist final tab metadata", it) }
         lifecycleOwner?.lifecycle?.removeObserver(lifecycleObserver)
-        _tabs.value.forEach { tab ->
+        _tabs.value.filter { it.hasRawSessionAuthority }.forEach { tab ->
             runCatching { runtime.webExtensionController.setTabActive(tab.session, false) }
             runCatching { tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT) }
+            resetMediaPlaybackState(tab)
             closeIfOpen(tab.session)
         }
     }
@@ -647,19 +975,32 @@ class TabManager(
 
     private fun capturePersistenceSnapshot(): PersistenceSnapshot = PersistenceSnapshot(
         selectedId = currentId.value,
-        tabs = _tabs.value.map {
-            PersistenceTabSnapshot(
-                id = it.id,
-                url = it.url,
-                title = it.title,
-                desktop = it.desktop,
-                lastAccess = it.lastAccess,
-                latestSessionState = it.latestSessionState,
-                latestSessionStateUrl = it.latestSessionStateUrl,
-                serializedSessionState = it.persistedSessionState,
-                serializedSessionStateUrl = it.persistedSessionStateUrl,
-                isPrivate = it.isPrivate,
-            )
+        tabs = _tabs.value.mapNotNull { tab ->
+            if (tab.rawSessionOwnership == RawSessionOwnership.Relinquished) {
+                val browserApp = context.applicationContext as? BrowserApp ?: return@mapNotNull null
+                persistenceTabSnapshotAfterRelinquish(
+                    id = tab.id,
+                    lastAccess = tab.lastAccess,
+                    browserState = browserApp.browserStore.state,
+                    persistenceState = browserApp.sessionStatePersistence,
+                    engineName = browserApp.engine.name(),
+                )
+            } else {
+                PersistenceTabSnapshot(
+                    id = tab.id,
+                    url = tab.url,
+                    title = tab.title,
+                    desktop = tab.desktop,
+                    lastAccess = tab.lastAccess,
+                    latestSessionState = tab.latestSessionState,
+                    latestSessionStateUrl = tab.latestSessionStateUrl,
+                    serializedSessionState = tab.persistedSessionState,
+                    serializedSessionStateUrl = tab.persistedSessionStateUrl,
+                    isPrivate = tab.isPrivate,
+                    serializedEngineSessionState = tab.persistedEngineSessionState,
+                    serializedEngineSessionStateUrl = tab.persistedEngineSessionStateUrl,
+                )
+            }
         },
     )
 
@@ -667,7 +1008,19 @@ class TabManager(
         val saved = TabStore.loadState(storeDir)
         Trace.beginSection(TAB_RESTORE_MATERIALIZE_TRACE)
         val restoredTabs = try {
-            saved.tabs.map { createTab(private = false, persisted = it, publish = false) }
+            saved.tabs.map { persisted ->
+                if (persisted.sessionOwner == PersistedSessionOwner.AndroidComponents) {
+                    seq = maxOf(seq, persisted.id)
+                    Tab.androidComponentsOwned(persisted.id).apply {
+                        url = persisted.url
+                        title = persisted.title
+                        desktop = persisted.desktop
+                        lastAccess = persisted.lastAccess
+                    }
+                } else {
+                    createTab(private = false, persisted = persisted, publish = false)
+                }
+            }
         } finally {
             Trace.endSection()
         }
@@ -687,30 +1040,72 @@ class TabManager(
         }
     }
 
-    private fun attachDelegates(tab: Tab) {
+    private fun adoptRecreationHandoff(handoff: TabManagerRecreationHandoff) {
+        val ids = handoff.tabs.map { it.id }
+        check(ids.size == ids.toSet().size) { "Recreation handoff contains duplicate tab IDs" }
+        check(
+            (handoff.tabs.isEmpty() && handoff.selectedId == null) ||
+                (handoff.tabs.isNotEmpty() && handoff.selectedId in ids),
+        ) { "Recreation handoff selection does not belong to its tab set" }
+
+        seq = maxOf(handoff.sequence, ids.maxOrNull() ?: 0L)
+        _tabs.value = handoff.tabs
+        currentId.value = handoff.selectedId
+        handoff.tabs.filter { it.hasRawSessionAuthority }.forEach { tab ->
+            attachDelegates(tab, preserveRawMediaSessionDelegate = true)
+        }
+        if (handoff.tabs.isEmpty()) {
+            newTab(null)
+        }
+    }
+
+    private fun detachRawActivityDelegatesForRecreation(tab: Tab) {
+        if (!tab.hasRawSessionAuthority) return
+        tab.session.progressDelegate = null
+        tab.session.navigationDelegate = null
+        tab.session.contentDelegate = null
+        tab.session.historyDelegate = null
+        tab.session.promptDelegate = null
+        tab.session.permissionDelegate = null
+    }
+
+    private fun attachDelegates(
+        tab: Tab,
+        preserveRawMediaSessionDelegate: Boolean = false,
+    ) {
+        check(tab.hasRawSessionAuthority) { "Raw delegates cannot be attached after ownership relinquish" }
         tab.session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
+                if (!tab.ownsRawSession(session)) return
                 tab.progressGate.accept(progress = 5)
                 tab.loadError = null
                 tab.securityState = SecurityState.Unknown
                 tab.progress = 0.05f
                 tab.historyTitleUrl = null
+                resetMediaPlaybackState(tab)
                 tab.url = url
                 tab.title = ""
+                if (tab.persistedEngineSessionStateUrl != url) {
+                    tab.persistedEngineSessionState = null
+                    tab.persistedEngineSessionStateUrl = null
+                }
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
+                if (!tab.ownsRawSession(session)) return
                 tab.progress = -1f
-                if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > effectiveHotTabLimit()) {
+                if (tab.id != currentId.value) {
                     enforceHotTabBudget()
                 }
             }
 
             override fun onProgressChange(session: GeckoSession, progress: Int) {
+                if (!tab.ownsRawSession(session)) return
                 if (tab.progressGate.accept(progress = progress)) tab.progress = progress / 100f
             }
 
             override fun onSecurityChange(session: GeckoSession, securityInfo: GeckoSession.ProgressDelegate.SecurityInformation) {
+                if (!tab.ownsRawSession(session)) return
                 tab.securityState = when {
                     securityInfo.isException -> SecurityState.Exception
                     securityInfo.isSecure -> SecurityState.Secure
@@ -719,6 +1114,7 @@ class TabManager(
             }
 
             override fun onSessionStateChange(session: GeckoSession, state: GeckoSession.SessionState) {
+                if (!tab.ownsRawSession(session)) return
                 val stateUrl = currentSessionStateUrl(state)
                 tab.latestSessionState = state
                 tab.latestSessionStateUrl = stateUrl
@@ -727,7 +1123,7 @@ class TabManager(
                     tab.persistedSessionStateUrl = null
                 }
                 if (!tab.isPrivate) requestPersist(immediate = false)
-                if (tab.id != currentId.value && _tabs.value.count { it.session.isOpen } > effectiveHotTabLimit()) {
+                if (tab.id != currentId.value) {
                     enforceHotTabBudget()
                 }
             }
@@ -741,15 +1137,23 @@ class TabManager(
                 permissions: List<GeckoSession.PermissionDelegate.ContentPermission>,
                 triggeredByUser: Boolean,
             ) {
+                if (!tab.ownsRawSession(session)) return
                 val nextUrl = url.orEmpty()
                 if (nextUrl != tab.url) tab.historyTitleUrl = null
                 tab.url = nextUrl
+                if (tab.persistedEngineSessionStateUrl != nextUrl) {
+                    tab.persistedEngineSessionState = null
+                    tab.persistedEngineSessionStateUrl = null
+                }
             }
 
             override fun onLoadRequest(
                 session: GeckoSession,
                 request: GeckoSession.NavigationDelegate.LoadRequest,
             ): GeckoResult<AllowOrDeny> {
+                if (!tab.ownsRawSession(session)) {
+                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                }
                 if (BuildConfig.DEBUG) {
                     Log.d(
                         "MinibrowserNavigation",
@@ -773,19 +1177,23 @@ class TabManager(
                 uri: String?,
                 error: WebRequestError,
             ): GeckoResult<String>? {
+                if (!tab.ownsRawSession(session)) return GeckoResult.fromValue(null)
                 tab.loadError = pageLoadErrorForCategory(error.category)
                 return GeckoResult.fromValue(null)
             }
 
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+                if (!tab.ownsRawSession(session)) return
                 tab.canGoBack = canGoBack
             }
 
             override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
+                if (!tab.ownsRawSession(session)) return
                 tab.canGoForward = canGoForward
             }
 
             override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
+                if (!tab.ownsRawSession(session)) return null
                 if (BuildConfig.DEBUG) {
                     Log.d("MinibrowserNavigation", "new session uri=${navigationDebugLabel(uri)}")
                 }
@@ -796,16 +1204,19 @@ class TabManager(
 
         tab.session.contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
+                if (!tab.ownsRawSession(session)) return
                 tab.title = title.orEmpty()
                 val historyUrl = tab.historyTitleUrl
                 if (!tab.isPrivate && historyUrl != null) HistorySink.updateTitle(historyUrl, title)
             }
 
             override fun onFullScreen(session: GeckoSession, fullscreen: Boolean) {
+                if (!tab.ownsRawSession(session)) return
                 tab.fullscreen = fullscreen
             }
 
             override fun onCloseRequest(session: GeckoSession) {
+                if (!tab.ownsRawSession(session)) return
                 closeTab(tab.id)
             }
 
@@ -815,10 +1226,15 @@ class TabManager(
                 screenY: Int,
                 element: GeckoSession.ContentDelegate.ContextElement,
             ) {
+                if (!tab.ownsRawSession(session)) return
                 contextMenuController?.show(element, tab.isPrivate)
             }
 
             override fun onExternalResponse(session: GeckoSession, response: org.mozilla.geckoview.WebResponse) {
+                if (!tab.ownsRawSession(session)) {
+                    runCatching { response.body?.close() }
+                    return
+                }
                 val controller = downloadController
                 if (controller != null) {
                     controller.handle(response, tab.isPrivate)
@@ -828,12 +1244,34 @@ class TabManager(
             }
 
             override fun onCrash(session: GeckoSession) {
-                recoverDeadSession(tab)
+                recoverDeadSession(tab, session)
             }
 
             override fun onKill(session: GeckoSession) {
-                recoverDeadSession(tab)
+                recoverDeadSession(tab, session)
             }
+        }
+
+        val retainedRawMediaSessionDelegate =
+            tab.rawMediaSessionDelegate.takeIf { preserveRawMediaSessionDelegate }
+        if (retainedRawMediaSessionDelegate != null) {
+            // This delegate captures only the exact Tab/GeckoSession ownership pair, not Activity UI.
+            // Keep its media controller/playback/fullscreen snapshot intact across configuration change.
+            tab.session.setMediaSessionDelegate(retainedRawMediaSessionDelegate)
+        } else {
+            val mediaOwnerSession = tab.session
+            val rawMediaSessionDelegate = AndroidComponentsRawMediaSessionDelegate(
+                ownerSession = mediaOwnerSession,
+                stillOwnsSession = { tab.ownsRawSession(mediaOwnerSession) },
+                onPlaybackSnapshotChanged = { state ->
+                    if (tab.ownsRawSession(mediaOwnerSession)) {
+                        tab.mediaPlaybackState = state
+                    }
+                },
+            )
+            tab.rawMediaSessionDelegate = rawMediaSessionDelegate
+            tab.mediaPlaybackState = rawMediaSessionDelegate.playbackSnapshot
+            tab.session.setMediaSessionDelegate(rawMediaSessionDelegate)
         }
 
         tab.session.historyDelegate = object : GeckoSession.HistoryDelegate {
@@ -843,7 +1281,8 @@ class TabManager(
                 lastVisitedURL: String?,
                 flags: Int,
             ): GeckoResult<Boolean>? {
-                if (!tab.isPrivate && flags and GeckoSession.HistoryDelegate.VISIT_TOP_LEVEL != 0) {
+                if (!tab.ownsRawSession(session)) return null
+                if (shouldRecordHistoryVisit(tab.isPrivate, flags)) {
                     tab.historyTitleUrl = url
                     HistorySink.record(url, tab.title)
                 }
@@ -854,18 +1293,30 @@ class TabManager(
         permissionController?.let(tab.session::setPermissionDelegate)
     }
 
+    private fun resetMediaPlaybackState(tab: Tab) {
+        if (!tab.hasRawSessionAuthority) return
+        val delegate = tab.rawMediaSessionDelegate
+        if (delegate != null) {
+            delegate.reset()
+        } else {
+            tab.mediaPlaybackState = TabMediaPlaybackState()
+        }
+    }
+
     private fun launchExternalUri(tab: Tab, uri: String) {
+        if (!tab.hasRawSessionAuthority) return
         val intent = createSafeExternalIntent(uri)?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         val launched = intent != null && intent.resolveActivity(context.packageManager) != null && runCatching {
             context.startActivity(intent)
             true
         }.getOrDefault(false)
-        if (!launched) {
+        if (!launched && tab.hasRawSessionAuthority) {
             safeExternalFallbackUrl(uri)?.let(tab.session::loadUri)
         }
     }
 
     private fun deactivateTab(tab: Tab) {
+        if (!tab.hasRawSessionAuthority) return
         runtime.webExtensionController.setTabActive(tab.session, false)
         tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
         if (tab.session.isOpen) {
@@ -881,7 +1332,7 @@ class TabManager(
     }
 
     private fun applyDesktop(tab: Tab) {
-        if (!tab.session.isOpen) return
+        if (!tab.hasRawSessionAuthority || !tab.session.isOpen) return
         tab.session.settings.userAgentMode =
             if (tab.desktop) GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
             else GeckoSessionSettings.USER_AGENT_MODE_MOBILE
@@ -896,11 +1347,12 @@ class TabManager(
             .suspendMediaWhenInactive(true)
             .build()
 
-    private fun recoverDeadSession(tab: Tab) {
-        if (closed) return
+    private fun recoverDeadSession(tab: Tab, failedSession: GeckoSession) {
+        if (closed || !tab.ownsRawSession(failedSession)) return
         val wasActive = tab.id == currentId.value
         runtime.webExtensionController.setTabActive(tab.session, false)
         tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+        resetMediaPlaybackState(tab)
         closeIfOpen(tab.session)
         tab.canGoBack = false
         tab.canGoForward = false

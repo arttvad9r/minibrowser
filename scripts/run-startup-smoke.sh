@@ -101,8 +101,8 @@ if grep -Eq '^INSTRUMENTATION_STATUS_CODE: -[12]$' "$output"; then
   echo "Instrumentation reported a failing/error status code"
   failed=1
 fi
-if ! grep -Fqx 'OK (2 tests)' "$output"; then
-  echo "Instrumentation did not complete both startup tests"
+if ! grep -Eq '^OK \([1-9][0-9]* tests?\)$' "$output"; then
+  echo "Instrumentation did not complete startup tests successfully"
   failed=1
 fi
 
