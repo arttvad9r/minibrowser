@@ -140,10 +140,12 @@ class TabManagerRecreationOwnershipSystemTest {
             instrumentation.runOnMainSync {
                 replacement?.close()
                 oldManager?.close()
-                val storeIds = app.browserStore.state.tabs.mapTo(mutableSetOf()) { it.id }
-                val idsToRemove = androidComponentsIds.intersect(storeIds)
-                if (idsToRemove.isNotEmpty()) {
-                    app.browserStore.dispatch(TabListAction.RemoveTabsAction(idsToRemove.toList()))
+                if (androidComponentsIds.isNotEmpty()) {
+                    // Keep cleanup ordered after every AddTabAction even when the store worker has
+                    // not exposed those rows yet; snapshot-based conditional removal can race them.
+                    app.browserStore.dispatch(
+                        TabListAction.RemoveTabsAction(androidComponentsIds.toList()),
+                    )
                 }
                 TabManagerRecreationHandoffRegistry.clearForTest(storeDir)
             }
