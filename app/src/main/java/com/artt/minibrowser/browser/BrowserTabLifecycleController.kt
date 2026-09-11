@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import mozilla.components.browser.state.action.AppLifecycleAction
 import mozilla.components.lib.state.ext.flow
+import org.mozilla.geckoview.GeckoSession
 
 /** Keeps Gecko tab visibility, persistence, and background trimming aligned with host lifecycle. */
 internal class BrowserTabLifecycleController(
@@ -67,11 +68,9 @@ internal class BrowserTabLifecycleController(
             }
             androidComponentsBridgeScope.launch {
                 // Selected raw tabs are transferred only at an idle page boundary. This state signal
-                // supplies deterministic retries for both cases that cannot transfer immediately:
-                // GeckoView popups are returned unopened from onNewSession and active navigations keep
-                // their raw delegates through PageStop so terminal URL/progress/loading state cannot be
-                // lost while delegates are replaced. Once an EngineSession is linked this maps to null,
-                // so ordinary A-C progress/content churn does not keep retrying the transfer path.
+                // supplies deterministic retries for cases where active navigation must keep its raw
+                // delegates through PageStop. Once an EngineSession is linked this maps to null, so
+                // ordinary A-C progress/content churn does not keep retrying the transfer path.
                 browserApp.browserStore.stateFlow
                     .map { state ->
                         val selected = state.tabs.firstOrNull { it.id == state.selectedTabId }
@@ -158,7 +157,18 @@ internal class BrowserTabLifecycleController(
         lifecycle.removeObserver(this)
     }
 
-    private fun transferCurrentRawTabWhenMirrored(browserApp: BrowserApp) {
+    internal fun transferOpenedWindowSession(session: GeckoSession) {
+        val browserApp = app ?: return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val current = tabManager.current() ?: return
+        if (!current.ownsRawSession(session)) return
+        transferCurrentRawTabWhenMirrored(browserApp, expectedSession = session)
+    }
+
+    private fun transferCurrentRawTabWhenMirrored(
+        browserApp: BrowserApp,
+        expectedSession: GeckoSession? = null,
+    ) {
         androidComponentsBridgeScope.launch {
             browserApp.browserStore.flow().first { state ->
                 val currentId = tabManager.currentId.value?.toString()
@@ -169,6 +179,7 @@ internal class BrowserTabLifecycleController(
 
             val tab = tabManager.current() ?: return@launch
             if (!tab.hasRawSessionAuthority) return@launch
+            if (expectedSession != null && !tab.ownsRawSession(expectedSession)) return@launch
             val rawSession = tab.rawSessionOrNull ?: return@launch
             if (!rawSession.isOpen) return@launch
             // Raw progress is >= 0 from PageStart through PageStop. Keep the raw delegates installed
