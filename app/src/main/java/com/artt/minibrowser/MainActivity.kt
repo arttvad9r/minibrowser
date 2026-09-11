@@ -68,6 +68,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
     private val backgroundTabOpened = MutableSharedFlow<Long>(extraBufferCapacity = 1)
     private val pendingIntents = ArrayDeque<Intent>()
     private lateinit var tabManager: TabManager
+    private var tabLifecycleController: BrowserTabLifecycleController? = null
     private var androidComponentsCompatibilityHostLease: Closeable? = null
     private val browserViewModel by lazy { ViewModelProvider(this)[BrowserViewModel::class.java] }
     private val settingsViewModel by lazy {
@@ -174,7 +175,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
             filePicker = activityRequests::pickFiles,
         )
         bindAndroidComponentsCompatibilityHost()
-        BrowserTabLifecycleController(this, tabManager)
+        tabLifecycleController = BrowserTabLifecycleController(this, tabManager)
         val lifecycleState = lifecycle.currentState
         val browserVisible = lifecycleState.isAtLeast(Lifecycle.State.RESUMED) || isInPictureInPictureMode
         tabManager.setAppVisible(browserVisible)
@@ -234,6 +235,9 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                 },
                 openBackgroundTab = ::openBackgroundTab,
                 openWindowSession = tabManager::newWindowSession,
+                onWindowSessionOpened = { session ->
+                    tabLifecycleController?.transferOpenedWindowSession(session)
+                },
                 closeWindowTab = { sessionId ->
                     ::tabManager.isInitialized &&
                         closeAndroidComponentsOwnedTabFromWindowRequest(
@@ -378,6 +382,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
     override fun onDestroy() {
         androidComponentsCompatibilityHostLease?.close()
         androidComponentsCompatibilityHostLease = null
+        tabLifecycleController = null
         activityRequests.cancelAll()
         super.onDestroy()
     }
