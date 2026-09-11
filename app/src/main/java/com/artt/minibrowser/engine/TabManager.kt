@@ -515,7 +515,9 @@ class TabManager(
 
     fun newTab(url: String?, private: Boolean = false): Tab {
         check(!closed) { "TabManager is closed" }
-        val tab = createTab(private)
+        val tab = createTab(private, persisted = null, publish = false)
+        if (url != null) tab.url = url
+        _tabs.value += tab
         deactivateOthers(tab.id)
         currentId.value = tab.id
         openTab(tab)
