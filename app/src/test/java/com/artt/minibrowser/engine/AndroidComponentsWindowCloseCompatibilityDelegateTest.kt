@@ -47,7 +47,7 @@ class AndroidComponentsWindowCloseCompatibilityDelegateTest {
             pickFiles = null,
             openTab = { _, _ -> Unit },
             openBackgroundTab = { _, _ -> Unit },
-            openWindowSession = { GeckoSession() },
+            openWindowSession = { _, _ -> GeckoSession() },
             closeWindowTab = { sessionId ->
                 closedSessionId = sessionId
                 true

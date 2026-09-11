@@ -49,6 +49,7 @@ class AndroidComponentsNewSessionCompatibilityDelegateTest {
     fun activityHostUsesRawPopupPolicyAndImmutablePrivateMode() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val parent = GeckoSession()
+        var openedUri: String? = null
         var openedPrivate: Boolean? = null
         var openCalls = 0
         val host = AndroidComponentsActivityGeckoCompatibilityHost(
@@ -58,8 +59,9 @@ class AndroidComponentsNewSessionCompatibilityDelegateTest {
             pickFiles = null,
             openTab = { _, _ -> Unit },
             openBackgroundTab = { _, _ -> Unit },
-            openWindowSession = { private ->
+            openWindowSession = { uri, private ->
                 openCalls++
+                openedUri = uri
                 openedPrivate = private
                 GeckoSession()
             },
@@ -71,6 +73,7 @@ class AndroidComponentsNewSessionCompatibilityDelegateTest {
 
         assertNotNull(host.onNewSession(context, parent, "https://example.test/popup"))
         assertEquals(1, openCalls)
+        assertEquals("https://example.test/popup", openedUri)
         assertTrue(openedPrivate == true)
 
         assertNull(host.onNewSession(context, parent, "javascript:alert(1)"))
