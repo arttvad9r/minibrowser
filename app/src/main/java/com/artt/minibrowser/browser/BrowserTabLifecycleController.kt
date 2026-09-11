@@ -182,10 +182,11 @@ internal class BrowserTabLifecycleController(
             if (expectedSession != null && !tab.ownsRawSession(expectedSession)) return@launch
             val rawSession = tab.rawSessionOrNull ?: return@launch
             if (!rawSession.isOpen) return@launch
-            // Raw progress is >= 0 from PageStart through PageStop. Keep the raw delegates installed
-            // for the whole navigation so a late terminal progress/PageStop callback cannot fall into
-            // the delegate-replacement window. The BrowserStore content observer retries at PageStop.
-            if (tab.progress >= 0f) return@launch
+            // GeckoSession.open() can finish a synthetic about:blank page after a real initial
+            // loadUri() has already been accepted. Do not mistake that startup PageStop for the
+            // target page's idle boundary. Once the first real PageStart arrives, progress keeps
+            // raw delegates installed until the matching PageStop as before.
+            if (tab.awaitingInitialNonBlankPageStart || tab.progress >= 0f) return@launch
 
             val storeTab = browserApp.browserStore.state.tabs
                 .firstOrNull { it.id == tab.id.toString() }
