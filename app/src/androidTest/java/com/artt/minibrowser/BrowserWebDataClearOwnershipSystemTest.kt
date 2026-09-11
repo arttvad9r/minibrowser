@@ -2,6 +2,9 @@ package com.artt.minibrowser
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.artt.minibrowser.data.PersistedBrowserState
+import com.artt.minibrowser.data.PersistedTab
+import com.artt.minibrowser.data.TabStore
 import com.artt.minibrowser.engine.BrowserApp
 import com.artt.minibrowser.engine.TabManager
 import com.artt.minibrowser.engine.androidComponentsExistingSessionTransferPlan
@@ -26,9 +29,20 @@ class BrowserWebDataClearOwnershipSystemTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as BrowserApp
         val storeDir = File(app.cacheDir, "web-data-clear-owner-${System.nanoTime()}")
+        val rawTabId = 92_001L
         var tabManager: TabManager? = null
         var engineSession: GeckoEngineSession? = null
         var rawSession: GeckoSession? = null
+
+        // Web-data clear still has to cover a live raw GeckoSession after it crosses into A-C
+        // ownership. Seed that legacy input explicitly now that ordinary fresh tabs start A-C-owned.
+        TabStore.saveState(
+            storeDir,
+            PersistedBrowserState(
+                selectedId = rawTabId,
+                tabs = listOf(PersistedTab(id = rawTabId, url = "about:blank")),
+            ),
+        )
 
         try {
             instrumentation.runOnMainSync {
@@ -92,6 +106,7 @@ class BrowserWebDataClearOwnershipSystemTest {
                 }
                 tabManager?.close()
             }
+            TabStore.loadState(storeDir)
             storeDir.deleteRecursively()
         }
     }
