@@ -42,6 +42,19 @@ class AndroidComponentsActivityShutdownTest {
     }
 
     @Test
+    fun pendingSessionlessFreshTabIsQueuedForRemovalAfterItsPendingAdd() {
+        val ids = androidComponentsFinalActivityShutdownStoreTabIds(
+            rawOwnedTabIds = emptySet(),
+            relinquishedTabIds = linkedSetOf("2", "3"),
+            storeTabIds = linkedSetOf("2"),
+            linkedStoreTabIds = emptySet(),
+            sessionlessRelinquishedTabIds = setOf("3"),
+        )
+
+        assertEquals(listOf("2", "3"), ids)
+    }
+
+    @Test
     fun suspendedRelinquishedTabDoesNotRequireCurrentEngineSessionLink() {
         val ids = androidComponentsFinalActivityShutdownStoreTabIds(
             rawOwnedTabIds = emptySet(),
