@@ -97,12 +97,15 @@ internal class AndroidComponentsActivityGeckoCompatibilityHost(
     ): GeckoResult<GeckoSession>? {
         if (!canShowUi() || !isAllowedPopupTarget(uri)) return null
         // GeckoView requires OnNewSession to return an unopened GeckoSession and opens it itself
-        // after this callback returns. Post the ownership retry to the next main-loop turn: Gecko's
-        // immediate GeckoResult continuation has opened the exact returned session by then, while
-        // about:blank/empty popups no longer depend on a later content callback to trigger cutover.
+        // after this callback returns. A web-target popup must keep its raw delegates through the
+        // first PageStart/PageStop; BrowserTabLifecycleController already transfers it at that idle
+        // boundary. Empty/about:blank windows may never produce those callbacks, so only they need
+        // the next-main-loop ownership retry after Gecko has opened the returned session.
         val windowSession = openWindowSession(context.privateMode)
-        mainHandler.post {
-            if (canShowUi()) onWindowSessionOpened(windowSession)
+        if (uri.isBlank() || uri.equals("about:blank", ignoreCase = true)) {
+            mainHandler.post {
+                if (canShowUi()) onWindowSessionOpened(windowSession)
+            }
         }
         return GeckoResult.fromValue(windowSession)
     }
