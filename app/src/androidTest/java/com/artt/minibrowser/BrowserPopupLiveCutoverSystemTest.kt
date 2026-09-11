@@ -3,6 +3,7 @@ package com.artt.minibrowser
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.view.View
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -63,6 +64,13 @@ class BrowserPopupLiveCutoverSystemTest {
                 )
 
                 val initialIds = app.browserStore.state.tabs.mapTo(mutableSetOf()) { it.id }
+                onView(isAssignableFrom(GeckoEngineView::class.java)).check { view, _ ->
+                    assertTrue(
+                        "Gecko content is still occluded before tap; " +
+                            "storeUrl=${selectedTab(app)?.content?.url}",
+                        view.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_YES,
+                    )
+                }
                 onView(isAssignableFrom(GeckoEngineView::class.java)).perform(click())
 
                 assertTrue(
