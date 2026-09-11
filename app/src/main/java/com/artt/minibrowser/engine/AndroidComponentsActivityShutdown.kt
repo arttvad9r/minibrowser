@@ -12,6 +12,10 @@ import mozilla.components.browser.state.store.BrowserStore
  * linked at this exact instant: A-C SuspendMiddleware unlinks synchronously and closes the captured
  * EngineSession asynchronously. A relinquished structural tab must still have its BrowserStore record,
  * while a raw-owned tab must never have a linked A-C owner.
+ *
+ * A final Activity destroy also clears every raw-owned shadow BrowserStore record. BrowserStore is
+ * process-scoped, so leaving those records behind can make a later Activity instance mistake stale
+ * shadow state for an already-restored store and skip rebuilding persisted A-C-owned tabs.
  */
 internal fun androidComponentsFinalActivityShutdownStoreTabIds(
     rawOwnedTabIds: Set<String>,
@@ -25,7 +29,7 @@ internal fun androidComponentsFinalActivityShutdownStoreTabIds(
     check(relinquishedTabIds.all(storeTabIds::contains)) {
         "Relinquished tabs require BrowserStore records before final Activity shutdown"
     }
-    return (linkedStoreTabIds + relinquishedTabIds).toList()
+    return storeTabIds.toList()
 }
 
 /**
@@ -33,8 +37,8 @@ internal fun androidComponentsFinalActivityShutdownStoreTabIds(
  *
  * Configuration changes use [TabManagerRecreationHandoff] instead. On a real final destroy, persist
  * the complete mixed-ownership snapshot first through TabManager, close raw-owned sessions there,
- * then deterministically unlink/close every currently-linked A-C owner and remove all relinquished
- * BrowserStore records. A-C sessions already unlinked by SuspendMiddleware retain its pending close
+ * then deterministically unlink/close every currently-linked A-C owner and remove every process-scoped
+ * BrowserStore record. A-C sessions already unlinked by SuspendMiddleware retain its pending close
  * ownership and must not be closed a second time through the stale raw GeckoSession reference.
  */
 @MainThread
