@@ -37,7 +37,7 @@ internal fun loadBrowserUrl(tab: Tab, browserStore: BrowserStore, url: String) {
             ) {
                 browserStore.dispatch(
                     EngineAction.LoadUrlAction(
-                        sessionId = tab.id.toString(),
+                        tabId = tab.id.toString(),
                         url = url,
                     ),
                 )
