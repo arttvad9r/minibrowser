@@ -4,7 +4,6 @@ import java.io.Closeable
 import mozilla.components.browser.state.state.content.DownloadState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.WebResponse
 
 /** Immutable metadata that remains valid when the Activity hosting compatibility UI is recreated. */
 internal data class AndroidComponentsGeckoSessionContext(
@@ -45,13 +44,6 @@ internal interface AndroidComponentsGeckoCompatibilityHost {
         audio: Array<GeckoSession.PermissionDelegate.MediaSource>?,
         callback: GeckoSession.PermissionDelegate.MediaCallback,
     )
-
-    /** Returns true after taking ownership of [response.body]. */
-    fun onExternalResponse(
-        context: AndroidComponentsGeckoSessionContext,
-        session: GeckoSession,
-        response: WebResponse,
-    ): Boolean
 
     /** Returns true after taking ownership of [download.response]. */
     fun onDownload(download: DownloadState): Boolean = false
@@ -134,16 +126,6 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
             ) {
                 current?.onMediaPermissionRequest(context, session, uri, video, audio, callback)
                     ?: callback.reject()
-            }
-
-            override fun onExternalResponse(
-                session: GeckoSession,
-                response: WebResponse,
-            ) {
-                val consumed = current?.onExternalResponse(context, session, response) == true
-                if (!consumed) {
-                    runCatching { response.body?.close() }
-                }
             }
 
             override fun onNewSession(
