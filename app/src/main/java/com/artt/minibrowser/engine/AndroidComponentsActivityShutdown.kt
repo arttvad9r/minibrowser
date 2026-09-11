@@ -11,7 +11,8 @@ import mozilla.components.browser.state.store.BrowserStore
  * Unlike web-data clearing, shutdown does not need every still-open relinquished GeckoSession to be
  * linked at this exact instant: A-C SuspendMiddleware unlinks synchronously and closes the captured
  * EngineSession asynchronously. A relinquished structural tab must still have its BrowserStore record,
- * while a raw-owned tab must never have a linked A-C owner.
+ * except for a sessionless fresh A-C tab whose AddTabAction is already queued but has not reduced yet.
+ * In that narrow case shutdown must queue removal for the same id after the pending add.
  *
  * A final Activity destroy also clears every raw-owned shadow BrowserStore record. BrowserStore is
  * process-scoped, so leaving those records behind can make a later Activity instance mistake stale
@@ -22,14 +23,16 @@ internal fun androidComponentsFinalActivityShutdownStoreTabIds(
     relinquishedTabIds: Set<String>,
     storeTabIds: Set<String>,
     linkedStoreTabIds: Set<String>,
+    sessionlessRelinquishedTabIds: Set<String> = emptySet(),
 ): List<String> {
     check(rawOwnedTabIds.intersect(linkedStoreTabIds).isEmpty()) {
         "Raw-owned tabs cannot have linked Android Components EngineSessions during final Activity shutdown"
     }
-    check(relinquishedTabIds.all(storeTabIds::contains)) {
+    val missingRelinquishedTabIds = relinquishedTabIds - storeTabIds
+    check(missingRelinquishedTabIds.all(sessionlessRelinquishedTabIds::contains)) {
         "Relinquished tabs require BrowserStore records before final Activity shutdown"
     }
-    return storeTabIds.toList()
+    return (storeTabIds + missingRelinquishedTabIds).toList()
 }
 
 /**
@@ -52,6 +55,9 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
         .mapTo(mutableSetOf()) { it.id.toString() }
     val relinquishedTabs = tabsBeforeClose.filterNot { it.hasRawSessionAuthority }
     val relinquishedTabIds = relinquishedTabs.mapTo(mutableSetOf()) { it.id.toString() }
+    val sessionlessRelinquishedTabIds = relinquishedTabs
+        .filter { it.rawSessionOrNull == null }
+        .mapTo(mutableSetOf()) { it.id.toString() }
     val storeTabs = store.state.tabs
     val storeTabIds = storeTabs.mapTo(mutableSetOf()) { it.id }
     val linkedStoreTabs = storeTabs.filter { it.engineState.engineSession != null }
@@ -62,6 +68,7 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
         relinquishedTabIds = relinquishedTabIds,
         storeTabIds = storeTabIds,
         linkedStoreTabIds = linkedStoreTabIds,
+        sessionlessRelinquishedTabIds = sessionlessRelinquishedTabIds,
     )
     val storeTabIdsToRemoveSet = storeTabIdsToRemove.toSet()
     val linkedSessionsToClose = linkedStoreTabs
@@ -71,7 +78,9 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
 
     // capturePersistenceSnapshot() still sees BrowserStore state here. This must happen before
     // unlink/removal, otherwise durable A-C EngineSessionState for relinquished tabs could be lost.
-    // close() is idempotent, so lifecycle-observer ordering does not affect this boundary.
+    // A sessionless fresh tab whose AddTabAction has not reduced yet falls back to structural
+    // metadata in TabManager.capturePersistenceSnapshot(). close() is idempotent, so lifecycle-
+    // observer ordering does not affect this boundary.
     tabManager.close()
 
     // Unlink synchronously before direct close. TabsRemovedMiddleware then observes no EngineSession
@@ -92,6 +101,9 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
     }
 
     if (storeTabIdsToRemove.isNotEmpty()) {
+        // This list can intentionally include a sessionless fresh id whose AddTabAction is still
+        // ahead of this action in BrowserStore's queue. Reducer ordering then guarantees no late
+        // process-scoped orphan survives final Activity destruction.
         store.dispatch(TabListAction.RemoveTabsAction(storeTabIdsToRemove))
     }
 }
