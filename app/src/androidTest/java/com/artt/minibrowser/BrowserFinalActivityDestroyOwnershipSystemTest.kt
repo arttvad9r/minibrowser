@@ -94,6 +94,94 @@ class BrowserFinalActivityDestroyOwnershipSystemTest {
     }
 
     @Test
+    fun finalDestroyClearsRawShadowRecordsAlongsideTransferredOwner() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val app = instrumentation.targetContext.applicationContext as BrowserApp
+        val storeDir = File(app.cacheDir, "final-destroy-mixed-${System.nanoTime()}")
+        val selectedId = 810_000_000L + (System.nanoTime() and 0x007FFFFFL)
+        val rawId = selectedId + 1L
+        val selectedSessionId = selectedId.toString()
+        val rawSessionId = rawId.toString()
+        var manager: TabManager? = null
+        var transferredRawSession: GeckoSession? = null
+
+        TabStore.saveState(
+            storeDir,
+            PersistedBrowserState(
+                selectedId = selectedId,
+                tabs = listOf(
+                    PersistedTab(id = selectedId, url = "about:blank"),
+                    PersistedTab(id = rawId, url = "https://example.com/raw-shadow"),
+                ),
+            ),
+        )
+
+        try {
+            instrumentation.runOnMainSync {
+                val store = app.browserStore
+                setOf(selectedSessionId, rawSessionId).forEach { id ->
+                    if (store.state.tabs.any { it.id == id }) {
+                        store.dispatch(TabListAction.RemoveTabAction(id))
+                    }
+                }
+                store.dispatch(
+                    TabListAction.AddMultipleTabsAction(
+                        listOf(
+                            createTab(url = "about:blank", private = false, id = selectedSessionId),
+                            createTab(
+                                url = "https://example.com/raw-shadow",
+                                private = false,
+                                id = rawSessionId,
+                            ),
+                        ),
+                    ),
+                )
+                store.dispatch(TabListAction.SelectTabAction(selectedSessionId))
+
+                val tabManager = TabManager(app.runtime, storeDir, app)
+                manager = tabManager
+                val selected = checkNotNull(tabManager.current())
+                transferredRawSession = selected.session
+                app.transferExistingTabToAndroidComponents(tabManager, selected)
+
+                assertTrue(
+                    "Mixed precondition keeps the raw-owned background shadow record",
+                    store.state.tabs.any { it.id == rawSessionId && it.engineState.engineSession == null },
+                )
+
+                closeBrowserSessionsForFinalActivityDestroy(tabManager, store)
+
+                assertTrue(
+                    "Final destroy clears both transferred owners and raw shadow records from process BrowserStore",
+                    store.state.tabs.none { it.id == selectedSessionId || it.id == rawSessionId },
+                )
+                assertFalse(
+                    "Transferred owner is synchronously closed during final destroy",
+                    checkNotNull(transferredRawSession).isOpen,
+                )
+            }
+
+            val persisted = TabStore.loadState(storeDir)
+            assertTrue("Transferred tab remains in the durable snapshot", persisted.tabs.any { it.id == selectedId })
+            assertTrue("Raw-owned tab remains in the durable snapshot", persisted.tabs.any { it.id == rawId })
+        } finally {
+            instrumentation.runOnMainSync {
+                val store = app.browserStore
+                setOf(selectedSessionId, rawSessionId).forEach { id ->
+                    if (store.state.tabs.any { it.id == id }) {
+                        store.dispatch(TabListAction.RemoveTabAction(id))
+                    }
+                }
+                manager?.close()
+                transferredRawSession?.let { session ->
+                    if (session.isOpen) session.close()
+                }
+            }
+            storeDir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun finalDestroyAcceptsAndroidComponentsSuspendAfterSynchronousUnlink() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as BrowserApp
