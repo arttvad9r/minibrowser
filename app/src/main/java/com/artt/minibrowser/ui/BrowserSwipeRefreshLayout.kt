@@ -96,8 +96,14 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
             }
 
             null -> {
-                if (allowAndroidComponentsSessionCreation && tabId != null) {
-                    bindAndroidComponentsSession(store = store, tabId = tabId)
+                // BrowserStore dispatch is asynchronous. A fresh A-C structural tab can reach
+                // Compose before its queued AddTabAction has reduced; stateFlow retries this bind
+                // as soon as the BrowserStore row becomes visible.
+                val resolvedTabId = tabId?.takeIf { id ->
+                    store.state.tabs.any { it.id == id }
+                }
+                if (allowAndroidComponentsSessionCreation && resolvedTabId != null) {
+                    bindAndroidComponentsSession(store = store, tabId = resolvedTabId)
                 } else {
                     releaseRenderedSession()
                 }
