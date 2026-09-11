@@ -31,6 +31,7 @@ class TabManagerRecreationOwnershipSystemTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val app = instrumentation.targetContext.applicationContext as BrowserApp
         val storeDir = File(app.cacheDir, "tab-recreation-raw-${System.nanoTime()}")
+        val rawTabId = 93_001L
         var oldManager: TabManager? = null
         var replacement: TabManager? = null
         lateinit var publicTab: Tab
@@ -38,6 +39,17 @@ class TabManagerRecreationOwnershipSystemTest {
         lateinit var publicSession: GeckoSession
         var retainedMediaDelegate: Any? = null
         var closedHighId = 0L
+        val androidComponentsIds = mutableSetOf<String>()
+
+        // This test needs one raw GeckoSession identity to survive recreation. Ordinary fresh tabs
+        // are A-C-owned now, so make the legacy raw owner an explicit persisted precondition.
+        TabStore.saveState(
+            storeDir,
+            PersistedBrowserState(
+                selectedId = rawTabId,
+                tabs = listOf(PersistedTab(id = rawTabId, url = "about:blank")),
+            ),
+        )
 
         try {
             instrumentation.runOnMainSync {
@@ -64,7 +76,9 @@ class TabManagerRecreationOwnershipSystemTest {
                 )
 
                 privateTab = manager.newTab(null, private = true)
+                androidComponentsIds += privateTab.id.toString()
                 val closedHighTab = manager.newTab(null, private = false)
+                androidComponentsIds += closedHighTab.id.toString()
                 closedHighId = closedHighTab.id
                 manager.closeTab(closedHighId)
                 manager.select(publicTab.id)
@@ -116,6 +130,7 @@ class TabManagerRecreationOwnershipSystemTest {
                 )
 
                 val next = adopted.newTab(null, private = false)
+                androidComponentsIds += next.id.toString()
                 assertTrue(
                     "Recreation keeps the monotonic sequence beyond already-closed tab IDs",
                     next.id > closedHighId,
@@ -125,8 +140,14 @@ class TabManagerRecreationOwnershipSystemTest {
             instrumentation.runOnMainSync {
                 replacement?.close()
                 oldManager?.close()
+                val storeIds = app.browserStore.state.tabs.mapTo(mutableSetOf()) { it.id }
+                val idsToRemove = androidComponentsIds.intersect(storeIds)
+                if (idsToRemove.isNotEmpty()) {
+                    app.browserStore.dispatch(TabListAction.RemoveTabsAction(idsToRemove.toList()))
+                }
                 TabManagerRecreationHandoffRegistry.clearForTest(storeDir)
             }
+            TabStore.loadState(storeDir)
             storeDir.deleteRecursively()
         }
     }
@@ -231,6 +252,7 @@ class TabManagerRecreationOwnershipSystemTest {
                     isSessionOpenOnMainThread(instrumentation, suppliedRawSession),
                 )
             }
+            TabStore.loadState(storeDir)
             storeDir.deleteRecursively()
         }
     }
