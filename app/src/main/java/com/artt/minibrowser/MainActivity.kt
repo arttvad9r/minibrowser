@@ -187,6 +187,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
             tabManager.trimForBackground()
         }
         installBrowserBackFallback()
+        externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
         val handledShortcut = handleShortcut(launchIntent)
 
         setContent {
