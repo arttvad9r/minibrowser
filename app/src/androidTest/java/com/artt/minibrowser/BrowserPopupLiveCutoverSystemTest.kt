@@ -1,7 +1,9 @@
 package com.artt.minibrowser
 
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
 import androidx.test.core.app.ActivityScenario
@@ -21,6 +23,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import mozilla.components.browser.engine.gecko.GeckoEngineView
 import mozilla.components.browser.state.action.TabListAction
 import org.junit.AfterClass
@@ -36,70 +39,94 @@ class BrowserPopupLiveCutoverSystemTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val app = targetApp()
-
-        LocalPopupServer().use { server ->
-            val intent = Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse(server.pageUrl),
-                targetContext,
-                MainActivity::class.java,
-            )
-            ActivityScenario.launch<MainActivity>(intent).use {
-                val pageReady = waitUntil(LINK_TIMEOUT_MS) { server.pageReady }
-                assertTrue(
-                    "Initial popup parent executed its local DOM readiness script in Gecko; " +
-                        app.browserStore.state.let { state ->
-                            "selected=${state.selectedTabId}, tabs=" +
-                                state.tabs.joinToString(prefix = "[", postfix = "]") { tab ->
-                                    "${tab.id}{url=${tab.content.url}, linked=${tab.engineState.engineSession != null}, " +
-                                        "loading=${tab.content.loading}}"
-                                }
-                        },
-                    pageReady,
-                )
-                assertTrue(
-                    "Initial popup parent is owned by a linked Android Components session",
-                    waitUntil(LINK_TIMEOUT_MS) {
-                        selectedTab(app)?.engineState?.engineSession != null
-                    },
-                )
-                assertTrue(
-                    "Diagnostic persisted tab ID survived restore and ACTION_VIEW received the next ID",
-                    app.browserStore.state.let { state ->
-                        state.selectedTabId == (DIAGNOSTIC_TAB_ID + 1L).toString() &&
-                            state.tabs.any { it.id == DIAGNOSTIC_TAB_ID.toString() }
-                    },
-                )
-
-                val initialIds = app.browserStore.state.tabs.mapTo(mutableSetOf()) { it.id }
-                onView(isAssignableFrom(GeckoEngineView::class.java)).check { view, _ ->
-                    assertTrue(
-                        "Gecko content is still occluded before tap; " +
-                            "storeUrl=${selectedTab(app)?.content?.url}",
-                        view.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_YES,
+        val launchObservation = AtomicReference("MainActivity was not created")
+        val lifecycleCallbacks = object : android.app.Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                if (activity is MainActivity) {
+                    launchObservation.set(
+                        "action=${activity.intent?.action}, data=${activity.intent?.dataString}, " +
+                            "savedInstanceState=${savedInstanceState != null}",
                     )
                 }
-                onView(isAssignableFrom(GeckoEngineView::class.java)).perform(click())
-
-                assertTrue(
-                    "Tap reached the current popup parent page",
-                    waitUntil(LINK_TIMEOUT_MS) { server.popupClicked },
-                )
-                assertTrue(
-                    "Gecko opened the requested child page in the popup session",
-                    waitUntil(LINK_TIMEOUT_MS) { server.childRequested },
-                )
-                assertTrue(
-                    "Gecko popup becomes the selected linked Android Components tab",
-                    waitUntil(LINK_TIMEOUT_MS) {
-                        val state = app.browserStore.state
-                        val popup = state.tabs.singleOrNull { it.id !in initialIds }
-                        popup != null &&
-                            state.selectedTabId == popup.id &&
-                            popup.engineState.engineSession != null
-                    },
-                )
             }
+
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        }
+        app.registerActivityLifecycleCallbacks(lifecycleCallbacks)
+
+        try {
+            LocalPopupServer().use { server ->
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(server.pageUrl),
+                    targetContext,
+                    MainActivity::class.java,
+                )
+                ActivityScenario.launch<MainActivity>(intent).use {
+                    val pageReady = waitUntil(LINK_TIMEOUT_MS) { server.pageReady }
+                    assertTrue(
+                        "Initial popup parent executed its local DOM readiness script in Gecko; " +
+                            "launch=${launchObservation.get()}; " +
+                            app.browserStore.state.let { state ->
+                                "selected=${state.selectedTabId}, tabs=" +
+                                    state.tabs.joinToString(prefix = "[", postfix = "]") { tab ->
+                                        "${tab.id}{url=${tab.content.url}, linked=${tab.engineState.engineSession != null}, " +
+                                            "loading=${tab.content.loading}}"
+                                    }
+                            },
+                        pageReady,
+                    )
+                    assertTrue(
+                        "Initial popup parent is owned by a linked Android Components session",
+                        waitUntil(LINK_TIMEOUT_MS) {
+                            selectedTab(app)?.engineState?.engineSession != null
+                        },
+                    )
+                    assertTrue(
+                        "Diagnostic persisted tab ID survived restore and ACTION_VIEW received the next ID",
+                        app.browserStore.state.let { state ->
+                            state.selectedTabId == (DIAGNOSTIC_TAB_ID + 1L).toString() &&
+                                state.tabs.any { it.id == DIAGNOSTIC_TAB_ID.toString() }
+                        },
+                    )
+
+                    val initialIds = app.browserStore.state.tabs.mapTo(mutableSetOf()) { it.id }
+                    onView(isAssignableFrom(GeckoEngineView::class.java)).check { view, _ ->
+                        assertTrue(
+                            "Gecko content is still occluded before tap; " +
+                                "storeUrl=${selectedTab(app)?.content?.url}",
+                            view.importantForAccessibility == View.IMPORTANT_FOR_ACCESSIBILITY_YES,
+                        )
+                    }
+                    onView(isAssignableFrom(GeckoEngineView::class.java)).perform(click())
+
+                    assertTrue(
+                        "Tap reached the current popup parent page",
+                        waitUntil(LINK_TIMEOUT_MS) { server.popupClicked },
+                    )
+                    assertTrue(
+                        "Gecko opened the requested child page in the popup session",
+                        waitUntil(LINK_TIMEOUT_MS) { server.childRequested },
+                    )
+                    assertTrue(
+                        "Gecko popup becomes the selected linked Android Components tab",
+                        waitUntil(LINK_TIMEOUT_MS) {
+                            val state = app.browserStore.state
+                            val popup = state.tabs.singleOrNull { it.id !in initialIds }
+                            popup != null &&
+                                state.selectedTabId == popup.id &&
+                                popup.engineState.engineSession != null
+                        },
+                    )
+                }
+            }
+        } finally {
+            app.unregisterActivityLifecycleCallbacks(lifecycleCallbacks)
         }
     }
 
