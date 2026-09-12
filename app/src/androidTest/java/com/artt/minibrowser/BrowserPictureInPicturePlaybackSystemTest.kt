@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import mozilla.components.browser.engine.gecko.GeckoEngineView
 import mozilla.components.browser.state.action.TabListAction
+import mozilla.components.concept.engine.mediasession.MediaSession
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,6 +78,17 @@ class BrowserPictureInPicturePlaybackSystemTest {
 
                     waitFor("Gecko reported content fullscreen from the real video element") {
                         selectedContent(browserApp)?.fullScreen == true
+                    }
+                    waitFor(
+                        "Gecko MediaSession playback did not reach BrowserStore",
+                        MEDIA_READY_TIMEOUT_MS,
+                    ) {
+                        browserApp.browserStore.state.let { state ->
+                            state.tabs
+                                .firstOrNull { it.id == state.selectedTabId }
+                                ?.mediaSessionState
+                                ?.playbackState == MediaSession.PlaybackState.PLAYING
+                        }
                     }
 
                     val requested = AtomicBoolean(false)
@@ -361,6 +373,11 @@ class BrowserPictureInPicturePlaybackSystemTest {
                   mark('/clicked');
                   const video = document.getElementById('video');
                   document.getElementById('start').remove();
+                  if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({ title: 'MiniBrowser PiP test' });
+                    navigator.mediaSession.setActionHandler('play', () => video.play());
+                    navigator.mediaSession.setActionHandler('pause', () => video.pause());
+                  }
                   const playResult = video.play();
                   if (playResult) {
                     playResult.then(() => mark('/play-ok')).catch(() => mark('/play-error'));
