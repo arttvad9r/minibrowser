@@ -45,9 +45,17 @@ class BrowserPopupLiveCutoverSystemTest {
                 MainActivity::class.java,
             )
             ActivityScenario.launch<MainActivity>(intent).use {
+                val pageReady = waitUntil(LINK_TIMEOUT_MS) { server.pageReady }
                 assertTrue(
-                    "Initial popup parent executed its local DOM readiness script in Gecko",
-                    waitUntil(LINK_TIMEOUT_MS) { server.pageReady },
+                    "Initial popup parent executed its local DOM readiness script in Gecko; " +
+                        app.browserStore.state.let { state ->
+                            "selected=${state.selectedTabId}, tabs=" +
+                                state.tabs.joinToString(prefix = "[", postfix = "]") { tab ->
+                                    "${tab.id}{url=${tab.content.url}, linked=${tab.engineState.engineSession != null}, " +
+                                        "loading=${tab.content.loading}}"
+                                }
+                        },
+                    pageReady,
                 )
                 assertTrue(
                     "Initial popup parent is owned by a linked Android Components session",
