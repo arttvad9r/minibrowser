@@ -377,6 +377,12 @@ class BrowserPictureInPicturePlaybackSystemTest {
                     navigator.mediaSession.metadata = new MediaMetadata({ title: 'MiniBrowser PiP test' });
                     navigator.mediaSession.setActionHandler('play', () => video.play());
                     navigator.mediaSession.setActionHandler('pause', () => video.pause());
+                    video.addEventListener('playing', () => {
+                      navigator.mediaSession.playbackState = 'playing';
+                    });
+                    video.addEventListener('pause', () => {
+                      navigator.mediaSession.playbackState = 'paused';
+                    });
                   }
                   const playResult = video.play();
                   if (playResult) {
