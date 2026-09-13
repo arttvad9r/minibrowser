@@ -302,6 +302,29 @@ class AndroidComponentsStateBridgeTest {
     }
 
     @Test
+    fun staleStructuralSnapshotCannotRemoveStoreOnlyOwnedTab() {
+        val existing = snapshot(id = "1", url = "https://one.example")
+        val storeOnly = snapshot(
+            id = "2",
+            url = "https://fresh.example",
+            rawSessionOwnership = RawSessionOwnership.Relinquished,
+        )
+        val state = BrowserState(
+            tabs = listOf(existing.toState(), storeOnly.toState()),
+            selectedTabId = "1",
+        )
+
+        val actions = browserStoreSyncActions(
+            state = state,
+            tabs = listOf(existing),
+            selectedTabId = "1",
+            missingTabRemovalIds = emptySet(),
+        )
+
+        assertTrue(actions.isEmpty())
+    }
+
+    @Test
     fun contentChangeIsPreservedWhileTabsReorder() {
         val first = snapshot(id = "1", url = "https://one.example", title = "Old")
         val second = snapshot(id = "2", url = "https://two.example")

@@ -114,12 +114,15 @@ private fun shouldRecreateShadowTab(
  *
  * [engineSessionStates] contains already-decoded, URL-bound A-C restore state. The shadow store may
  * hold this state before live ownership moves, but this function never dispatches CreateEngineSessionAction.
+ * [missingTabRemovalIds] restricts structural removal to rows whose deletion is owned by this sync.
+ * This prevents a stale structural snapshot from deleting a fresh Android Components-owned row.
  */
 internal fun browserStoreSyncActions(
     state: BrowserState,
     tabs: List<BrowserStoreTabSnapshot>,
     selectedTabId: String?,
     engineSessionStates: Map<String, EngineSessionState?> = emptyMap(),
+    missingTabRemovalIds: Set<String> = state.tabs.mapTo(mutableSetOf()) { it.id },
 ): List<BrowserAction> {
     val actions = mutableListOf<BrowserAction>()
     val currentById = state.tabs.associateBy { it.id }
@@ -127,12 +130,14 @@ internal fun browserStoreSyncActions(
 
     val removedIds = state.tabs.mapNotNull { current ->
         val next = nextById[current.id]
-        current.id.takeIf {
-            next == null || shouldRecreateShadowTab(
+        when {
+            next == null -> current.id.takeIf(missingTabRemovalIds::contains)
+            shouldRecreateShadowTab(
                 current = current,
                 next = next,
                 desiredEngineSessionState = engineSessionStates[next.id],
-            )
+            ) -> current.id
+            else -> null
         }
     }
     val removedIdSet = removedIds.toSet()
@@ -303,9 +308,11 @@ internal class AndroidComponentsStateBridge(
     private val engine: Engine,
 ) {
     private val decodedEngineStates = mutableMapOf<String, CachedEngineSessionState>()
+    private var mirroredRawTabIds: Set<String> = emptySet()
 
     fun sync(tabs: List<BrowserStoreTabSnapshot>, selectedTabId: String?) {
         val liveIds = tabs.mapTo(mutableSetOf()) { it.id }
+        val missingMirroredRawTabIds = mirroredRawTabIds - liveIds
         decodedEngineStates.keys.retainAll(liveIds)
         val engineSessionStates = tabs.associate { tab ->
             if (tab.rawSessionOwnership.mirrorsRawContent) {
@@ -315,7 +322,16 @@ internal class AndroidComponentsStateBridge(
                 tab.id to null
             }
         }
-        browserStoreSyncActions(store.state, tabs, selectedTabId, engineSessionStates).forEach(store::dispatch)
+        browserStoreSyncActions(
+            state = store.state,
+            tabs = tabs,
+            selectedTabId = selectedTabId,
+            engineSessionStates = engineSessionStates,
+            missingTabRemovalIds = missingMirroredRawTabIds,
+        ).forEach(store::dispatch)
+        mirroredRawTabIds = tabs.asSequence()
+            .filter { it.rawSessionOwnership.mirrorsRawContent }
+            .mapTo(mutableSetOf()) { it.id }
     }
 
     private fun resolveEngineSessionState(tab: BrowserStoreTabSnapshot): EngineSessionState? {
