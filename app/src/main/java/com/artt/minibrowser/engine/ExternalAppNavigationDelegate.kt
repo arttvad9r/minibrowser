@@ -9,6 +9,8 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import mozilla.components.concept.engine.EngineSession
+import mozilla.components.concept.engine.request.RequestInterceptor
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -150,6 +152,62 @@ private class ExternalAppNavigationDelegate(
 internal enum class ExternalAppRequestDecision { Pass, Deny }
 
 /**
+ * Engine-neutral navigation request used by both the raw Gecko delegate and the future
+ * Android Components RequestInterceptor ownership path.
+ */
+internal data class ExternalAppNavigationRequest(
+    val uri: String,
+    val hasUserGesture: Boolean,
+    val isRedirect: Boolean,
+)
+
+internal fun interface ExternalAppNavigationPolicy {
+    fun onLoadRequest(request: ExternalAppNavigationRequest): ExternalAppRequestDecision
+}
+
+internal fun shouldInterceptExternalAppRequest(isSubframeRequest: Boolean): Boolean = !isSubframeRequest
+
+internal fun externalAppInterceptionResponse(
+    decision: ExternalAppRequestDecision,
+): RequestInterceptor.InterceptionResponse? = when (decision) {
+    ExternalAppRequestDecision.Pass -> null
+    ExternalAppRequestDecision.Deny -> RequestInterceptor.InterceptionResponse.Deny
+}
+
+/**
+ * Android Components adapter for MiniBrowser's existing external-app navigation policy.
+ *
+ * This class is deliberately not installed on the live GeckoEngine yet. It becomes active only
+ * when GeckoSession ownership moves to Android Components. Subframe requests are ignored so an
+ * embedded frame can never launch an external Activity through this browser-level policy.
+ */
+internal class AndroidComponentsExternalAppRequestInterceptor(
+    private val policy: ExternalAppNavigationPolicy,
+) : RequestInterceptor {
+    override fun onLoadRequest(
+        engineSession: EngineSession,
+        uri: String,
+        lastUri: String?,
+        hasUserGesture: Boolean,
+        isSameDomain: Boolean,
+        isRedirect: Boolean,
+        isDirectNavigation: Boolean,
+        isSubframeRequest: Boolean,
+    ): RequestInterceptor.InterceptionResponse? {
+        if (!shouldInterceptExternalAppRequest(isSubframeRequest)) return null
+        return externalAppInterceptionResponse(
+            policy.onLoadRequest(
+                ExternalAppNavigationRequest(
+                    uri = uri,
+                    hasUserGesture = hasUserGesture,
+                    isRedirect = isRedirect,
+                ),
+            ),
+        )
+    }
+}
+
+/**
  * App-link handling that runs inside TabManager's own NavigationDelegate.
  *
  * This deliberately does not replace or wrap GeckoSession.navigationDelegate. Regular HTTP(S)
@@ -157,16 +215,28 @@ internal enum class ExternalAppRequestDecision { Pass, Deny }
  * after Gecko has been allowed to consume the click, or consumes a custom scheme that Gecko cannot
  * render. A short user-gesture window also covers tg:// / bank-scheme navigations triggered by an
  * immediate script or redirect after the original web tap.
+ *
+ * The policy core now consumes [ExternalAppNavigationRequest]. The Gecko overload below is only a
+ * temporary compatibility adapter while TabManager still owns raw GeckoSession navigation.
  */
 internal class ExternalAppRequestHandler(
     private val activity: Activity,
-) {
+) : ExternalAppNavigationPolicy {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var userNavigationChainUntilMs = 0L
     private var navigationGeneration = 0L
     private var externallyLaunchedGeneration = -1L
 
-    fun onLoadRequest(request: GeckoSession.NavigationDelegate.LoadRequest): ExternalAppRequestDecision {
+    fun onLoadRequest(request: GeckoSession.NavigationDelegate.LoadRequest): ExternalAppRequestDecision =
+        onLoadRequest(
+            ExternalAppNavigationRequest(
+                uri = request.uri,
+                hasUserGesture = request.hasUserGesture,
+                isRedirect = request.isRedirect,
+            ),
+        )
+
+    override fun onLoadRequest(request: ExternalAppNavigationRequest): ExternalAppRequestDecision {
         val uri = request.uri
         val now = SystemClock.elapsedRealtime()
         val hadRecentUserGesture = now <= userNavigationChainUntilMs

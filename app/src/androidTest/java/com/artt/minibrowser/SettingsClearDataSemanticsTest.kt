@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.artt.minibrowser.ui.BrowserExtensionUiState
@@ -49,7 +50,10 @@ class SettingsClearDataSemanticsTest {
             }
         }
 
-        composeRule.onNodeWithText(clearData).performClick()
+        composeRule
+            .onNodeWithText(clearData)
+            .performScrollTo()
+            .performClick()
 
         val toggleState = SemanticsProperties.ToggleableState
         val option = composeRule.onNodeWithText(clearBookmarks)

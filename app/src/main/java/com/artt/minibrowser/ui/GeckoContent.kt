@@ -6,10 +6,18 @@ import android.content.ContextWrapper
 import android.view.View
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.artt.minibrowser.engine.BrowserApp
+import com.artt.minibrowser.engine.BrowserCommandTarget
+import com.artt.minibrowser.engine.RawSessionOwnership
 import com.artt.minibrowser.engine.Tab
+import com.artt.minibrowser.engine.browserCommandTargetForTab
+import com.artt.minibrowser.engine.reloadOrStopBrowser
 import org.mozilla.geckoview.BasicSelectionActionDelegate
 
 internal fun View.updateBrowserContentAccessibility(hidden: Boolean) {
@@ -26,59 +34,76 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     else -> null
 }
 
-/** Thin Compose/GeckoView bridge. Browser chrome remains independent of Gecko session objects. */
+/** Thin Compose/EngineView bridge. Browser chrome remains independent of Gecko session objects. */
 @Composable
 internal fun GeckoContent(
     tab: Tab?,
     previewStore: TabPreviewStore,
     modifier: Modifier = Modifier,
 ) {
-    val session = tab?.session
+    val app = LocalContext.current.applicationContext as BrowserApp
+    val browserStoreState by app.browserStore.stateFlow.collectAsStateWithLifecycle()
     val tabId = tab?.id
-    val url = tab?.url.orEmpty()
-    val isPrivate = tab?.isPrivate == true
-    val hiddenFromAccessibility = LocalBrowserContentAccessibilityHidden.current
-    val pageSupportsRefresh = tab != null &&
-        (url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true))
-    val pageLoading = tab != null && tab.progress >= 0f
+    val storeContent = tabId?.toString()?.let { id ->
+        browserStoreState.tabs.firstOrNull { it.id == id }?.content
+    }
+    val rawTab = tab?.takeIf { it.hasRawSessionAuthority }
+    val url = storeContent?.url ?: rawTab?.url.orEmpty()
+    val isPrivate = storeContent?.private ?: (rawTab?.isPrivate == true)
+    val pageSupportsRefresh =
+        url.startsWith("https://", ignoreCase = true) || url.startsWith("http://", ignoreCase = true)
+    val pageLoading = storeContent?.loading ?: ((rawTab?.progress ?: -1f) >= 0f)
     val pageSettled = pageSupportsRefresh && !pageLoading
+    val hiddenFromAccessibility = LocalBrowserContentAccessibilityHidden.current
     val indicatorColor = MaterialTheme.colorScheme.primary.toArgb()
     val indicatorBackgroundColor = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
 
     AndroidView(
-        factory = { context ->
-            BrowserSwipeRefreshLayout(context).apply {
-                // GeckoView exposes the web form as a virtual Android Autofill structure so the
-                // user's system provider (Bitwarden, 1Password, Google Password Manager, etc.)
-                // can fill credentials without Minibrowser storing them itself.
-                geckoView.setAutofillEnabled(true)
-            }
-        },
+        factory = { context -> BrowserSwipeRefreshLayout(context) },
         update = { container ->
-            val view = container.geckoView
+            val view = container.engineView
             view.updateBrowserContentAccessibility(hiddenFromAccessibility)
-            if (view.session !== session) {
-                container.resetForSessionChange()
-                view.releaseSession()
-                session?.let { nextSession ->
-                    // Gecko does not install a text-selection action mode for embedders by
-                    // default. The built-in delegate supplies Select all / Copy / Cut / Paste /
-                    // Process text using Android's standard contextual toolbar.
-                    if (nextSession.selectionActionDelegate == null) {
-                        view.context.findActivity()?.let { activity ->
-                            nextSession.setSelectionActionDelegate(BasicSelectionActionDelegate(activity))
-                        }
+            val renderTarget = tab?.let { currentTab ->
+                browserCommandTargetForTab(currentTab, app.browserStore)
+            }
+            if (renderTarget is BrowserCommandTarget.Raw) {
+                val rawOwnedTab = requireNotNull(tab) { "Raw render target requires a tab" }
+                val rawSession = renderTarget.session
+                // Gecko does not install a text-selection action mode for raw embedders by default.
+                // Never mutate the raw session after ownership has been relinquished.
+                if (rawOwnedTab.ownsRawSession(rawSession) && rawSession.selectionActionDelegate == null) {
+                    view.context.findActivity()?.let { activity ->
+                        rawSession.setSelectionActionDelegate(BasicSelectionActionDelegate(activity))
                     }
-                    view.setSession(nextSession)
                 }
             }
+            val allowAndroidComponentsSessionCreation = tab?.let { currentTab ->
+                currentTab.rawSessionOwnership == RawSessionOwnership.Relinquished &&
+                    currentTab.rawSessionOrNull == null
+            } == true
+            container.bindSession(
+                runtime = app.runtime,
+                store = app.browserStore,
+                tabId = tabId?.toString(),
+                target = renderTarget,
+                privateMode = isPrivate,
+                allowAndroidComponentsSessionCreation = allowAndroidComponentsSessionCreation,
+            )
             container.configurePullToRefresh(
                 pageSupportsRefresh = pageSupportsRefresh,
                 pageLoading = pageLoading,
                 indicatorColor = indicatorColor,
                 indicatorBackgroundColor = indicatorBackgroundColor,
                 onRefresh = {
-                    if (pageSupportsRefresh) session?.reload()
+                    tab?.let { currentTab ->
+                        if (pageSupportsRefresh) {
+                            reloadOrStopBrowser(
+                                tab = currentTab,
+                                browserStore = app.browserStore,
+                                isLoading = false,
+                            )
+                        }
+                    }
                 },
             )
             previewStore.maybeCapture(
@@ -89,12 +114,7 @@ internal fun GeckoContent(
                 pageSettled = pageSettled,
             )
         },
-        onRelease = { container ->
-            // The view only borrows the session. TabManager remains responsible for persistence and
-            // closing it; releasing here prevents a disposed AndroidView from retaining the session.
-            container.clearPullToRefresh()
-            container.geckoView.releaseSession()
-        },
+        onRelease = { container -> container.clearPullToRefresh() },
         modifier = modifier,
     )
 }
