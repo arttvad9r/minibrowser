@@ -206,7 +206,6 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
                 historyRepository = historyRepo,
                 browserWindow = browserWindow,
                 browserIntents = browserIntents,
-                externalNavigation = externalNavigation,
                 backgroundTabOpened = backgroundTabOpened,
                 tabPreviewStore = tabPreviewStore,
                 iconsDir = iconsDir,

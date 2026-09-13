@@ -43,7 +43,6 @@ import com.artt.minibrowser.browser.BrowserScreen
 import com.artt.minibrowser.browser.BrowserViewModel
 import com.artt.minibrowser.browser.BrowserWindowController
 import com.artt.minibrowser.browser.BrowserWindowEffects
-import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.OmniboxSuggestionsViewModel
 import com.artt.minibrowser.browser.PageBookmarkViewModel
 import com.artt.minibrowser.browser.SettingsViewModel
@@ -117,7 +116,6 @@ internal fun BrowserRoute(
     historyRepository: HistoryRepository,
     browserWindow: BrowserWindowController,
     browserIntents: BrowserIntentController,
-    externalNavigation: NavigationController,
     backgroundTabOpened: Flow<Long>,
     tabPreviewStore: TabPreviewStore,
     iconsDir: File,
@@ -179,9 +177,6 @@ internal fun BrowserRoute(
         inFullscreen = inFullscreen,
         showFind = showFind,
         onClearFocus = { focusManager.clearFocus(force = true) },
-        onInstallExternalNavigation = {
-            externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
-        },
         onSyncBookmark = pageBookmarkViewModel::sync,
         onGoBack = {
             currentTab?.let { tab -> goBrowserBack(tab, browserStore) }

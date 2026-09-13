@@ -18,7 +18,6 @@ internal fun BrowserRootEffects(
     inFullscreen: Boolean,
     showFind: Boolean,
     onClearFocus: () -> Unit,
-    onInstallExternalNavigation: () -> Unit,
     onSyncBookmark: (String?) -> Unit,
     onGoBack: () -> Unit,
     onExitFullscreen: () -> Unit,
@@ -26,10 +25,6 @@ internal fun BrowserRootEffects(
 ) {
     LaunchedEffect(screen, showSwitcher) {
         if (screen != BrowserScreen.Browser || showSwitcher) onClearFocus()
-    }
-
-    LaunchedEffect(Unit) {
-        onInstallExternalNavigation()
     }
 
     LaunchedEffect(screen, currentUrl) {
