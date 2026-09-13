@@ -105,7 +105,7 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
         )[OmniboxSuggestionsViewModel::class.java]
     }
 
-    private val externalNavigation = NavigationController()
+    private val externalNavigation = NavigationController { uri -> tabManager.newTab(uri) }
     private val activityRequests = BrowserActivityRequestController(this)
     private val browserWindow by lazy { BrowserWindowController(window) }
     private val browserIntents by lazy {
@@ -187,7 +187,6 @@ class MainActivity : FragmentActivity(), BackgroundTabHost {
             tabManager.trimForBackground()
         }
         installBrowserBackFallback()
-        externalNavigation.setHandler { uri -> tabManager.newTab(uri) }
         val handledShortcut = handleShortcut(launchIntent)
 
         setContent {
