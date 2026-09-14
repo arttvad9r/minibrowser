@@ -32,8 +32,8 @@ data class PersistedTab(
     // files and current raw-owned snapshots omit this field and therefore remain raw-owned.
     @SerialName("session_owner")
     val sessionOwner: PersistedSessionOwner = PersistedSessionOwner.Raw,
-    // Future A-C-owned sessions persist EngineSessionState separately from the legacy raw Gecko
-    // string above. Raw-owned shadow tabs may also carry this payload during migration.
+    // A-C-owned sessions persist EngineSessionState separately from the legacy raw Gecko state above.
+    // Raw-owned shadow tabs may also carry this payload while both ownership paths remain live.
     val engineSessionState: EngineSessionStateEnvelope? = null,
     val engineSessionStateUrl: String? = null,
 )
