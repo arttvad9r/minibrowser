@@ -47,9 +47,6 @@ internal class AndroidComponentsExistingSessionTransferPreflight private constru
             val target = checkNotNull(store.state.tabs.firstOrNull { it.id == tabId }) {
                 "BrowserStore tab $tabId does not exist"
             }
-            check(target.engineState.engineSession == null) {
-                "BrowserStore tab $tabId already has an EngineSession"
-            }
             val sessionContext = AndroidComponentsGeckoSessionContext(
                 sessionId = target.id,
                 privateMode = target.content.private,
