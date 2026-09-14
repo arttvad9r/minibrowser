@@ -26,10 +26,7 @@ class HotTabBudgetPlannerTest {
         )
 
         assertEquals(
-            listOf(
-                HotTabBudgetEviction(1, HotTabSessionOwner.Raw),
-                HotTabBudgetEviction(2, HotTabSessionOwner.AndroidComponents),
-            ),
+            listOf(entries[0], entries[1]),
             planHotTabBudget(entries, selectedTabId = 4, limit = 2),
         )
     }
@@ -43,7 +40,7 @@ class HotTabBudgetPlannerTest {
         )
 
         assertEquals(
-            listOf(HotTabBudgetEviction(2, HotTabSessionOwner.Raw)),
+            listOf(entries[1]),
             planHotTabBudget(entries, selectedTabId = 1, limit = 2),
         )
     }
@@ -57,7 +54,7 @@ class HotTabBudgetPlannerTest {
         )
 
         assertEquals(
-            listOf(HotTabBudgetEviction(2, HotTabSessionOwner.AndroidComponents)),
+            listOf(entries[1]),
             planHotTabBudget(entries, selectedTabId = 3, limit = 2),
         )
     }
@@ -72,7 +69,7 @@ class HotTabBudgetPlannerTest {
         )
 
         assertEquals(
-            listOf(HotTabBudgetEviction(2, HotTabSessionOwner.AndroidComponents)),
+            listOf(entries[1]),
             planHotTabBudget(entries, selectedTabId = 4, limit = 1),
         )
     }
