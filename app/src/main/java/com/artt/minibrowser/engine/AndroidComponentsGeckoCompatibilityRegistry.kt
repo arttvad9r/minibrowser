@@ -147,10 +147,10 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
 }
 
 /**
- * Wraps the stock delegates installed by GeckoEngineSession after construction. This function is
- * intentionally not wired into the current shadow/raw ownership path; it is the cutover hook for an
- * A-C-owned session factory that captures the underlying GeckoSession through the public
- * geckoSessionProvider constructor argument.
+ * Wraps the stock delegates installed by GeckoEngineSession after construction.
+ *
+ * A-C-owned sessions install these compatibility wrappers at the ownership boundary, after the stock
+ * Gecko delegates exist. Raw-owned GeckoSessions keep their raw delegates until that cutover.
  */
 internal fun installAndroidComponentsGeckoCompatibilityDelegates(
     session: GeckoSession,
