@@ -15,23 +15,6 @@ import mozilla.components.lib.state.Middleware
 import org.mozilla.geckoview.GeckoSession
 
 /**
- * Configures the session-only settings MiniBrowser needs once BrowserStore starts owning live
- * EngineSessions. Keeping this separate from GeckoEngine DefaultSettings avoids mutating the shared
- * GeckoRuntime before the ownership cutover.
- */
-internal fun configureAndroidComponentsOwnedSession(
-    settings: Settings,
-    historyTrackingDelegate: HistoryTrackingDelegate,
-    downloadDelegate: DownloadDelegate,
-    requestInterceptor: RequestInterceptor,
-) {
-    settings.historyTrackingDelegate = historyTrackingDelegate
-    settings.downloadDelegate = downloadDelegate
-    settings.requestInterceptor = requestInterceptor
-    settings.suspendMediaWhenInactive = true
-}
-
-/**
  * Owns the small session-only policy that must survive the raw -> A-C handoff.
  *
  * Delegate/interceptor factories are lazy on purpose: constructing the shadow BrowserStore must not
@@ -52,12 +35,10 @@ internal class AndroidComponentsOwnedSessionConfigurator(
     }
 
     fun configure(settings: Settings) {
-        configureAndroidComponentsOwnedSession(
-            settings = settings,
-            historyTrackingDelegate = historyTrackingDelegate,
-            downloadDelegate = downloadDelegate,
-            requestInterceptor = requestInterceptor,
-        )
+        settings.historyTrackingDelegate = historyTrackingDelegate
+        settings.downloadDelegate = downloadDelegate
+        settings.requestInterceptor = requestInterceptor
+        settings.suspendMediaWhenInactive = true
     }
 }
 
