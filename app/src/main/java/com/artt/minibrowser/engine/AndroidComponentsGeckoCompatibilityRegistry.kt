@@ -92,8 +92,6 @@ internal class AndroidComponentsGeckoCompatibilityRegistry {
         }
     }
 
-    internal fun currentHost(): AndroidComponentsGeckoCompatibilityHost? = current
-
     /** BrowserStore download middleware uses the same Activity lease without retaining an Activity. */
     fun consumeDownload(download: DownloadState): Boolean = current?.onDownload(download) == true
 

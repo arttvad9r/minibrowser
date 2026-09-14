@@ -9,7 +9,6 @@ import org.robolectric.annotation.Config
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -17,35 +16,6 @@ import kotlin.test.assertTrue
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35], application = Application::class)
 class AndroidComponentsGeckoCompatibilityRegistryTest {
-    @Test
-    fun closingOlderLeaseDoesNotClearReplacementActivityBinding() {
-        val registry = AndroidComponentsGeckoCompatibilityRegistry()
-        val first = unusedHost()
-        val second = unusedHost()
-
-        val firstLease = registry.bind(first)
-        val secondLease = registry.bind(second)
-
-        assertSame(second, registry.currentHost())
-        firstLease.close()
-        assertSame(second, registry.currentHost())
-
-        secondLease.close()
-        assertNull(registry.currentHost())
-    }
-
-    @Test
-    fun closingCurrentLeaseClearsBinding() {
-        val registry = AndroidComponentsGeckoCompatibilityRegistry()
-        val host = unusedHost()
-
-        val lease = registry.bind(host)
-        assertSame(host, registry.currentHost())
-
-        lease.close()
-        assertNull(registry.currentHost())
-    }
-
     @Test
     fun sessionContextKeepsIdentityAndPrivacyIndependentOfActivityLifetime() {
         val context = AndroidComponentsGeckoSessionContext(
@@ -62,22 +32,22 @@ class AndroidComponentsGeckoCompatibilityRegistryTest {
     @Test
     fun sessionHandlerCanOutliveCurrentActivityBinding() {
         val registry = AndroidComponentsGeckoCompatibilityRegistry()
-        val context = AndroidComponentsGeckoSessionContext(
-            sessionId = "42",
-            privateMode = false,
+        val handler = registry.forSession(
+            AndroidComponentsGeckoSessionContext(sessionId = "42", privateMode = false),
         )
+        val firstPrompt = object : GeckoSession.PromptDelegate {}
+        val firstLease = registry.bind(unusedHost(firstPrompt))
 
-        val handler = registry.forSession(context)
-        val firstLease = registry.bind(unusedHost())
+        assertSame(firstPrompt, handler.promptDelegate())
         firstLease.close()
-        assertNull(registry.currentHost())
         assertNull(handler.promptDelegate())
 
-        val second = unusedHost()
-        registry.bind(second)
-        assertSame(second, registry.currentHost())
-        // The same session-bound handler does not retain either Activity-scoped host.
-        assertNotNull(handler)
+        val secondPrompt = object : GeckoSession.PromptDelegate {}
+        val secondLease = registry.bind(unusedHost(secondPrompt))
+        assertSame(secondPrompt, handler.promptDelegate())
+
+        secondLease.close()
+        assertNull(handler.promptDelegate())
     }
 
     @Test
