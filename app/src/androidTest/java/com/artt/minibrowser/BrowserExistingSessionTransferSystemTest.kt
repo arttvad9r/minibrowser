@@ -70,7 +70,7 @@ class BrowserExistingSessionTransferSystemTest {
                     "A-C navigation delegate retains MiniBrowser-only load-error UI state",
                     rawSession.navigationDelegate is AndroidComponentsNavigationUiCompatibilityDelegate,
                 )
-                val uiCompatibility = app.uiCompatibilityState.snapshot(tabId)
+                val uiCompatibility = app.uiCompatibilityState.snapshots.value[tabId]
                 assertNotNull("Raw UI compatibility state is handed off before delegate takeover", uiCompatibility)
                 assertSame(SecurityState.Exception, uiCompatibility!!.securityState)
                 assertSame(PageLoadError.Network, uiCompatibility.pageLoadError)
@@ -153,7 +153,7 @@ class BrowserExistingSessionTransferSystemTest {
                 assertTrue("Transferred test tab is removed from BrowserStore", store.state.tabs.none { it.id == tabId })
                 assertNull(
                     "BrowserStore removal also drops MiniBrowser-only UI compatibility state",
-                    app.uiCompatibilityState.snapshot(tabId),
+                    app.uiCompatibilityState.snapshots.value[tabId],
                 )
             }
 
