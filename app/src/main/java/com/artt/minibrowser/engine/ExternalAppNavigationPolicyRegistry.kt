@@ -1,10 +1,10 @@
 package com.artt.minibrowser.engine
 
 /**
- * Activity-lifecycle bridge for the future A-C [mozilla.components.concept.engine.request.RequestInterceptor].
+ * Activity-lifecycle bridge for A-C's [mozilla.components.concept.engine.request.RequestInterceptor].
  *
- * The interceptor itself is application-scoped with the EngineSession configurator, but launching
- * an external Android activity must use only the currently started browser Activity. When no host is
+ * The interceptor is application-scoped with the EngineSession configurator, but launching an
+ * external Android activity must use only the currently started browser Activity. When no host is
  * bound, requests pass through to Gecko unchanged.
  */
 internal class ExternalAppNavigationPolicyRegistry : ExternalAppNavigationPolicy {

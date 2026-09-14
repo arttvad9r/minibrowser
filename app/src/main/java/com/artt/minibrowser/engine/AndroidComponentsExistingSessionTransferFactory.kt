@@ -116,8 +116,6 @@ internal fun preflightAndroidComponentsExistingSessionTransfer(
  * Gecko delegates on the existing session; compatibility wrappers are installed only after those
  * stock delegates exist. Any failure after constructor takeover is fail-closed by closing the new
  * EngineSession rather than returning a partially-owned raw session to TabManager.
- *
- * The current raw/shadow runtime never calls this function.
  */
 @MainThread
 internal fun prepareAndroidComponentsExistingSessionTransferAfterRawRelinquish(
