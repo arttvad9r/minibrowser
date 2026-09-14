@@ -12,7 +12,7 @@ internal fun initialExternalNavigationUri(
     hasSavedInstanceState: Boolean,
 ): String? = intentUri.takeUnless { hasSavedInstanceState }
 
-class NavigationController(
+internal class NavigationController(
     private val handler: (String) -> Unit,
 ) {
     fun accept(uri: String?) {
