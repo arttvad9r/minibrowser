@@ -66,6 +66,3 @@ internal object TabManagerRecreationHandoffRegistry {
 
 internal fun hasTabManagerRecreationHandoff(storeDir: File): Boolean =
     TabManagerRecreationHandoffRegistry.hasPending(storeDir)
-
-internal fun takeTabManagerRecreationHandoff(storeDir: File): TabManagerRecreationHandoff? =
-    TabManagerRecreationHandoffRegistry.consume(storeDir)

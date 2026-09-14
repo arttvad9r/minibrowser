@@ -7,11 +7,11 @@ import mozilla.components.concept.engine.history.HistoryTrackingDelegate
 import mozilla.components.concept.storage.PageVisit
 
 /**
- * Pre-cutover adapter for Android Components history callbacks.
+ * History adapter for Android Components-owned EngineSessions.
  *
- * This is intentionally not installed on a live GeckoEngineSession yet. The raw Gecko owner uses
- * the same top-level/non-unrecoverable visit gate as GeckoEngineSession so history storage semantics
- * are already aligned before live session ownership moves.
+ * [AndroidComponentsOwnedSessionConfigurator] installs it in EngineSession settings for both fresh
+ * and transferred A-C sessions. Raw-owned GeckoSessions keep their existing history path until the
+ * ownership cutover.
  */
 internal class AndroidComponentsHistoryTrackingDelegate(
     private val history: MiniBrowserHistoryBackend = HistorySink,

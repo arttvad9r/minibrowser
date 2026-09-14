@@ -39,10 +39,12 @@ internal fun androidComponentsProcessRestorePlan(
             )
         }
         .toList()
-    val ids = tabs.mapTo(mutableSetOf()) { it.id }
+    val selectedTabId = state.selectedId
+        ?.toString()
+        ?.takeIf { selectedId -> tabs.any { it.id == selectedId } }
     return AndroidComponentsProcessRestorePlan(
         tabs = tabs,
-        selectedTabId = state.selectedId?.toString()?.takeIf(ids::contains),
+        selectedTabId = selectedTabId,
     )
 }
 
