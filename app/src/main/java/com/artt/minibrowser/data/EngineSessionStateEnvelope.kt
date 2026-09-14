@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 
-internal const val ENGINE_SESSION_STATE_ENVELOPE_VERSION = 1
+private const val ENGINE_SESSION_STATE_ENVELOPE_VERSION = 1
 
 /**
  * Versioned, engine-qualified container for Android Components EngineSessionState JSON.
