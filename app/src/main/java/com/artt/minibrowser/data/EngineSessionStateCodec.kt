@@ -10,8 +10,8 @@ import java.io.StringWriter
 /**
  * Serializes Android Components session state exclusively through its public persistence contract.
  *
- * This codec is deliberately independent from TabManager. Raw GeckoSession.SessionState remains the
- * only active restore path until BrowserStore owns live EngineSessions.
+ * This codec is deliberately independent from TabManager. Raw-owned tabs keep their legacy Gecko
+ * restore path, while A-C-owned tabs persist and restore EngineSessionState through BrowserStore.
  */
 internal fun encodeEngineSessionStateEnvelope(
     engineName: String,
@@ -28,14 +28,6 @@ internal fun encodeEngineSessionStateEnvelope(
     return createEngineSessionStateEnvelope(engineName, stateJson)
 }
 
-internal fun encodeEngineSessionStateEnvelope(
-    engine: Engine,
-    state: EngineSessionState?,
-): EngineSessionStateEnvelope? = encodeEngineSessionStateEnvelope(
-    engineName = engine.name(),
-    state = state,
-)
-
 /**
  * Restores a compatible persisted payload without depending on an engine's private JSON format.
  */
@@ -49,15 +41,6 @@ internal fun decodeEngineSessionStateEnvelope(
         JsonReader(StringReader(stateJson)).use { reader -> createState(reader) }
     }.getOrNull()
 }
-
-internal fun decodeEngineSessionStateEnvelope(
-    envelope: EngineSessionStateEnvelope?,
-    engine: Engine,
-): EngineSessionState? = decodeEngineSessionStateEnvelope(
-    envelope = envelope,
-    engineName = engine.name(),
-    createState = { reader -> engine.createSessionStateFrom(reader) },
-)
 
 /**
  * Restores only state explicitly bound to the current tab URL.
