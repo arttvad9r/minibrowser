@@ -25,9 +25,9 @@ import mozilla.components.concept.engine.EngineSessionState
 import kotlin.math.roundToInt
 
 /**
- * Temporary migration snapshot used while raw GeckoSession remains the execution source of truth.
- * BrowserStore is intentionally shadow state at this stage; later Android Components features can
- * move one responsibility at a time without forcing a simultaneous TabManager rewrite.
+ * Structural snapshot used while legacy raw GeckoSession ownership drains into Android Components.
+ * BrowserStore is authoritative for A-C-owned rows; this bridge mirrors content and restore state only
+ * for tabs that still explicitly own their raw session.
  *
  * [rawSessionOwnership] is the one-way ownership seam: once raw session authority is relinquished,
  * structural tab/order information may still flow through this bridge, but stale raw content and
@@ -98,24 +98,24 @@ private fun shouldRecreateShadowTab(
     if (!next.rawSessionOwnership.mirrorsRawContent) return false
     if (current.content.private != next.isPrivate) return true
 
-    // A-C 154 has no nullable UpdateEngineSessionStateAction. While this bridge is shadow-only,
-    // recreate just the affected BrowserStore tab to atomically replace or clear its persisted
-    // restore state. Never use this path once a live EngineSession has been linked: TabsRemovedMiddleware
-    // would then own closing it, which belongs to the later explicit ownership cutover.
+    // A-C 154 has no nullable UpdateEngineSessionStateAction. While a row is still raw-owned,
+    // recreate just that BrowserStore mirror to atomically replace or clear its persisted restore
+    // state. Never use this path once a live EngineSession has been linked: TabsRemovedMiddleware
+    // would then own closing it, which belongs to the explicit ownership cutover.
     return current.engineState.engineSession == null &&
         current.engineState.engineSessionState !== desiredEngineSessionState
 }
 
 /**
- * Produces granular BrowserStore actions that mirror MiniBrowser without rebuilding unaffected tabs.
- * Structural changes remove, add and move only the tabs that actually changed, preserving existing
- * BrowserStore sessions for ordinary reorders. Content changes are diffed by tab ID so structural
- * updates do not cause unrelated content actions.
+ * Produces granular BrowserStore actions for structural state plus raw-owned content mirrors without
+ * rebuilding unaffected tabs. Structural changes remove, add and move only the tabs that actually
+ * changed, preserving existing BrowserStore sessions for ordinary reorders. Content changes are
+ * diffed by tab ID so structural updates do not cause unrelated content actions.
  *
- * [engineSessionStates] contains already-decoded, URL-bound A-C restore state. The shadow store may
- * hold this state before live ownership moves, but this function never dispatches CreateEngineSessionAction.
- * [missingTabRemovalIds] restricts structural removal to rows whose deletion is owned by this sync.
- * This prevents a stale structural snapshot from deleting a fresh Android Components-owned row.
+ * [engineSessionStates] contains already-decoded, URL-bound A-C restore state for raw-owned rows.
+ * This function never dispatches CreateEngineSessionAction. [missingTabRemovalIds] restricts
+ * structural removal to rows whose deletion is owned by this sync, preventing a stale structural
+ * snapshot from deleting a fresh Android Components-owned row.
  */
 internal fun browserStoreSyncActions(
     state: BrowserState,
@@ -313,15 +313,10 @@ internal class AndroidComponentsStateBridge(
     fun sync(tabs: List<BrowserStoreTabSnapshot>, selectedTabId: String?) {
         val liveIds = tabs.mapTo(mutableSetOf()) { it.id }
         val missingMirroredRawTabIds = mirroredRawTabIds - liveIds
-        decodedEngineStates.keys.retainAll(liveIds)
-        val engineSessionStates = tabs.associate { tab ->
-            if (tab.rawSessionOwnership.mirrorsRawContent) {
-                tab.id to resolveEngineSessionState(tab)
-            } else {
-                decodedEngineStates.remove(tab.id)
-                tab.id to null
-            }
-        }
+        val engineSessionStates = tabs.asSequence()
+            .filter { it.rawSessionOwnership.mirrorsRawContent }
+            .associate { tab -> tab.id to resolveEngineSessionState(tab) }
+        decodedEngineStates.keys.retainAll(engineSessionStates.keys)
         browserStoreSyncActions(
             state = store.state,
             tabs = tabs,
@@ -329,9 +324,7 @@ internal class AndroidComponentsStateBridge(
             engineSessionStates = engineSessionStates,
             missingTabRemovalIds = missingMirroredRawTabIds,
         ).forEach(store::dispatch)
-        mirroredRawTabIds = tabs.asSequence()
-            .filter { it.rawSessionOwnership.mirrorsRawContent }
-            .mapTo(mutableSetOf()) { it.id }
+        mirroredRawTabIds = engineSessionStates.keys.toSet()
     }
 
     private fun resolveEngineSessionState(tab: BrowserStoreTabSnapshot): EngineSessionState? {
