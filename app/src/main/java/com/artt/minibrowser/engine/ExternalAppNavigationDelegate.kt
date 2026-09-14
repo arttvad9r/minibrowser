@@ -76,15 +76,6 @@ internal fun interface ExternalAppNavigationPolicy {
     fun onLoadRequest(request: ExternalAppNavigationRequest): ExternalAppRequestDecision
 }
 
-internal fun shouldInterceptExternalAppRequest(isSubframeRequest: Boolean): Boolean = !isSubframeRequest
-
-internal fun externalAppInterceptionResponse(
-    decision: ExternalAppRequestDecision,
-): RequestInterceptor.InterceptionResponse? = when (decision) {
-    ExternalAppRequestDecision.Pass -> null
-    ExternalAppRequestDecision.Deny -> RequestInterceptor.InterceptionResponse.Deny
-}
-
 /**
  * Android Components adapter for MiniBrowser's external-app navigation policy.
  *
@@ -105,16 +96,19 @@ internal class AndroidComponentsExternalAppRequestInterceptor(
         isDirectNavigation: Boolean,
         isSubframeRequest: Boolean,
     ): RequestInterceptor.InterceptionResponse? {
-        if (!shouldInterceptExternalAppRequest(isSubframeRequest)) return null
-        return externalAppInterceptionResponse(
+        if (isSubframeRequest) return null
+        return when (
             policy.onLoadRequest(
                 ExternalAppNavigationRequest(
                     uri = uri,
                     hasUserGesture = hasUserGesture,
                     isRedirect = isRedirect,
                 ),
-            ),
-        )
+            )
+        ) {
+            ExternalAppRequestDecision.Pass -> null
+            ExternalAppRequestDecision.Deny -> RequestInterceptor.InterceptionResponse.Deny
+        }
     }
 }
 
