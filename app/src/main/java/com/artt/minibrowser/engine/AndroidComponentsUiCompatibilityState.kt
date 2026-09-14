@@ -61,9 +61,6 @@ internal class AndroidComponentsUiCompatibilityState {
     val snapshots: StateFlow<Map<String, AndroidComponentsUiCompatibilitySnapshot>> =
         mutableSnapshots.asStateFlow()
 
-    fun snapshot(sessionId: String): AndroidComponentsUiCompatibilitySnapshot? =
-        mutableSnapshots.value[sessionId]
-
     fun seed(
         sessionId: String,
         handoff: AndroidComponentsUiCompatibilityHandoff,
