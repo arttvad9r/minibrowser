@@ -157,12 +157,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         attachLinkedSessionFeatureToLifecycle()
     }
 
-    override fun onDetachedFromWindow() {
-        linkedSessionFeatureBinding.clear()
-        linkedSessionFeatureOwner = null
-        super.onDetachedFromWindow()
-    }
-
     private fun attachLinkedSessionFeatureToLifecycle() {
         val feature = linkedSessionFeature ?: return
         val owner = findViewTreeLifecycleOwner() ?: return
@@ -196,10 +190,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         }
     }
 
-    fun resetForSessionChange() {
-        isRefreshing = false
-    }
-
     private fun releaseRenderedSession() {
         if (
             renderedRawSession == null &&
@@ -209,7 +199,7 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
             return
         }
 
-        resetForSessionChange()
+        isRefreshing = false
         linkedSessionFeatureBinding.clear()
         linkedSessionFeatureOwner = null
         linkedSessionFeature = null
@@ -221,7 +211,7 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
     }
 
     fun clearPullToRefresh() {
-        resetForSessionChange()
+        isRefreshing = false
         pageSupportsRefresh = false
         refreshAction = {}
         isEnabled = false
