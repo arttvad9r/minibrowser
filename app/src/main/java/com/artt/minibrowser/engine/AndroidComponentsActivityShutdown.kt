@@ -70,9 +70,7 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
         linkedStoreTabIds = linkedStoreTabIds,
         sessionlessRelinquishedTabIds = sessionlessRelinquishedTabIds,
     )
-    val storeTabIdsToRemoveSet = storeTabIdsToRemove.toSet()
     val linkedSessionsToClose = linkedStoreTabs
-        .filter { it.id in storeTabIdsToRemoveSet }
         .map { tab -> tab.id to checkNotNull(tab.engineState.engineSession) }
     val linkedRelinquishedTabIds = relinquishedTabIds.intersect(linkedStoreTabIds)
 
