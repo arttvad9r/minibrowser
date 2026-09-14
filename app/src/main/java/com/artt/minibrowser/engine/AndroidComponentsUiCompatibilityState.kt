@@ -30,7 +30,7 @@ internal fun Tab.androidComponentsUiCompatibilityHandoff(): AndroidComponentsUiC
     )
 
 /** Matches the precedence used by TabManager's current Gecko ProgressDelegate. */
-internal fun securityStateForGeckoSecurityInfo(
+private fun securityStateForGeckoSecurityInfo(
     isException: Boolean,
     isSecure: Boolean,
 ): SecurityState = when {
