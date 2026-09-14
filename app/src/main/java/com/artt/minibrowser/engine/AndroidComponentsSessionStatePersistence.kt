@@ -1,8 +1,6 @@
 package com.artt.minibrowser.engine
 
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import mozilla.components.browser.state.action.BrowserAction
 import mozilla.components.browser.state.state.BrowserState
@@ -48,9 +46,6 @@ internal fun TabManager.requestPersistForAndroidComponentsSessionStateChange() {
 internal class AndroidComponentsSessionStatePersistenceState {
     private val mutableSnapshots =
         MutableStateFlow<Map<String, AndroidComponentsBoundEngineSessionState>>(emptyMap())
-
-    val snapshots: StateFlow<Map<String, AndroidComponentsBoundEngineSessionState>> =
-        mutableSnapshots.asStateFlow()
 
     fun snapshot(sessionId: String): AndroidComponentsBoundEngineSessionState? =
         mutableSnapshots.value[sessionId]
