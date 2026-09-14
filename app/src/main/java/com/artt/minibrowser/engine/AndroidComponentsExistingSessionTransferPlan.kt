@@ -26,7 +26,7 @@ internal data class AndroidComponentsExistingSessionTransferPlan(
     val skipLoading: Boolean = true
     val includeParent: Boolean = false
 
-    fun linkAction(engineSession: EngineSession): EngineAction.LinkEngineSessionAction =
+    private fun linkAction(engineSession: EngineSession): EngineAction.LinkEngineSessionAction =
         EngineAction.LinkEngineSessionAction(
             tabId = tabId,
             engineSession = engineSession,
