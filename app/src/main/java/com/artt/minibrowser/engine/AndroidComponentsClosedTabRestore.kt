@@ -37,8 +37,10 @@ internal fun androidComponentsClosedTabCapture(
 internal data class AndroidComponentsClosedTabRestorePlan(
     val structuralTab: Tab,
     val storeTab: TabSessionState,
-    val engineSessionState: EngineSessionState?,
-)
+) {
+    val engineSessionState: EngineSessionState?
+        get() = storeTab.engineState.engineSessionState
+}
 
 /**
  * Recreates an A-C-owned tab without ever allocating a raw GeckoSession.
@@ -71,6 +73,5 @@ internal fun androidComponentsClosedTabRestorePlan(
     return AndroidComponentsClosedTabRestorePlan(
         structuralTab = structuralTab,
         storeTab = storeTab,
-        engineSessionState = safeState,
     )
 }
