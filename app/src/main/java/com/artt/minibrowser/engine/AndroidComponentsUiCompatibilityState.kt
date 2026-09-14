@@ -21,13 +21,10 @@ internal data class AndroidComponentsUiCompatibilitySnapshot(
 )
 
 /** Snapshot captured while the raw owner still has authoritative Gecko callback state. */
-internal data class AndroidComponentsUiCompatibilityHandoff(
-    val securityState: SecurityState,
-    val pageLoadError: PageLoadError?,
-)
+internal typealias AndroidComponentsUiCompatibilityHandoff = AndroidComponentsUiCompatibilitySnapshot
 
 internal fun Tab.androidComponentsUiCompatibilityHandoff(): AndroidComponentsUiCompatibilityHandoff =
-    AndroidComponentsUiCompatibilityHandoff(
+    AndroidComponentsUiCompatibilitySnapshot(
         securityState = securityState,
         pageLoadError = loadError,
     )
@@ -71,13 +68,7 @@ internal class AndroidComponentsUiCompatibilityState {
         sessionId: String,
         handoff: AndroidComponentsUiCompatibilityHandoff,
     ) {
-        set(
-            sessionId = sessionId,
-            snapshot = AndroidComponentsUiCompatibilitySnapshot(
-                securityState = handoff.securityState,
-                pageLoadError = handoff.pageLoadError,
-            ),
-        )
+        set(sessionId, handoff)
     }
 
     /** Mirrors raw onPageStart: a new document clears both the old error and old security result. */
