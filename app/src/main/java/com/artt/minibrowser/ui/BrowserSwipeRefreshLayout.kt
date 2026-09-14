@@ -37,7 +37,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
     private val linkedSessionFeatureBinding = ViewBoundFeatureWrapper<SessionFeature>()
     private var linkedSessionFeatureOwner: LifecycleOwner? = null
     private var pageSupportsRefresh = false
-    private var pageLoading = false
     private var refreshAction: () -> Unit = {}
 
     init {
@@ -185,7 +184,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         onRefresh: () -> Unit,
     ) {
         this.pageSupportsRefresh = pageSupportsRefresh
-        this.pageLoading = pageLoading
         refreshAction = onRefresh
 
         isEnabled = pageSupportsRefresh
@@ -200,7 +198,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
 
     fun resetForSessionChange() {
         isRefreshing = false
-        pageLoading = false
     }
 
     private fun releaseRenderedSession() {
