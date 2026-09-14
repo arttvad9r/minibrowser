@@ -48,7 +48,7 @@ class BrowserFreshAndroidComponentsSessionSystemTest {
             assertTrue(
                 "Fresh Gecko callbacks reach MiniBrowser's UI compatibility wrapper",
                 waitUntil(LINK_TIMEOUT_MS) {
-                    app.uiCompatibilityState.snapshot(tabId) != null
+                    app.uiCompatibilityState.snapshots.value[tabId] != null
                 },
             )
 
