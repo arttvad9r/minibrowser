@@ -30,7 +30,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
     val engineView = GeckoEngineView(context)
 
     private var renderedRawSession: GeckoSession? = null
-    private var renderedLinkedSession: EngineSession? = null
     private var renderedLinkedTabId: String? = null
     private var linkedSessionFeature: SessionFeature? = null
     private var linkedSessionFeatureLifecycle: LinkedSessionFeatureLifecycleBinding? = null
@@ -114,7 +113,7 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         session: GeckoSession,
         privateMode: Boolean,
     ) {
-        if (renderedRawSession === session && renderedLinkedSession == null) return
+        if (renderedRawSession === session) return
 
         releaseRenderedSession()
         renderedRawSession = session
@@ -129,23 +128,16 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         store: BrowserStore,
         tabId: String,
     ) {
-        val storeTab = checkNotNull(store.state.tabs.firstOrNull { it.id == tabId }) {
-            "Android Components render target requires a BrowserStore tab"
-        }
-        val storeSession = storeTab.engineState.engineSession
-
         if (
             renderedLinkedTabId == tabId &&
             renderedRawSession == null &&
             linkedSessionFeature != null
         ) {
-            renderedLinkedSession = storeSession
             attachLinkedSessionFeatureToLifecycle()
             return
         }
 
         releaseRenderedSession()
-        renderedLinkedSession = storeSession
         renderedLinkedTabId = tabId
         val sessionUseCases = SessionUseCases(store)
         linkedSessionFeature = SessionFeature(
@@ -203,7 +195,7 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
     private fun releaseRenderedSession() {
         if (
             renderedRawSession == null &&
-            renderedLinkedSession == null &&
+            renderedLinkedTabId == null &&
             linkedSessionFeature == null
         ) {
             return
@@ -215,7 +207,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         linkedSessionFeature = null
         engineView.release()
         renderedRawSession = null
-        renderedLinkedSession = null
         renderedLinkedTabId = null
         // Do not close either session here. Raw sidecars borrow TabManager-owned GeckoSessions;
         // linked EngineSessions are owned and closed by BrowserStore/EngineMiddleware.
