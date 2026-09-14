@@ -5,6 +5,7 @@ import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.ViewGroup
 import androidx.annotation.ColorInt
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.artt.minibrowser.engine.BrowserCommandTarget
@@ -14,6 +15,7 @@ import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
 import mozilla.components.feature.session.SessionFeature
 import mozilla.components.feature.session.SessionUseCases
+import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -32,7 +34,8 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
     private var renderedRawSession: GeckoSession? = null
     private var renderedLinkedTabId: String? = null
     private var linkedSessionFeature: SessionFeature? = null
-    private var linkedSessionFeatureLifecycle: LinkedSessionFeatureLifecycleBinding? = null
+    private val linkedSessionFeatureBinding = ViewBoundFeatureWrapper<SessionFeature>()
+    private var linkedSessionFeatureOwner: LifecycleOwner? = null
     private var pageSupportsRefresh = false
     private var pageLoading = false
     private var refreshAction: () -> Unit = {}
@@ -146,9 +149,7 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
             goForwardUseCase = sessionUseCases.goForward,
             engineView = engineView,
             tabId = tabId,
-        ).also { feature ->
-            linkedSessionFeatureLifecycle = LinkedSessionFeatureLifecycleBinding(feature)
-        }
+        )
         attachLinkedSessionFeatureToLifecycle()
     }
 
@@ -158,12 +159,22 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
     }
 
     override fun onDetachedFromWindow() {
-        linkedSessionFeatureLifecycle?.detach()
+        linkedSessionFeatureBinding.clear()
+        linkedSessionFeatureOwner = null
         super.onDetachedFromWindow()
     }
 
     private fun attachLinkedSessionFeatureToLifecycle() {
-        linkedSessionFeatureLifecycle?.attach(findViewTreeLifecycleOwner())
+        val feature = linkedSessionFeature ?: return
+        val owner = findViewTreeLifecycleOwner() ?: return
+        if (linkedSessionFeatureBinding.get() === feature && linkedSessionFeatureOwner === owner) return
+
+        linkedSessionFeatureBinding.set(
+            feature = feature,
+            owner = owner,
+            view = this,
+        )
+        linkedSessionFeatureOwner = owner
     }
 
     fun configurePullToRefresh(
@@ -202,8 +213,8 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         }
 
         resetForSessionChange()
-        linkedSessionFeatureLifecycle?.detach()
-        linkedSessionFeatureLifecycle = null
+        linkedSessionFeatureBinding.clear()
+        linkedSessionFeatureOwner = null
         linkedSessionFeature = null
         engineView.release()
         renderedRawSession = null
