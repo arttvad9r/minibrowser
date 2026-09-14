@@ -147,7 +147,7 @@ class TabManagerRecreationOwnershipSystemTest {
                         TabListAction.RemoveTabsAction(androidComponentsIds.toList()),
                     )
                 }
-                TabManagerRecreationHandoffRegistry.clearForTest(storeDir)
+                TabManagerRecreationHandoffRegistry.consume(storeDir)
             }
             TabStore.loadState(storeDir)
             storeDir.deleteRecursively()
@@ -238,7 +238,7 @@ class TabManagerRecreationOwnershipSystemTest {
                 replacement?.closeTab(tabId)
                 replacement?.close()
                 oldManager?.close()
-                TabManagerRecreationHandoffRegistry.clearForTest(storeDir)
+                TabManagerRecreationHandoffRegistry.consume(storeDir)
             }
 
             rawSession?.let { suppliedRawSession ->

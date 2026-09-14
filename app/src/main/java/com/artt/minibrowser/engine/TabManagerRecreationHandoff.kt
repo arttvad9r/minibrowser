@@ -56,12 +56,6 @@ internal object TabManagerRecreationHandoffRegistry {
     fun consume(storeDir: File): TabManagerRecreationHandoff? = synchronized(lock) {
         pendingByStore.remove(storeDir.absolutePath)
     }
-
-    internal fun clearForTest(storeDir: File) {
-        synchronized(lock) {
-            pendingByStore.remove(storeDir.absolutePath)
-        }
-    }
 }
 
 internal fun hasTabManagerRecreationHandoff(storeDir: File): Boolean =

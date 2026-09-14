@@ -37,8 +37,8 @@ class TabManagerRecreationHandoffTest {
             assertFalse(hasTabManagerRecreationHandoff(firstStore))
             assertNull(TabManagerRecreationHandoffRegistry.consume(firstStore))
         } finally {
-            TabManagerRecreationHandoffRegistry.clearForTest(firstStore)
-            TabManagerRecreationHandoffRegistry.clearForTest(secondStore)
+            TabManagerRecreationHandoffRegistry.consume(firstStore)
+            TabManagerRecreationHandoffRegistry.consume(secondStore)
             firstStore.deleteRecursively()
             secondStore.deleteRecursively()
         }
@@ -65,7 +65,7 @@ class TabManagerRecreationHandoffTest {
             }
             assertSame(first, TabManagerRecreationHandoffRegistry.consume(store))
         } finally {
-            TabManagerRecreationHandoffRegistry.clearForTest(store)
+            TabManagerRecreationHandoffRegistry.consume(store)
             store.deleteRecursively()
         }
     }
