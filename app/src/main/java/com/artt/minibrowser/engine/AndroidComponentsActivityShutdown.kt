@@ -72,7 +72,6 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
     )
     val linkedSessionsToClose = linkedStoreTabs
         .map { tab -> tab.id to checkNotNull(tab.engineState.engineSession) }
-    val linkedRelinquishedTabIds = relinquishedTabIds.intersect(linkedStoreTabIds)
 
     // capturePersistenceSnapshot() still sees BrowserStore state here. This must happen before
     // unlink/removal, otherwise durable A-C EngineSessionState for relinquished tabs could be lost.
@@ -92,7 +91,7 @@ internal fun closeBrowserSessionsForFinalActivityDestroy(
 
     check(
         relinquishedTabs.none { tab ->
-            tab.id.toString() in linkedRelinquishedTabIds && tab.rawSessionOrNull?.isOpen == true
+            tab.id.toString() in linkedStoreTabIds && tab.rawSessionOrNull?.isOpen == true
         },
     ) {
         "Linked relinquished GeckoSessions must close before final Activity shutdown completes"
