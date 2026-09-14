@@ -61,9 +61,7 @@ internal fun closeAndroidComponentsOwnedTabsBeforeWebDataClear(
         openRelinquishedTabIds = openRelinquishedTabIds,
         linkedStoreTabIds = linkedStoreTabIds,
     )
-    val storeTabIdsToRemoveSet = storeTabIdsToRemove.toSet()
     val linkedSessionsToClose = linkedStoreTabs
-        .filter { it.id in storeTabIdsToRemoveSet }
         .map { tab -> tab.id to checkNotNull(tab.engineState.engineSession) }
 
     // LinkingMiddleware unregisters the EngineSession observer and EngineStateReducer clears the
