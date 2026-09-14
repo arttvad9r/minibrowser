@@ -23,7 +23,7 @@ class AndroidComponentsUiCompatibilityStateTest {
                 securityState = SecurityState.Exception,
                 pageLoadError = PageLoadError.Security,
             ),
-            state.snapshot("7"),
+            state.snapshots.value["7"],
         )
     }
 
@@ -40,7 +40,7 @@ class AndroidComponentsUiCompatibilityStateTest {
 
         state.onPageStart("7")
 
-        assertEquals(AndroidComponentsUiCompatibilitySnapshot(), state.snapshot("7"))
+        assertEquals(AndroidComponentsUiCompatibilitySnapshot(), state.snapshots.value["7"])
     }
 
     @Test
@@ -49,7 +49,7 @@ class AndroidComponentsUiCompatibilityStateTest {
 
         state.onSecurityChange(sessionId = "7", isException = true, isSecure = true)
 
-        assertEquals(SecurityState.Exception, state.snapshot("7")?.securityState)
+        assertEquals(SecurityState.Exception, state.snapshots.value["7"]?.securityState)
     }
 
     @Test
@@ -59,8 +59,8 @@ class AndroidComponentsUiCompatibilityStateTest {
 
         state.onSecurityChange(sessionId = "7", isException = false, isSecure = true)
 
-        assertEquals(SecurityState.Secure, state.snapshot("7")?.securityState)
-        assertEquals(PageLoadError.Network, state.snapshot("7")?.pageLoadError)
+        assertEquals(SecurityState.Secure, state.snapshots.value["7"]?.securityState)
+        assertEquals(PageLoadError.Network, state.snapshots.value["7"]?.pageLoadError)
     }
 
     @Test
@@ -69,14 +69,14 @@ class AndroidComponentsUiCompatibilityStateTest {
         state.onSecurityChange(sessionId = "7", isException = false, isSecure = true)
 
         state.onLoadError("7", WebRequestError.ERROR_CATEGORY_SECURITY)
-        assertEquals(SecurityState.Secure, state.snapshot("7")?.securityState)
-        assertEquals(PageLoadError.Security, state.snapshot("7")?.pageLoadError)
+        assertEquals(SecurityState.Secure, state.snapshots.value["7"]?.securityState)
+        assertEquals(PageLoadError.Security, state.snapshots.value["7"]?.pageLoadError)
 
         state.onLoadError("7", WebRequestError.ERROR_CATEGORY_NETWORK)
-        assertEquals(PageLoadError.Network, state.snapshot("7")?.pageLoadError)
+        assertEquals(PageLoadError.Network, state.snapshots.value["7"]?.pageLoadError)
 
         state.onLoadError("7", WebRequestError.ERROR_CATEGORY_UNKNOWN)
-        assertEquals(PageLoadError.Generic, state.snapshot("7")?.pageLoadError)
+        assertEquals(PageLoadError.Generic, state.snapshots.value["7"]?.pageLoadError)
     }
 
     @Test
@@ -86,7 +86,7 @@ class AndroidComponentsUiCompatibilityStateTest {
 
         state.remove("7")
 
-        assertNull(state.snapshot("7"))
+        assertNull(state.snapshots.value["7"])
     }
 
     @Test
@@ -97,9 +97,9 @@ class AndroidComponentsUiCompatibilityStateTest {
 
         state.retain(setOf("8", "9"))
 
-        assertNull(state.snapshot("7"))
-        assertEquals(PageLoadError.Network, state.snapshot("8")?.pageLoadError)
-        assertNull(state.snapshot("9"))
+        assertNull(state.snapshots.value["7"])
+        assertEquals(PageLoadError.Network, state.snapshots.value["8"]?.pageLoadError)
+        assertNull(state.snapshots.value["9"])
     }
 
     @Test
