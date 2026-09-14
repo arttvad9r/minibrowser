@@ -31,7 +31,7 @@ internal fun downloadFallbackName(url: String?): String {
 }
 
 /** MiniBrowser's filename policy before GeckoEngineSession's mandatory post-sanitization. */
-internal fun suggestedDownloadFilename(
+private fun suggestedDownloadFilename(
     contentDisposition: String?,
     url: String?,
 ): String = parseFilename(contentDisposition, downloadFallbackName(url))
