@@ -25,7 +25,7 @@ internal fun androidComponentsFinalActivityShutdownStoreTabIds(
     linkedStoreTabIds: Set<String>,
     sessionlessRelinquishedTabIds: Set<String> = emptySet(),
 ): List<String> {
-    check(rawOwnedTabIds.intersect(linkedStoreTabIds).isEmpty()) {
+    check(rawOwnedTabIds.none(linkedStoreTabIds::contains)) {
         "Raw-owned tabs cannot have linked Android Components EngineSessions during final Activity shutdown"
     }
     val missingRelinquishedTabIds = relinquishedTabIds - storeTabIds
