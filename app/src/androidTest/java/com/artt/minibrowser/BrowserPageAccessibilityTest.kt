@@ -1,5 +1,6 @@
 package com.artt.minibrowser
 
+import android.view.View
 import android.widget.TextView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +30,8 @@ import com.artt.minibrowser.ui.LocalBrowserContentAccessibilityHidden
 import com.artt.minibrowser.ui.MinibrowserTheme
 import com.artt.minibrowser.ui.updateBrowserContentAccessibility
 import java.io.File
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -99,7 +102,7 @@ class BrowserPageAccessibilityTest {
     @Test
     fun startPageHidesEmbeddedAndroidViewFromPlatformAccessibility() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val nativeLabel = "Native browser content"
+        var nativeView: TextView? = null
         var showStart by mutableStateOf(false)
 
         composeRule.setContent {
@@ -113,7 +116,7 @@ class BrowserPageAccessibilityTest {
                             LocalBrowserContentAccessibilityHidden.current
                         AndroidView(
                             factory = { viewContext ->
-                                TextView(viewContext).apply { text = nativeLabel }
+                                TextView(viewContext).also { nativeView = it }
                             },
                             update = { view ->
                                 view.updateBrowserContentAccessibility(hiddenFromAccessibility)
@@ -131,23 +134,17 @@ class BrowserPageAccessibilityTest {
             }
         }
 
-        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
-            platformAccessibilityTreeContainsImportant(nativeLabel)
-        }
+        assertPlatformAccessibility(nativeView, View.IMPORTANT_FOR_ACCESSIBILITY_YES)
         composeRule.runOnIdle { showStart = true }
-        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
-            !platformAccessibilityTreeContainsImportant(nativeLabel)
-        }
+        assertPlatformAccessibility(nativeView, View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS)
         composeRule.runOnIdle { showStart = false }
-        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
-            platformAccessibilityTreeContainsImportant(nativeLabel)
-        }
+        assertPlatformAccessibility(nativeView, View.IMPORTANT_FOR_ACCESSIBILITY_YES)
     }
 
     @Test
     fun routeOcclusionHidesEmbeddedAndroidViewFromPlatformAccessibility() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val nativeLabel = "Native browser content behind route"
+        var nativeView: TextView? = null
         var routeOccluded by mutableStateOf(false)
 
         composeRule.setContent {
@@ -161,7 +158,7 @@ class BrowserPageAccessibilityTest {
                             LocalBrowserContentAccessibilityHidden.current
                         AndroidView(
                             factory = { viewContext ->
-                                TextView(viewContext).apply { text = nativeLabel }
+                                TextView(viewContext).also { nativeView = it }
                             },
                             update = { view ->
                                 view.updateBrowserContentAccessibility(hiddenFromAccessibility)
@@ -179,16 +176,17 @@ class BrowserPageAccessibilityTest {
             }
         }
 
-        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
-            platformAccessibilityTreeContainsImportant(nativeLabel)
-        }
+        assertPlatformAccessibility(nativeView, View.IMPORTANT_FOR_ACCESSIBILITY_YES)
         composeRule.runOnIdle { routeOccluded = true }
-        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
-            !platformAccessibilityTreeContainsImportant(nativeLabel)
-        }
+        assertPlatformAccessibility(nativeView, View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS)
         composeRule.runOnIdle { routeOccluded = false }
-        composeRule.waitUntil(timeoutMillis = PLATFORM_TREE_TIMEOUT_MS) {
-            platformAccessibilityTreeContainsImportant(nativeLabel)
+        assertPlatformAccessibility(nativeView, View.IMPORTANT_FOR_ACCESSIBILITY_YES)
+    }
+
+    private fun assertPlatformAccessibility(view: View?, expected: Int) {
+        composeRule.runOnIdle {
+            assertNotNull(view)
+            assertEquals(expected, view?.importantForAccessibility)
         }
     }
 
@@ -242,18 +240,10 @@ class BrowserPageAccessibilityTest {
         browserContentHiddenByRoute = browserContentHiddenByRoute,
     )
 
-    private fun platformAccessibilityTreeContainsImportant(text: String): Boolean {
-        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
-            ?: return false
-        return root.findAccessibilityNodeInfosByText(text)
-            .any { it.isImportantForAccessibility }
-    }
-
     private companion object {
         const val CHILD_TAG = "browser-page-child"
         const val PANE_CHILD_TAG = "browser-pane-child"
         const val WEB_CONTENT_TAG = "web-content-child"
-        const val PLATFORM_TREE_TIMEOUT_MS = 5_000L
 
         val NO_OP_ACTIONS = BrowserPageActions(
             onSuggestionQueryChanged = {},

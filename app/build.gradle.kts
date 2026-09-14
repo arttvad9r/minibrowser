@@ -83,7 +83,26 @@ roborazzi {
 }
 
 dependencies {
-    implementation("org.mozilla.geckoview:geckoview:154.0.20260824154132")
+    // Android Components' Gecko engine uses the Omni variant. Keep the exact Gecko build ID that
+    // MiniBrowser already shipped; Omni supplies the native Glean implementation used by Firefox.
+    implementation("org.mozilla.geckoview:geckoview-omni:154.0.20260824154132")
+    implementation("org.mozilla.components:browser-state:154.0.1")
+    implementation("org.mozilla.components:browser-engine-gecko:154.0.1")
+    // Linked A-C-owned tabs use Mozilla's SessionFeature for lifecycle-aware EngineView rendering.
+    // Raw-owned tabs remain on the temporary borrowed-session bridge until ownership crosses over.
+    implementation("org.mozilla.components:feature-session:154.0.1")
+    // EngineMiddleware's public API accepts concept-engine.Engine. browser-engine-gecko keeps that
+    // dependency internal, so consumers wiring the middleware directly must expose it themselves.
+    implementation("org.mozilla.components:concept-engine:154.0.1")
+    // MiniBrowser calls Mozilla's public filename sanitizer directly so raw Gecko downloads already
+    // produce the same final filename GeckoEngineSession will expose after the ownership cutover.
+    implementation("org.mozilla.components:support-ktx:154.0.1")
+    // Firefox 154.0.1 aligns Android Components/Nimbus with Glean 68.0.1. We need its Kotlin/Java
+    // API for Nimbus/R8, but GeckoView Omni already contains the matching native Glean provider.
+    // Exclude only the redundant standalone native artifact to avoid packaging a second libxul.so.
+    implementation("org.mozilla.telemetry:glean:68.0.1") {
+        exclude(group = "org.mozilla.telemetry", module = "glean-native")
+    }
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material3.adaptive:adaptive:1.3.0")
@@ -91,6 +110,19 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.animation:animation")
     implementation("androidx.activity:activity-compose:1.13.0")
+    // Fragment 1.8.9 declares older baseline AndroidX dependencies. MiniBrowser already uses newer,
+    // verified versions of these modules, so keep the Fragment host on the existing dependency set
+    // instead of expanding dependency-verification trust to metadata that will never be selected.
+    implementation("androidx.fragment:fragment:1.8.9") {
+        exclude(group = "androidx.annotation", module = "annotation")
+        exclude(group = "androidx.annotation", module = "annotation-experimental")
+        exclude(group = "androidx.collection", module = "collection")
+        exclude(group = "androidx.lifecycle", module = "lifecycle-livedata-core")
+    }
+    implementation("androidx.annotation:annotation:1.10.0")
+    implementation("androidx.annotation:annotation-experimental:1.6.0")
+    implementation("androidx.collection:collection:1.6.0")
+    implementation("androidx.lifecycle:lifecycle-livedata-core:2.11.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")

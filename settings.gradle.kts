@@ -17,6 +17,9 @@ dependencyResolutionManagement {
             }
             filter {
                 includeGroup("org.mozilla.geckoview")
+                includeGroup("org.mozilla.components")
+                includeGroup("org.mozilla.appservices")
+                includeGroup("org.mozilla.telemetry")
             }
         }
     }

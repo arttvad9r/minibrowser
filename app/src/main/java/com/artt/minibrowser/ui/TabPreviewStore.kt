@@ -4,14 +4,14 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.mutableStateMapOf
-import org.mozilla.geckoview.GeckoView
+import mozilla.components.concept.engine.EngineView
 import java.lang.ref.WeakReference
 import java.util.LinkedHashMap
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
- * In-process cache of real GeckoView renders for the tab switcher.
+ * In-process cache of real engine renders for the tab switcher.
  *
  * Normal-tab previews stay memory-only and are kept in a byte-bounded LRU. Private tabs are
  * deliberately excluded even from this transient cache.
@@ -45,8 +45,8 @@ internal class TabPreviewStore {
     private var generation = 0
     private var overviewVisible = false
 
-    private var hostView = WeakReference<GeckoView>(null)
-    private var currentView = WeakReference<GeckoView>(null)
+    private var hostView = WeakReference<EngineView>(null)
+    private var currentView = WeakReference<EngineView>(null)
     private var currentTabId: Long? = null
     private var currentUrl: String = ""
 
@@ -103,11 +103,11 @@ internal class TabPreviewStore {
         }
     }
 
-    fun attach(view: GeckoView, tabId: Long?, url: String, isPrivate: Boolean) {
+    fun attach(view: EngineView, tabId: Long?, url: String, isPrivate: Boolean) {
         val previousHost = hostView.get()
         if (previousHost !== view) {
             // Tab ids are monotonic only inside one TabManager. A recreated Activity can restore a
-            // lower max id and later reuse a tombstoned id from the previous host. A new GeckoView
+            // lower max id and later reuse a tombstoned id from the previous host. A new EngineView
             // marks that host boundary. Invalidate every old compositor callback before releasing
             // the tombstones so a late bitmap cannot be published into a reused id.
             generation++
@@ -147,7 +147,7 @@ internal class TabPreviewStore {
      * opening the overview itself performs no compositor readback.
      */
     fun maybeCapture(
-        view: GeckoView,
+        view: EngineView,
         tabId: Long?,
         url: String,
         isPrivate: Boolean,
@@ -174,7 +174,7 @@ internal class TabPreviewStore {
 
     /**
      * Drops every preview and invalidates callbacks from captures that started before this call.
-     * Known old tab ids stay blocked for the lifetime of the current GeckoView host so a final old-UI
+     * Known old tab ids stay blocked for the lifetime of the current EngineView host so a final old-UI
      * Compose pass cannot start a fresh post-clear capture before TabManager closes those sessions.
      */
     fun clear() {
@@ -210,7 +210,7 @@ internal class TabPreviewStore {
         schedulePrewarm(view, id, url, delayMs)
     }
 
-    private fun schedulePrewarm(view: GeckoView, tabId: Long, url: String, delayMs: Long) {
+    private fun schedulePrewarm(view: EngineView, tabId: Long, url: String, delayMs: Long) {
         if (tabId in privateTabs || tabId in removedTabs || !isPreviewableUrl(url)) return
         val cached = previews[tabId]
         if (lastCapturedUrl[tabId] == url && cached != null && !cached.isRecycled) {
@@ -243,56 +243,51 @@ internal class TabPreviewStore {
         }, delayMs.coerceAtLeast(0L))
     }
 
-    private fun capture(view: GeckoView, tabId: Long, url: String) {
+    private fun capture(view: EngineView, tabId: Long, url: String) {
         if (tabId in privateTabs || tabId in removedTabs || !inFlight.add(tabId)) return
         val expectedGeneration = generation
         runCatching {
-            view.capturePixels().accept(
-                { source ->
-                    mainHandler.post {
-                        if (expectedGeneration != generation) {
-                            inFlight.remove(tabId)
-                            source?.let(::retire)
-                            return@post
-                        }
-                        if (source == null || source.width <= 0 || source.height <= 0) {
-                            inFlight.remove(tabId)
-                            source?.let(::retire)
-                            return@post
-                        }
-                        if (tabId in privateTabs || tabId in removedTabs) {
-                            inFlight.remove(tabId)
-                            retire(source)
-                            return@post
-                        }
+            view.captureThumbnail { source ->
+                mainHandler.post {
+                    if (expectedGeneration != generation) {
+                        inFlight.remove(tabId)
+                        source?.let(::retire)
+                        return@post
+                    }
+                    if (source == null || source.width <= 0 || source.height <= 0) {
+                        inFlight.remove(tabId)
+                        source?.let(::retire)
+                        return@post
+                    }
+                    if (tabId in privateTabs || tabId in removedTabs) {
+                        inFlight.remove(tabId)
+                        retire(source)
+                        return@post
+                    }
 
-                        // Bitmap scaling is CPU/allocation work. Do not perform it on the main thread
-                        // while the user may be scrolling or selecting a card in the overview.
-                        scaleExecutor.execute {
-                            val scaled = runCatching { downscale(source) }.getOrElse {
-                                retire(source)
-                                null
-                            }
-                            mainHandler.post {
-                                inFlight.remove(tabId)
-                                if (scaled == null) return@post
-                                if (
-                                    expectedGeneration != generation ||
-                                    tabId in privateTabs ||
-                                    tabId in removedTabs
-                                ) {
-                                    retire(scaled)
-                                } else {
-                                    publishOrDefer(tabId, scaled, url)
-                                }
+                    // Bitmap scaling is CPU/allocation work. Do not perform it on the main thread
+                    // while the user may be scrolling or selecting a card in the overview.
+                    scaleExecutor.execute {
+                        val scaled = runCatching { downscale(source) }.getOrElse {
+                            retire(source)
+                            null
+                        }
+                        mainHandler.post {
+                            inFlight.remove(tabId)
+                            if (scaled == null) return@post
+                            if (
+                                expectedGeneration != generation ||
+                                tabId in privateTabs ||
+                                tabId in removedTabs
+                            ) {
+                                retire(scaled)
+                            } else {
+                                publishOrDefer(tabId, scaled, url)
                             }
                         }
                     }
-                },
-                {
-                    mainHandler.post { inFlight.remove(tabId) }
-                },
-            )
+                }
+            }
         }.onFailure { inFlight.remove(tabId) }
     }
 

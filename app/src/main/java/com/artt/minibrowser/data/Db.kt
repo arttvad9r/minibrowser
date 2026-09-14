@@ -74,6 +74,12 @@ data class Bookmark(
     @Query("SELECT * FROM history WHERE url = :url")
     suspend fun historyByUrl(url: String): HistoryEntry?
 
+    @Query("SELECT url FROM history WHERE url IN (:urls)")
+    suspend fun historyUrlsIn(urls: List<String>): List<String>
+
+    @Query("SELECT url FROM history")
+    suspend fun allHistoryUrls(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertHistory(e: HistoryEntry)
 

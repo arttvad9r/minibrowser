@@ -8,6 +8,8 @@ import android.util.Rational
 import androidx.activity.ComponentActivity
 
 internal data class BrowserPictureInPictureMediaState(
+    // This is the browser content fullscreen state from Gecko's ContentDelegate, not
+    // MediaSession.Delegate.onFullscreen. Mozilla's PictureInPictureFeature uses the same boundary.
     val fullscreenVideo: Boolean = false,
     val playing: Boolean = false,
     val videoWidth: Long = 0L,
@@ -17,6 +19,24 @@ internal data class BrowserPictureInPictureMediaState(
     val canEnter: Boolean get() = fullscreenVideo && !privateTab
     val canAutoEnter: Boolean get() = canEnter && playing
 }
+
+internal data class BrowserPictureInPicturePlaybackState(
+    val playing: Boolean = false,
+    val videoWidth: Long = 0L,
+    val videoHeight: Long = 0L,
+)
+
+internal fun pictureInPictureMediaStateForTab(
+    contentFullscreen: Boolean,
+    privateTab: Boolean,
+    playback: BrowserPictureInPicturePlaybackState,
+): BrowserPictureInPictureMediaState = BrowserPictureInPictureMediaState(
+    fullscreenVideo = contentFullscreen,
+    playing = playback.playing,
+    videoWidth = playback.videoWidth,
+    videoHeight = playback.videoHeight,
+    privateTab = privateTab,
+)
 
 internal data class PictureInPictureAspectRatio(
     val numerator: Int,

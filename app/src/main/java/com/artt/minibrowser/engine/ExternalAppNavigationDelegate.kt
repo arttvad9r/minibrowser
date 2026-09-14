@@ -9,8 +9,8 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import org.mozilla.geckoview.AllowOrDeny
-import org.mozilla.geckoview.GeckoResult
+import mozilla.components.concept.engine.EngineSession
+import mozilla.components.concept.engine.request.RequestInterceptor
 import org.mozilla.geckoview.GeckoSession
 
 private const val USER_NAVIGATION_CHAIN_WINDOW_MS = 3_000L
@@ -28,19 +28,6 @@ private val BLOCKED_EXTERNAL_SCHEMES = setOf(
     "moz-extension",
     "blob",
 )
-
-/**
- * Wraps TabManager's navigation delegate instead of replacing its browser-state handling.
- *
- * HTTP(S) is never launched synchronously from onLoadRequest. Gecko gets its ALLOW decision first;
- * only after that callback returns do we inspect Android App Links on the next main-loop turn. This
- * avoids backgrounding the Activity before Gecko has consumed the original tap.
- */
-internal fun installExternalAppNavigationDelegate(session: GeckoSession, activity: Activity) {
-    val current = session.navigationDelegate ?: return
-    if (current is ExternalAppNavigationDelegate) return
-    session.navigationDelegate = ExternalAppNavigationDelegate(activity, current)
-}
 
 /**
  * A direct user web navigation is eligible for a non-invasive Android resolver check. An HTTP
@@ -73,81 +60,57 @@ internal fun specializedHandlerPackages(
 internal fun shouldDenyGeckoAfterExternalLaunch(targetUri: String, launched: Boolean): Boolean =
     launched && !isAllowedWebUri(targetUri)
 
-private class ExternalAppNavigationDelegate(
-    private val activity: Activity,
-    private val delegate: GeckoSession.NavigationDelegate,
-) : GeckoSession.NavigationDelegate by delegate {
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var userNavigationChainUntilMs = 0L
-    private var navigationGeneration = 0L
-    private var externallyLaunchedGeneration = -1L
+internal enum class ExternalAppRequestDecision { Pass, Deny }
 
+/**
+ * Engine-neutral navigation request shared by the raw Gecko delegate and the Android Components
+ * RequestInterceptor path.
+ */
+internal data class ExternalAppNavigationRequest(
+    val uri: String,
+    val hasUserGesture: Boolean,
+    val isRedirect: Boolean,
+)
+
+internal fun interface ExternalAppNavigationPolicy {
+    fun onLoadRequest(request: ExternalAppNavigationRequest): ExternalAppRequestDecision
+}
+
+/**
+ * Android Components adapter for MiniBrowser's external-app navigation policy.
+ *
+ * AndroidComponentsOwnedSessionConfigurator installs this on A-C-owned EngineSessions. Subframe
+ * requests are ignored so an embedded frame can never launch an external Activity through this
+ * browser-level policy.
+ */
+internal class AndroidComponentsExternalAppRequestInterceptor(
+    private val policy: ExternalAppNavigationPolicy,
+) : RequestInterceptor {
     override fun onLoadRequest(
-        session: GeckoSession,
-        request: GeckoSession.NavigationDelegate.LoadRequest,
-    ): GeckoResult<AllowOrDeny>? {
-        val uri = request.uri
-        val now = SystemClock.elapsedRealtime()
-
-        if (!request.isRedirect) {
-            // Every new top-level request invalidates any delayed handoff left from the previous tap.
-            navigationGeneration++
-            externallyLaunchedGeneration = -1L
-            userNavigationChainUntilMs = if (request.hasUserGesture && isAllowedWebUri(uri)) {
-                now + USER_NAVIGATION_CHAIN_WINDOW_MS
-            } else {
-                0L
-            }
-        }
-
-        val redirectFromRecentUserGesture = request.isRedirect && now <= userNavigationChainUntilMs
-        val userInitiatedNavigation = request.hasUserGesture || redirectFromRecentUserGesture
-
-        if (
-            shouldTryExternalWebAppLink(
-                targetUri = uri,
-                hasUserGesture = request.hasUserGesture,
-                isRedirect = request.isRedirect,
-                redirectFromRecentUserGesture = redirectFromRecentUserGesture,
+        engineSession: EngineSession,
+        uri: String,
+        lastUri: String?,
+        hasUserGesture: Boolean,
+        isSameDomain: Boolean,
+        isRedirect: Boolean,
+        isDirectNavigation: Boolean,
+        isSubframeRequest: Boolean,
+    ): RequestInterceptor.InterceptionResponse? {
+        if (isSubframeRequest) return null
+        return when (
+            policy.onLoadRequest(
+                ExternalAppNavigationRequest(
+                    uri = uri,
+                    hasUserGesture = hasUserGesture,
+                    isRedirect = isRedirect,
+                ),
             )
         ) {
-            scheduleSpecializedWebHandoff(uri, navigationGeneration)
-            // Critical ordering: return Gecko's own decision now. Do not call PackageManager or
-            // startActivity until the callback has unwound and Gecko has accepted the tap.
-            return delegate.onLoadRequest(session, request)
-        }
-
-        if (userInitiatedNavigation && !isAllowedWebUri(uri)) {
-            val launched = launchCustomAppLink(activity, uri)
-            if (launched) {
-                userNavigationChainUntilMs = 0L
-                externallyLaunchedGeneration = navigationGeneration
-                if (shouldDenyGeckoAfterExternalLaunch(uri, launched = true)) {
-                    return GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-            }
-        }
-
-        return delegate.onLoadRequest(session, request)
-    }
-
-    private fun scheduleSpecializedWebHandoff(uri: String, generation: Long) {
-        mainHandler.post {
-            if (generation != navigationGeneration) return@post
-            if (generation == externallyLaunchedGeneration) return@post
-            if (activity.isFinishing || activity.isDestroyed) return@post
-
-            if (launchSpecializedWebHandler(activity, uri)) {
-                // Once one URL in the click/redirect chain opened a native app, suppress later
-                // redirects from launching a second Activity for the same user gesture.
-                externallyLaunchedGeneration = generation
-                userNavigationChainUntilMs = 0L
-            }
+            ExternalAppRequestDecision.Pass -> null
+            ExternalAppRequestDecision.Deny -> RequestInterceptor.InterceptionResponse.Deny
         }
     }
 }
-
-internal enum class ExternalAppRequestDecision { Pass, Deny }
 
 /**
  * App-link handling that runs inside TabManager's own NavigationDelegate.
@@ -157,16 +120,28 @@ internal enum class ExternalAppRequestDecision { Pass, Deny }
  * after Gecko has been allowed to consume the click, or consumes a custom scheme that Gecko cannot
  * render. A short user-gesture window also covers tg:// / bank-scheme navigations triggered by an
  * immediate script or redirect after the original web tap.
+ *
+ * The policy core now consumes [ExternalAppNavigationRequest]. The Gecko overload below is only a
+ * temporary compatibility adapter while TabManager still owns raw GeckoSession navigation.
  */
 internal class ExternalAppRequestHandler(
     private val activity: Activity,
-) {
+) : ExternalAppNavigationPolicy {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var userNavigationChainUntilMs = 0L
     private var navigationGeneration = 0L
     private var externallyLaunchedGeneration = -1L
 
-    fun onLoadRequest(request: GeckoSession.NavigationDelegate.LoadRequest): ExternalAppRequestDecision {
+    fun onLoadRequest(request: GeckoSession.NavigationDelegate.LoadRequest): ExternalAppRequestDecision =
+        onLoadRequest(
+            ExternalAppNavigationRequest(
+                uri = request.uri,
+                hasUserGesture = request.hasUserGesture,
+                isRedirect = request.isRedirect,
+            ),
+        )
+
+    override fun onLoadRequest(request: ExternalAppNavigationRequest): ExternalAppRequestDecision {
         val uri = request.uri
         val now = SystemClock.elapsedRealtime()
         val hadRecentUserGesture = now <= userNavigationChainUntilMs

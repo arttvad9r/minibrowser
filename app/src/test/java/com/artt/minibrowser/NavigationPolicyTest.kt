@@ -1,6 +1,5 @@
 package com.artt.minibrowser
 
-import com.artt.minibrowser.browser.NavigationController
 import com.artt.minibrowser.browser.initialExternalNavigationUri
 import com.artt.minibrowser.engine.NavigationTarget
 import com.artt.minibrowser.engine.isAllowedPopupTarget
@@ -11,14 +10,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class NavigationPolicyTest {
-    @Test fun queuesColdStartUntilHandlerIsReady() {
-        val controller = NavigationController()
-        var received = ""
-        controller.accept("https://example.com")
-        controller.setHandler { received = it }
-        assertEquals("https://example.com", received)
-    }
-
     @Test fun initialExternalNavigationIsNotReplayedAfterActivityRecreation() {
         assertEquals(
             "https://example.com/start",

@@ -20,66 +20,80 @@ interface BackgroundTabHost {
 /** Browser context menu for long-pressed links and media. Text selection uses Gecko's selection delegate. */
 class GeckoContextMenuController(
     private val activity: Activity,
+    private val openBackgroundTab: ((String, Boolean) -> Unit)? = null,
     private val openTab: (String, Boolean) -> Unit,
 ) {
     fun show(element: GeckoSession.ContentDelegate.ContextElement, private: Boolean) {
-        val link = element.linkUri?.takeIf { it.isNotBlank() }
-        val media = element.srcUri?.takeIf { it.isNotBlank() && it != link }
-        if (link == null && media == null) return
+        val items = contextMenuPolicyItems(
+            linkUri = element.linkUri,
+            mediaUri = element.srcUri,
+            isPrivate = private,
+        )
+        if (items.isEmpty()) return
 
         activity.runOnUiThread {
             if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
 
-            val labels = mutableListOf<String>()
-            val actions = mutableListOf<() -> Unit>()
-
-            if (link != null) {
-                if (isAllowedWebUri(link)) {
-                    labels += activity.getString(R.string.context_open_background_tab)
-                    actions += { openBackground(link, private) }
-                    if (!private) {
-                        labels += activity.getString(R.string.context_open_private_tab)
-                        actions += { openTab(link, true) }
-                    }
-                }
-                labels += activity.getString(R.string.context_copy_link)
-                actions += { copy(link, R.string.clipboard_label_link) }
-                labels += activity.getString(R.string.context_share_link)
-                actions += { share(link) }
-            }
-
-            if (media != null) {
-                if (isAllowedWebUri(media)) {
-                    labels += activity.getString(
-                        if (link == null) R.string.context_open_background_tab else R.string.context_open_media_background_tab,
-                    )
-                    actions += { openBackground(media, private) }
-                    if (!private) {
-                        labels += activity.getString(R.string.context_open_media_private_tab)
-                        actions += { openTab(media, true) }
-                    }
-                }
-                labels += activity.getString(
-                    if (link == null) R.string.context_copy_address else R.string.context_copy_media_address,
-                )
-                actions += { copy(media, R.string.clipboard_label_address) }
-                labels += activity.getString(R.string.context_share_media)
-                actions += { share(media) }
-            }
-
-            if (labels.isNotEmpty()) {
-                runCatching {
-                    AlertDialog.Builder(activity)
-                        .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
-                        .show()
-                }.onFailure { error ->
-                    Log.w("MinibrowserContext", "Failed to show context menu", error)
-                }
+            val labels = items.map { item -> activity.getString(item.labelRes()) }
+            runCatching {
+                AlertDialog.Builder(activity)
+                    .setItems(labels.toTypedArray()) { _, which -> execute(items[which]) }
+                    .show()
+            }.onFailure { error ->
+                Log.w("MinibrowserContext", "Failed to show context menu", error)
             }
         }
     }
 
+    private fun execute(item: ContextMenuPolicyItem) {
+        when (item.operation) {
+            ContextMenuOperation.OPEN_BACKGROUND -> openBackground(
+                item.uri,
+                requireNotNull(item.privateMode),
+            )
+            ContextMenuOperation.OPEN_PRIVATE -> openTab(item.uri, requireNotNull(item.privateMode))
+            ContextMenuOperation.COPY -> copy(
+                item.uri,
+                if (item.targetKind == ContextMenuTargetKind.LINK) {
+                    R.string.clipboard_label_link
+                } else {
+                    R.string.clipboard_label_address
+                },
+            )
+            ContextMenuOperation.SHARE -> share(item.uri)
+        }
+    }
+
+    @StringRes
+    private fun ContextMenuPolicyItem.labelRes(): Int = when (targetKind) {
+        ContextMenuTargetKind.LINK -> when (operation) {
+            ContextMenuOperation.OPEN_BACKGROUND -> R.string.context_open_background_tab
+            ContextMenuOperation.OPEN_PRIVATE -> R.string.context_open_private_tab
+            ContextMenuOperation.COPY -> R.string.context_copy_link
+            ContextMenuOperation.SHARE -> R.string.context_share_link
+        }
+        ContextMenuTargetKind.MEDIA -> when (operation) {
+            ContextMenuOperation.OPEN_BACKGROUND -> if (pairedWithLink) {
+                R.string.context_open_media_background_tab
+            } else {
+                R.string.context_open_background_tab
+            }
+            ContextMenuOperation.OPEN_PRIVATE -> R.string.context_open_media_private_tab
+            ContextMenuOperation.COPY -> if (pairedWithLink) {
+                R.string.context_copy_media_address
+            } else {
+                R.string.context_copy_address
+            }
+            ContextMenuOperation.SHARE -> R.string.context_share_media
+        }
+    }
+
     private fun openBackground(value: String, private: Boolean) {
+        val explicit = openBackgroundTab
+        if (explicit != null) {
+            explicit(value, private)
+            return
+        }
         val host = activity as? BackgroundTabHost
         if (host != null) {
             host.openBackgroundTab(value, private)

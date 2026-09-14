@@ -3,10 +3,8 @@ package com.artt.minibrowser.browser
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import java.util.Locale
+import com.artt.minibrowser.engine.acceptedPromptMimeTypes
 import org.mozilla.geckoview.GeckoSession
-
-private const val MIME_TOKEN_PUNCTUATION = "!#$&^_.+-"
 
 /**
  * Owns ActivityResult launchers used by Gecko prompts and serializes requests across prompt types.
@@ -88,7 +86,7 @@ internal class BrowserActivityRequestController(
             }
             fileRequests.enqueue(
                 start = { complete ->
-                    val accepted = acceptedMimeTypes(mimeTypes)
+                    val accepted = acceptedPromptMimeTypes(mimeTypes)
                     fileCompletion = { uris ->
                         callback(uris)
                         complete(uris)
@@ -131,23 +129,3 @@ internal class BrowserActivityRequestController(
         completion?.invoke(uris)
     }
 }
-
-private fun validMimeToken(value: String): Boolean = value.isNotEmpty() && value.all { char ->
-    char in 'a'..'z' || char in '0'..'9' || char in MIME_TOKEN_PUNCTUATION
-}
-
-private fun validAcceptedMimeType(value: String): Boolean {
-    val slash = value.indexOf('/')
-    if (slash <= 0 || slash != value.lastIndexOf('/') || slash == value.lastIndex) return false
-    val type = value.substring(0, slash)
-    val subtype = value.substring(slash + 1)
-    if (type == "*") return subtype == "*"
-    return validMimeToken(type) && (subtype == "*" || validMimeToken(subtype))
-}
-
-internal fun acceptedMimeTypes(mimeTypes: Array<String>): Array<String> = mimeTypes
-    .map { it.trim().lowercase(Locale.ROOT) }
-    .filter(::validAcceptedMimeType)
-    .distinct()
-    .toTypedArray()
-    .let { if (it.isEmpty()) arrayOf("*/*") else it }

@@ -1,6 +1,6 @@
 package com.artt.minibrowser
 
-import com.artt.minibrowser.browser.acceptedMimeTypes
+import com.artt.minibrowser.engine.acceptedPromptMimeTypes
 import org.junit.Assert.assertArrayEquals
 import org.junit.Test
 
@@ -9,7 +9,7 @@ class BrowserActivityRequestControllerTest {
     fun acceptedMimeTypesNormalizesAndFiltersInvalidValues() {
         assertArrayEquals(
             arrayOf("image/png", "text/plain", "image/*", "*/*", "application/vnd.api+json"),
-            acceptedMimeTypes(
+            acceptedPromptMimeTypes(
                 arrayOf(
                     "",
                     " IMAGE/PNG ",
@@ -33,7 +33,7 @@ class BrowserActivityRequestControllerTest {
     fun acceptedMimeTypesFallsBackToWildcard() {
         assertArrayEquals(
             arrayOf("*/*"),
-            acceptedMimeTypes(arrayOf("", "invalid", "text/", "*/png", "text/ht ml")),
+            acceptedPromptMimeTypes(arrayOf("", "invalid", "text/", "*/png", "text/ht ml")),
         )
     }
 }

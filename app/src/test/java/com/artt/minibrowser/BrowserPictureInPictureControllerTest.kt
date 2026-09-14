@@ -1,8 +1,10 @@
 package com.artt.minibrowser
 
 import com.artt.minibrowser.browser.BrowserPictureInPictureMediaState
+import com.artt.minibrowser.browser.BrowserPictureInPicturePlaybackState
 import com.artt.minibrowser.browser.PictureInPictureAspectRatio
 import com.artt.minibrowser.browser.calculatePictureInPictureAspectRatio
+import com.artt.minibrowser.browser.pictureInPictureMediaStateForTab
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -50,5 +52,31 @@ class BrowserPictureInPictureControllerTest {
         assertFalse(playingFullscreen.copy(fullscreenVideo = false).canEnter)
         assertFalse(playingFullscreen.copy(privateTab = true).canEnter)
         assertFalse(playingFullscreen.copy(privateTab = true).canAutoEnter)
+    }
+
+    @Test
+    fun contentFullscreenIsThePipFullscreenAuthority() {
+        val playback = BrowserPictureInPicturePlaybackState(
+            playing = true,
+            videoWidth = 1920,
+            videoHeight = 1080,
+        )
+
+        val fullscreen = pictureInPictureMediaStateForTab(
+            contentFullscreen = true,
+            privateTab = false,
+            playback = playback,
+        )
+        assertTrue(fullscreen.canAutoEnter)
+        assertEquals(1920, fullscreen.videoWidth)
+        assertEquals(1080, fullscreen.videoHeight)
+
+        val notFullscreen = pictureInPictureMediaStateForTab(
+            contentFullscreen = false,
+            privateTab = false,
+            playback = playback,
+        )
+        assertFalse(notFullscreen.canEnter)
+        assertFalse(notFullscreen.canAutoEnter)
     }
 }
