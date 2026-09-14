@@ -4,6 +4,7 @@ import mozilla.components.browser.state.action.ContentAction
 import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
+import mozilla.components.feature.session.SessionUseCases
 import org.mozilla.geckoview.GeckoSession
 
 /** Resolves and executes browser commands against the session that currently owns the tab. */
@@ -23,9 +24,12 @@ internal fun browserCommandTargetForTab(
 }
 
 internal fun loadBrowserUrl(tab: Tab, browserStore: BrowserStore, url: String) {
-    when (val target = browserCommandTargetForTab(tab, browserStore)) {
-        is BrowserCommandTarget.Raw -> target.session.loadUri(url)
-        is BrowserCommandTarget.Linked -> target.session.loadUrl(url)
+    when (browserCommandTargetForTab(tab, browserStore)) {
+        is BrowserCommandTarget.Raw -> tab.session.loadUri(url)
+        is BrowserCommandTarget.Linked -> SessionUseCases(browserStore).loadUrl(
+            url = url,
+            sessionId = tab.id.toString(),
+        )
         null -> {
             // A fresh/process-restored A-C tab may not have an EngineSession yet. Match
             // SessionUseCases: queue the load for EngineMiddleware instead of dropping it. The
@@ -47,17 +51,17 @@ internal fun loadBrowserUrl(tab: Tab, browserStore: BrowserStore, url: String) {
 }
 
 internal fun goBrowserBack(tab: Tab, browserStore: BrowserStore) {
-    when (val target = browserCommandTargetForTab(tab, browserStore)) {
-        is BrowserCommandTarget.Raw -> target.session.goBack()
-        is BrowserCommandTarget.Linked -> target.session.goBack()
+    when (browserCommandTargetForTab(tab, browserStore)) {
+        is BrowserCommandTarget.Raw -> tab.session.goBack()
+        is BrowserCommandTarget.Linked -> SessionUseCases(browserStore).goBack(tab.id.toString())
         null -> Unit
     }
 }
 
 internal fun goBrowserForward(tab: Tab, browserStore: BrowserStore) {
-    when (val target = browserCommandTargetForTab(tab, browserStore)) {
-        is BrowserCommandTarget.Raw -> target.session.goForward()
-        is BrowserCommandTarget.Linked -> target.session.goForward()
+    when (browserCommandTargetForTab(tab, browserStore)) {
+        is BrowserCommandTarget.Raw -> tab.session.goForward()
+        is BrowserCommandTarget.Linked -> SessionUseCases(browserStore).goForward(tab.id.toString())
         null -> Unit
     }
 }
@@ -67,13 +71,18 @@ internal fun reloadOrStopBrowser(
     browserStore: BrowserStore,
     isLoading: Boolean,
 ) {
-    when (val target = browserCommandTargetForTab(tab, browserStore)) {
+    when (browserCommandTargetForTab(tab, browserStore)) {
         is BrowserCommandTarget.Raw -> {
-            if (isLoading) target.session.stop() else target.session.reload()
+            if (isLoading) tab.session.stop() else tab.session.reload()
         }
 
         is BrowserCommandTarget.Linked -> {
-            if (isLoading) target.session.stopLoading() else target.session.reload()
+            val sessionUseCases = SessionUseCases(browserStore)
+            if (isLoading) {
+                sessionUseCases.stopLoading(tab.id.toString())
+            } else {
+                sessionUseCases.reload(tab.id.toString())
+            }
         }
 
         null -> Unit
@@ -85,17 +94,20 @@ internal fun toggleBrowserDesktopMode(
     browserStore: BrowserStore,
     enable: Boolean,
 ) {
-    when (val target = browserCommandTargetForTab(tab, browserStore)) {
+    when (browserCommandTargetForTab(tab, browserStore)) {
         is BrowserCommandTarget.Raw -> toggleDesktopMode(tab)
-        is BrowserCommandTarget.Linked -> target.session.toggleDesktopMode(enable = enable, reload = true)
+        is BrowserCommandTarget.Linked -> SessionUseCases(browserStore).requestDesktopSite(
+            enable = enable,
+            tabId = tab.id.toString(),
+        )
         null -> Unit
     }
 }
 
 internal fun exitBrowserFullscreen(tab: Tab, browserStore: BrowserStore) {
-    when (val target = browserCommandTargetForTab(tab, browserStore)) {
-        is BrowserCommandTarget.Raw -> target.session.exitFullScreen()
-        is BrowserCommandTarget.Linked -> target.session.exitFullScreenMode()
+    when (browserCommandTargetForTab(tab, browserStore)) {
+        is BrowserCommandTarget.Raw -> tab.session.exitFullScreen()
+        is BrowserCommandTarget.Linked -> SessionUseCases(browserStore).exitFullscreen(tab.id.toString())
         null -> Unit
     }
 }
