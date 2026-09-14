@@ -9,7 +9,6 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.artt.minibrowser.engine.BrowserCommandTarget
 import com.artt.minibrowser.engine.createGeckoEngineSessionSidecar
-import mozilla.components.browser.engine.gecko.GeckoEngineSession
 import mozilla.components.browser.engine.gecko.GeckoEngineView
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.engine.EngineSession
@@ -33,7 +32,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
     private var renderedRawSession: GeckoSession? = null
     private var renderedLinkedSession: EngineSession? = null
     private var renderedLinkedTabId: String? = null
-    private var engineSessionSidecar: GeckoEngineSession? = null
     private var linkedSessionFeature: SessionFeature? = null
     private var linkedSessionFeatureLifecycle: LinkedSessionFeatureLifecycleBinding? = null
     private var pageSupportsRefresh = false
@@ -120,7 +118,7 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
 
         releaseRenderedSession()
         renderedRawSession = session
-        engineSessionSidecar = createGeckoEngineSessionSidecar(
+        createGeckoEngineSessionSidecar(
             runtime = runtime,
             session = session,
             privateMode = privateMode,
@@ -206,7 +204,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         if (
             renderedRawSession == null &&
             renderedLinkedSession == null &&
-            engineSessionSidecar == null &&
             linkedSessionFeature == null
         ) {
             return
@@ -222,7 +219,6 @@ internal class BrowserSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(
         renderedLinkedTabId = null
         // Do not close either session here. Raw sidecars borrow TabManager-owned GeckoSessions;
         // linked EngineSessions are owned and closed by BrowserStore/EngineMiddleware.
-        engineSessionSidecar = null
     }
 
     fun clearPullToRefresh() {
