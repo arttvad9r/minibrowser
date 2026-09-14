@@ -20,7 +20,7 @@ internal fun androidComponentsWebDataClearStoreTabIds(
     openRelinquishedTabIds: Set<String>,
     linkedStoreTabIds: Set<String>,
 ): List<String> {
-    check(rawOwnedTabIds.intersect(linkedStoreTabIds).isEmpty()) {
+    check(rawOwnedTabIds.none(linkedStoreTabIds::contains)) {
         "Raw-owned tabs cannot have linked Android Components EngineSessions during web-data clear"
     }
     check(openRelinquishedTabIds.all(linkedStoreTabIds::contains)) {
